@@ -1,5 +1,7 @@
 """Configuration management for the autocompleter."""
 
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -48,8 +50,26 @@ class Config:
             self.openai_api_key = os.environ.get("OPENAI_API_KEY", "")
 
 
+def _load_dotenv() -> None:
+    """Load .env file from the project root if it exists."""
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if not env_path.is_file():
+        return
+    with open(env_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip().strip("\"'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+
+
 def load_config() -> Config:
-    """Load configuration, using environment variables and defaults."""
+    """Load configuration, using .env file, environment variables, and defaults."""
+    _load_dotenv()
     config = Config(
         llm_provider=os.environ.get("AUTOCOMPLETER_LLM_PROVIDER", "anthropic"),
         llm_model=os.environ.get(

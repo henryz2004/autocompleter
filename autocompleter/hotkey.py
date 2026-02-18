@@ -5,6 +5,8 @@ requiring the app to be focused. Runs the event tap on a background thread
 and dispatches callbacks to the main thread.
 """
 
+from __future__ import annotations
+
 import logging
 import threading
 from typing import Callable

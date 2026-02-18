@@ -4,6 +4,8 @@ Detects the currently focused text field, reads visible text content
 in the active window, and monitors for typing pauses or hotkey triggers.
 """
 
+from __future__ import annotations
+
 import logging
 import time
 from dataclasses import dataclass

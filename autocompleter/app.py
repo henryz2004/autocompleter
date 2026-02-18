@@ -5,6 +5,8 @@ overlay renderer, text injector, and hotkey listener into a cohesive
 autocomplete tool.
 """
 
+from __future__ import annotations
+
 import logging
 import signal
 import sys

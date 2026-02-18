@@ -5,6 +5,8 @@ Indexes by source (app, URL if available, timestamp). Provides sliced context
 to the suggestion engine: recent observations + relevant historical context.
 """
 
+from __future__ import annotations
+
 import sqlite3
 import time
 from dataclasses import dataclass

@@ -6,6 +6,8 @@ other windows. Supports keyboard navigation: arrow keys to select,
 Tab/Enter to accept, Esc to dismiss.
 """
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
 

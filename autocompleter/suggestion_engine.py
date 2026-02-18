@@ -5,6 +5,8 @@ calls an external LLM API with short max token limit, and returns
 1-3 short completions. Includes debouncing to avoid excessive API calls.
 """
 
+from __future__ import annotations
+
 import logging
 import time
 from dataclasses import dataclass
