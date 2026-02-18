@@ -306,6 +306,17 @@ class Autocompleter:
         if caret_pos:
             x, y, caret_height = caret_pos
             logger.debug(f"Using caret position: ({x:.0f}, {y:.0f}), caret_h={caret_height:.0f}")
+            # Sanity-check: some apps (Electron) report stale/shifted caret
+            # rects. If the caret bottom is above the element bottom, prefer
+            # the element bottom — it's more reliable across apps.
+            if focused.position and focused.size:
+                elem_bottom = focused.position[1] + focused.size[1]
+                if y < elem_bottom:
+                    logger.debug(
+                        f"Caret bottom ({y:.0f}) < element bottom ({elem_bottom:.0f}), "
+                        f"using element bottom instead"
+                    )
+                    y = elem_bottom
         elif focused.position:
             x, y = focused.position
             if focused.size:

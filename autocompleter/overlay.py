@@ -241,7 +241,9 @@ class SuggestionOverlay:
             primary_height = screens[0].frame().size.height
             # Flip: ns_y = primary_height - ax_y - overlay_height
             # This places the overlay's top edge at the caret bottom (below caret)
-            ns_y = primary_height - y - height
+            # Add a small gap (4px) so the overlay doesn't touch the caret edge
+            gap = 4.0
+            ns_y = primary_height - y - height - gap
         else:
             ns_y = y
 
@@ -369,8 +371,8 @@ class SuggestionOverlay:
 
         # If overlay extends below the bottom edge, flip above the caret
         if ns_y < screen_bottom:
-            # Place overlay bottom at the caret top (above the caret)
-            ns_y = caret_ns_y + caret_height
+            # Place overlay bottom at the caret top + gap (above the caret)
+            ns_y = caret_ns_y + caret_height + 4.0
             if ns_y + height > screen_top:
                 ns_y = screen_top - height
 
