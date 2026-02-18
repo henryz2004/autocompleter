@@ -136,12 +136,11 @@ class SuggestionOverlay:
         self._suggestions: list[Suggestion] = []
         self._selected_index: int = 0
         self._on_accept = None
+        self._visible = False
 
     @property
     def is_visible(self) -> bool:
-        if not HAS_APPKIT or self._window is None:
-            return False
-        return bool(self._window.isVisible())
+        return self._visible
 
     def show(
         self,
@@ -150,7 +149,11 @@ class SuggestionOverlay:
         y: float,
         on_accept=None,
     ) -> None:
-        """Show the overlay with suggestions at the given screen coordinates."""
+        """Show the overlay with suggestions at the given screen coordinates.
+
+        x, y are in macOS screen coordinates (origin = top-left of primary
+        screen, y increases downward — matching the Accessibility API).
+        """
         if not HAS_APPKIT:
             logger.warning("AppKit not available; overlay cannot be shown.")
             return
@@ -169,40 +172,72 @@ class SuggestionOverlay:
             self._config.max_height,
         )
 
-        # Convert coordinates: macOS screen origin is bottom-left
-        screen = AppKit.NSScreen.mainScreen()
-        if screen:
-            screen_height = screen.frame().size.height
-            # Position overlay below the cursor
-            y_flipped = screen_height - y - height
+        # Convert from top-left origin (AX coords) to bottom-left origin (AppKit coords).
+        # AX coords: origin at top-left of primary display, Y increases downward.
+        # AppKit coords: origin at bottom-left of primary display, Y increases upward.
+        # The primary screen (screens()[0]) defines both coordinate systems.
+        # Its height is the pivot for the Y flip regardless of which monitor
+        # the target is on.
+        screens = AppKit.NSScreen.screens()
+        if screens and len(screens) > 0:
+            # screens()[0] is always the primary display
+            primary_height = screens[0].frame().size.height
+            # Flip: ns_y = primary_height - ax_y - overlay_height
+            ns_y = primary_height - y - height
         else:
-            y_flipped = y
+            ns_y = y
 
-        frame = NSMakeRect(x, y_flipped, self._config.width, height)
+        logger.debug(
+            f"Overlay show: AX pos=({x:.0f}, {y:.0f}) -> "
+            f"NSWindow pos=({x:.0f}, {ns_y:.0f}), "
+            f"size=({self._config.width}, {height:.0f}), "
+            f"suggestions={len(suggestions)}, "
+            f"primary_h={primary_height if screens else '?'}"
+        )
+        # Log all screens for multi-monitor debugging
+        for i, scr in enumerate(AppKit.NSScreen.screens()):
+            f = scr.frame()
+            logger.debug(
+                f"  Screen {i}: origin=({f.origin.x:.0f}, {f.origin.y:.0f}) "
+                f"size=({f.size.width:.0f}, {f.size.height:.0f})"
+            )
+
+        frame = NSMakeRect(x, ns_y, self._config.width, height)
 
         if self._window is None:
             self._create_window(frame)
         else:
             self._window.setFrame_display_(frame, True)
+            # Resize the view to match
+            if self._view is not None:
+                self._view.setFrame_(
+                    NSMakeRect(0, 0, self._config.width, height)
+                )
 
         if self._view is not None:
             self._view.setSuggestions_(suggestions)
             self._view.setSelectedIndex_(0)
 
         self._window.orderFront_(None)
+        self._visible = True
+        logger.debug("Overlay is now visible")
 
     def hide(self) -> None:
         """Hide the overlay."""
         if self._window is not None:
             self._window.orderOut_(None)
+        self._visible = False
+        logger.debug("Overlay hidden")
 
     def move_selection(self, delta: int) -> None:
         """Move the selection up or down."""
         if not self._suggestions:
             return
+        old = self._selected_index
         self._selected_index = (
             self._selected_index + delta
         ) % len(self._suggestions)
+        logger.debug(f"Overlay selection: {old} -> {self._selected_index}")
         if self._view is not None:
             self._view.setSelectedIndex_(self._selected_index)
 
@@ -211,6 +246,7 @@ class SuggestionOverlay:
         if not self._suggestions:
             return None
         suggestion = self._suggestions[self._selected_index]
+        logger.debug(f"Overlay accepted [{self._selected_index}]: {suggestion.text[:60]}")
         self.hide()
         if self._on_accept:
             self._on_accept(suggestion)
@@ -220,6 +256,8 @@ class SuggestionOverlay:
         """Create the borderless floating window."""
         if not HAS_APPKIT:
             return
+
+        logger.debug(f"Creating overlay window at frame={frame}")
 
         style = AppKit.NSWindowStyleMaskBorderless
         window = AppKit.NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
@@ -238,9 +276,10 @@ class SuggestionOverlay:
             | AppKit.NSWindowCollectionBehaviorStationary
         )
 
+        content_rect = NSMakeRect(0, 0, frame.size.width, frame.size.height)
         view = (
             SuggestionOverlayView.alloc().initWithFrame_config_(
-                frame, self._config
+                content_rect, self._config
             )
         )
         window.setContentView_(view)

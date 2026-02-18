@@ -17,8 +17,11 @@ try:
         AXIsProcessTrusted,
         AXUIElementCreateApplication,
         AXUIElementCreateSystemWide,
+        AXUIElementGetPid,
+        AXValueGetValue,
+        kAXValueTypeCGPoint,
+        kAXValueTypeCGSize,
     )
-    from CoreFoundation import CFEqual
 
     HAS_ACCESSIBILITY = True
 except ImportError:
@@ -63,24 +66,52 @@ def _ax_get_attribute(element, attribute: str):
     return None
 
 
+def _collect_child_text(
+    element, max_depth: int = 5, max_chars: int = 2000, depth: int = 0
+) -> str:
+    """Collect text from child elements.
+
+    Used as a fallback when AXValue is empty on contenteditable divs
+    (common in Chromium-based browsers like Edge and Chrome).
+    """
+    if depth > max_depth:
+        return ""
+
+    parts: list[str] = []
+    total = 0
+    children = _ax_get_attribute(element, "AXChildren")
+    if children:
+        for child in children:
+            if total >= max_chars:
+                break
+            role = _ax_get_attribute(child, "AXRole")
+            if role == "AXStaticText":
+                val = _ax_get_attribute(child, "AXValue")
+                if isinstance(val, str) and val.strip():
+                    parts.append(val.strip())
+                    total += len(val)
+            else:
+                child_text = _collect_child_text(
+                    child, max_depth, max_chars - total, depth + 1
+                )
+                if child_text:
+                    parts.append(child_text)
+                    total += len(child_text)
+
+    return "\n".join(parts)
+
+
 def _ax_get_position(element) -> tuple[float, float] | None:
     """Get the screen position of an accessibility element."""
     pos = _ax_get_attribute(element, "AXPosition")
     if pos is not None:
         try:
-            point = AppKit.NSValue.valueWithPoint_(
-                AppKit.NSPoint(0, 0)
-            ).pointValue()
-            # AXPosition returns an AXValue wrapping a CGPoint
-            import Quartz
-
-            success, point = Quartz.AXValueGetValue(
-                pos, Quartz.kAXValueTypeCGPoint, None
-            )
+            success, point = AXValueGetValue(pos, kAXValueTypeCGPoint, None)
             if success:
+                logger.log(5, f"AXPosition: ({point.x:.0f}, {point.y:.0f})")
                 return (point.x, point.y)
         except Exception:
-            pass
+            logger.debug("Failed to extract AXPosition", exc_info=True)
     return None
 
 
@@ -89,16 +120,26 @@ def _ax_get_size(element) -> tuple[float, float] | None:
     size = _ax_get_attribute(element, "AXSize")
     if size is not None:
         try:
-            import Quartz
-
-            success, sz = Quartz.AXValueGetValue(
-                size, Quartz.kAXValueTypeCGSize, None
-            )
+            success, sz = AXValueGetValue(size, kAXValueTypeCGSize, None)
             if success:
+                logger.log(5, f"AXSize: ({sz.width:.0f}, {sz.height:.0f})")
                 return (sz.width, sz.height)
         except Exception:
-            pass
+            logger.debug("Failed to extract AXSize", exc_info=True)
     return None
+
+
+def _ax_get_pid(element) -> int:
+    """Get the PID of the process owning an accessibility element."""
+    if not HAS_ACCESSIBILITY:
+        return 0
+    try:
+        err, pid = AXUIElementGetPid(element, None)
+        if err == 0:
+            return pid
+    except Exception:
+        pass
+    return 0
 
 
 class InputObserver:
@@ -130,6 +171,7 @@ class InputObserver:
 
         focused = _ax_get_attribute(self._system_wide, "AXFocusedUIElement")
         if focused is None:
+            logger.debug("No AXFocusedUIElement found")
             return None
 
         role = _ax_get_attribute(focused, "AXRole") or ""
@@ -142,13 +184,23 @@ class InputObserver:
             "AXGroup",  # contenteditable divs often show as AXGroup
         }
         if role not in text_roles:
+            logger.debug(f"Focused element role '{role}' is not a text input")
             return None
 
         value = _ax_get_attribute(focused, "AXValue") or ""
+        # Chromium-based browsers (Edge, Chrome) often return empty or
+        # whitespace-only AXValue for contenteditable divs. Fall back to
+        # collecting child text.
+        if not value.strip() and role in {"AXTextArea", "AXWebArea", "AXGroup"}:
+            value = _collect_child_text(focused)
+            if value:
+                logger.debug(
+                    f"AXValue was empty, collected {len(value)} chars from children"
+                )
         selected = _ax_get_attribute(focused, "AXSelectedText") or ""
 
-        # Get the owning application
-        pid = _ax_get_attribute(focused, "AXPid") or 0
+        # Get PID via AXUIElementGetPid
+        pid = _ax_get_pid(focused)
         app_name = self._get_app_name(pid) if pid else "Unknown"
 
         position = _ax_get_position(focused)
@@ -267,7 +319,6 @@ class InputObserver:
 
         # For Safari
         if app_name == "Safari":
-            # Try AXDocument attribute on the focused window
             window = _ax_get_attribute(app_element, "AXFocusedWindow")
             if window:
                 doc = _ax_get_attribute(window, "AXDocument")

@@ -60,7 +60,6 @@ def parse_hotkey(hotkey_str: str) -> tuple[int, int]:
         else:
             # Try to interpret as a single character
             if len(part) == 1:
-                # Map common characters to key codes
                 char_codes = {
                     "a": 0, "b": 11, "c": 8, "d": 2, "e": 14, "f": 3,
                     "g": 5, "h": 4, "i": 34, "j": 38, "k": 40, "l": 37,
@@ -75,20 +74,32 @@ def parse_hotkey(hotkey_str: str) -> tuple[int, int]:
     return keycode, flags
 
 
+# Callback type: returns True to suppress the event, False to pass it through
+HotkeyCallback = Callable[[], bool]
+
+
 class HotkeyListener:
-    """Listens for global hotkey events using Quartz event taps."""
+    """Listens for global hotkey events using Quartz event taps.
+
+    Callbacks must return True to suppress the event (prevent it from
+    reaching the target app) or False to let it pass through.
+    """
 
     def __init__(self):
-        self._callbacks: dict[tuple[int, int], Callable] = {}
+        self._callbacks: dict[tuple[int, int], HotkeyCallback] = {}
         self._running = False
         self._thread: threading.Thread | None = None
         self._tap = None
 
-    def register(self, hotkey_str: str, callback: Callable) -> None:
-        """Register a callback for a hotkey combination."""
+    def register(self, hotkey_str: str, callback: HotkeyCallback) -> None:
+        """Register a callback for a hotkey combination.
+
+        The callback must return True to suppress the key event, or False
+        to let it pass through to the focused application.
+        """
         keycode, flags = parse_hotkey(hotkey_str)
         self._callbacks[(keycode, flags)] = callback
-        logger.info(f"Registered hotkey: {hotkey_str} (code={keycode}, flags={flags})")
+        logger.info(f"Registered hotkey: {hotkey_str} (code={keycode}, flags=0x{flags:x})")
 
     def start(self) -> None:
         """Start listening for hotkey events in a background thread."""
@@ -119,21 +130,55 @@ class HotkeyListener:
         )
 
         def callback(proxy, event_type, event, refcon):
+            # macOS sends kCGEventTapDisabledByTimeout when the tap blocks
+            # too long. Re-enable it automatically.
+            if event_type == Quartz.kCGEventTapDisabledByTimeout:
+                logger.warning("Event tap was disabled by timeout, re-enabling")
+                Quartz.CGEventTapEnable(self._tap, True)
+                return event
+
             if event_type == Quartz.kCGEventKeyDown:
                 keycode = Quartz.CGEventGetIntegerValueField(
                     event, Quartz.kCGKeyboardEventKeycode
                 )
                 flags = Quartz.CGEventGetFlags(event)
-
-                # Check each registered hotkey
                 for (reg_keycode, reg_flags), cb in self._callbacks.items():
-                    if keycode == reg_keycode and (flags & reg_flags) == reg_flags:
-                        try:
-                            cb()
-                        except Exception:
-                            logger.exception("Error in hotkey callback")
-                        # Suppress the event so it doesn't reach the app
-                        return None
+                    # For hotkeys with modifiers: match keycode and
+                    # require the modifier flags to be present.
+                    # For hotkeys without modifiers (reg_flags == 0):
+                    # match keycode only when NO modifiers are held
+                    # (ignore device-dependent bits like caps lock).
+                    if keycode != reg_keycode:
+                        continue
+
+                    if reg_flags != 0:
+                        # Modifier hotkey: check required flags are present
+                        if (flags & reg_flags) != reg_flags:
+                            continue
+                    else:
+                        # Plain key: only match if no modifier keys held
+                        modifier_mask = (
+                            Quartz.kCGEventFlagMaskControl
+                            | Quartz.kCGEventFlagMaskCommand
+                            | Quartz.kCGEventFlagMaskAlternate
+                            | Quartz.kCGEventFlagMaskShift
+                        )
+                        if flags & modifier_mask:
+                            continue
+
+                    try:
+                        suppress = cb()
+                        if suppress:
+                            logger.debug(
+                                f"Hotkey suppressed: code={keycode} flags=0x{flags:x}"
+                            )
+                            return None
+                        else:
+                            logger.debug(
+                                f"Hotkey handled but passed through: code={keycode}"
+                            )
+                    except Exception:
+                        logger.exception("Error in hotkey callback")
 
             return event
 
@@ -165,39 +210,9 @@ class HotkeyListener:
 
         logger.info("Hotkey event tap started")
 
-        # Run the event loop
         while self._running:
             Quartz.CFRunLoopRunInMode(
                 Quartz.kCFRunLoopDefaultMode, 1.0, False
             )
 
         logger.info("Hotkey event tap stopped")
-
-
-class OverlayKeyHandler:
-    """Handles keyboard events while the suggestion overlay is visible.
-
-    Arrow keys navigate, Tab/Enter accept, Esc dismisses.
-    """
-
-    def __init__(
-        self,
-        on_move_up: Callable,
-        on_move_down: Callable,
-        on_accept: Callable,
-        on_dismiss: Callable,
-    ):
-        self.on_move_up = on_move_up
-        self.on_move_down = on_move_down
-        self.on_accept = on_accept
-        self.on_dismiss = on_dismiss
-
-    def register(self, listener: HotkeyListener) -> None:
-        """Register overlay navigation keys."""
-        # These are registered as additional hotkeys. The main app
-        # should only enable them when the overlay is visible.
-        listener.register("up", self.on_move_up)
-        listener.register("down", self.on_move_down)
-        listener.register("tab", self.on_accept)
-        listener.register("return", self.on_accept)
-        listener.register("escape", self.on_dismiss)
