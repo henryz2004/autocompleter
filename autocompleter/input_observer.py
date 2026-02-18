@@ -12,20 +12,17 @@ from dataclasses import dataclass
 
 try:
     import AppKit
-    import ApplicationServices
     from ApplicationServices import (
         AXIsProcessTrusted,
         AXUIElementCreateApplication,
         AXUIElementCreateSystemWide,
-        AXUIElementGetPid,
-        AXValueGetValue,
-        kAXValueTypeCGPoint,
-        kAXValueTypeCGSize,
     )
 
     HAS_ACCESSIBILITY = True
 except ImportError:
     HAS_ACCESSIBILITY = False
+
+from .ax_utils import ax_get_attribute, ax_get_pid, ax_get_position, ax_get_size
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +38,29 @@ class FocusedElement:
     selected_text: str
     position: tuple[float, float] | None  # (x, y) screen coordinates
     size: tuple[float, float] | None  # (width, height)
+    insertion_point: int | None = None  # Caret position in value (chars from start)
+    selection_length: int = 0  # Length of selected text range (0 = no selection)
+
+    @property
+    def before_cursor(self) -> str:
+        """Text before the cursor/selection."""
+        if self.insertion_point is None:
+            return self.value
+        return self.value[:self.insertion_point]
+
+    @property
+    def after_cursor(self) -> str:
+        """Text after the cursor/selection."""
+        if self.insertion_point is None:
+            return ""
+        return self.value[self.insertion_point + self.selection_length:]
+
+
+@dataclass
+class ConversationTurn:
+    """A single message in a conversation."""
+    speaker: str
+    text: str
 
 
 @dataclass
@@ -52,18 +72,7 @@ class VisibleContent:
     window_title: str
     text_elements: list[str]
     url: str
-
-
-def _ax_get_attribute(element, attribute: str):
-    """Safely get an accessibility attribute from an element."""
-    if not HAS_ACCESSIBILITY:
-        return None
-    err, value = ApplicationServices.AXUIElementCopyAttributeValue(
-        element, attribute, None
-    )
-    if err == 0:
-        return value
-    return None
+    conversation_turns: list[ConversationTurn] | None = None
 
 
 def _collect_child_text(
@@ -79,14 +88,14 @@ def _collect_child_text(
 
     parts: list[str] = []
     total = 0
-    children = _ax_get_attribute(element, "AXChildren")
+    children = ax_get_attribute(element, "AXChildren")
     if children:
         for child in children:
             if total >= max_chars:
                 break
-            role = _ax_get_attribute(child, "AXRole")
+            role = ax_get_attribute(child, "AXRole")
             if role == "AXStaticText":
-                val = _ax_get_attribute(child, "AXValue")
+                val = ax_get_attribute(child, "AXValue")
                 if isinstance(val, str) and val.strip():
                     parts.append(val.strip())
                     total += len(val)
@@ -99,47 +108,6 @@ def _collect_child_text(
                     total += len(child_text)
 
     return "\n".join(parts)
-
-
-def _ax_get_position(element) -> tuple[float, float] | None:
-    """Get the screen position of an accessibility element."""
-    pos = _ax_get_attribute(element, "AXPosition")
-    if pos is not None:
-        try:
-            success, point = AXValueGetValue(pos, kAXValueTypeCGPoint, None)
-            if success:
-                logger.log(5, f"AXPosition: ({point.x:.0f}, {point.y:.0f})")
-                return (point.x, point.y)
-        except Exception:
-            logger.debug("Failed to extract AXPosition", exc_info=True)
-    return None
-
-
-def _ax_get_size(element) -> tuple[float, float] | None:
-    """Get the size of an accessibility element."""
-    size = _ax_get_attribute(element, "AXSize")
-    if size is not None:
-        try:
-            success, sz = AXValueGetValue(size, kAXValueTypeCGSize, None)
-            if success:
-                logger.log(5, f"AXSize: ({sz.width:.0f}, {sz.height:.0f})")
-                return (sz.width, sz.height)
-        except Exception:
-            logger.debug("Failed to extract AXSize", exc_info=True)
-    return None
-
-
-def _ax_get_pid(element) -> int:
-    """Get the PID of the process owning an accessibility element."""
-    if not HAS_ACCESSIBILITY:
-        return 0
-    try:
-        err, pid = AXUIElementGetPid(element, None)
-        if err == 0:
-            return pid
-    except Exception:
-        pass
-    return 0
 
 
 class InputObserver:
@@ -169,12 +137,12 @@ class InputObserver:
         if not HAS_ACCESSIBILITY or self._system_wide is None:
             return None
 
-        focused = _ax_get_attribute(self._system_wide, "AXFocusedUIElement")
+        focused = ax_get_attribute(self._system_wide, "AXFocusedUIElement")
         if focused is None:
             logger.debug("No AXFocusedUIElement found")
             return None
 
-        role = _ax_get_attribute(focused, "AXRole") or ""
+        role = ax_get_attribute(focused, "AXRole") or ""
         # Only care about text-input-like roles
         text_roles = {
             "AXTextField",
@@ -187,7 +155,7 @@ class InputObserver:
             logger.debug(f"Focused element role '{role}' is not a text input")
             return None
 
-        value = _ax_get_attribute(focused, "AXValue") or ""
+        value = ax_get_attribute(focused, "AXValue") or ""
         # Chromium-based browsers (Edge, Chrome) often return empty or
         # whitespace-only AXValue for contenteditable divs. Fall back to
         # collecting child text.
@@ -197,14 +165,31 @@ class InputObserver:
                 logger.debug(
                     f"AXValue was empty, collected {len(value)} chars from children"
                 )
-        selected = _ax_get_attribute(focused, "AXSelectedText") or ""
+        selected = ax_get_attribute(focused, "AXSelectedText") or ""
+
+        # Extract cursor position from AXSelectedTextRange
+        insertion_point = None
+        selection_length = 0
+        sel_range = ax_get_attribute(focused, "AXSelectedTextRange")
+        if sel_range is not None:
+            try:
+                ns_range = sel_range.rangeValue()
+                insertion_point = ns_range.location
+                selection_length = ns_range.length
+                logger.debug(
+                    f"Cursor: insertion_point={insertion_point}, "
+                    f"selection_length={selection_length}"
+                )
+            except Exception:
+                logger.debug("Could not extract range from AXSelectedTextRange",
+                             exc_info=True)
 
         # Get PID via AXUIElementGetPid
-        pid = _ax_get_pid(focused)
+        pid = ax_get_pid(focused)
         app_name = self._get_app_name(pid) if pid else "Unknown"
 
-        position = _ax_get_position(focused)
-        size = _ax_get_size(focused)
+        position = ax_get_position(focused)
+        size = ax_get_size(focused)
 
         # Track value changes for typing-pause detection
         if value != self._last_value:
@@ -219,6 +204,8 @@ class InputObserver:
             selected_text=selected,
             position=position,
             size=size,
+            insertion_point=insertion_point,
+            selection_length=selection_length,
         )
 
     def get_visible_content(self) -> VisibleContent | None:
@@ -241,16 +228,16 @@ class InputObserver:
         app_element = AXUIElementCreateApplication(pid)
 
         # Get the focused window
-        window = _ax_get_attribute(app_element, "AXFocusedWindow")
+        window = ax_get_attribute(app_element, "AXFocusedWindow")
         if window is None:
             # Fall back to first window
-            windows = _ax_get_attribute(app_element, "AXWindows")
+            windows = ax_get_attribute(app_element, "AXWindows")
             if windows and len(windows) > 0:
                 window = windows[0]
             else:
                 return None
 
-        window_title = _ax_get_attribute(window, "AXTitle") or ""
+        window_title = ax_get_attribute(window, "AXTitle") or ""
 
         # Extract text elements from the window
         text_elements = []
@@ -259,13 +246,34 @@ class InputObserver:
         # Try to get URL from browser
         url = self._get_browser_url(app_element, app_name)
 
+        # Try structured conversation extraction for chat-like apps
+        conversation_turns = self._extract_conversation_turns(window)
+
         return VisibleContent(
             app_name=app_name,
             app_pid=pid,
             window_title=window_title,
             text_elements=text_elements,
             url=url,
+            conversation_turns=conversation_turns,
         )
+
+    # Roles that are UI chrome — skip their entire subtree
+    _SKIP_ROLES = frozenset({
+        "AXToolbar", "AXMenuBar", "AXMenu", "AXMenuItem",
+        "AXButton", "AXScrollBar", "AXSlider", "AXIncrementor",
+        "AXPopUpButton", "AXCheckBox", "AXRadioButton",
+        "AXTabGroup", "AXTab",
+    })
+
+    # Roles that carry meaningful text content
+    _CONTENT_ROLES = frozenset({
+        "AXStaticText", "AXTextField", "AXTextArea",
+        "AXWebArea", "AXGroup", "AXCell", "AXRow",
+        "AXHeading", "AXLink", "AXParagraph",
+    })
+
+    _MIN_TEXT_LEN = 3  # Skip strings <= 2 chars
 
     def _collect_text(
         self,
@@ -275,34 +283,30 @@ class InputObserver:
         max_items: int,
         depth: int = 0,
     ) -> None:
-        """Recursively collect text content from accessibility elements."""
+        """Recursively collect text content from accessibility elements.
+
+        Filters out UI chrome (toolbars, buttons, menus, scrollbars) and
+        only extracts from content-bearing roles. Skips very short strings.
+        """
         if depth > max_depth or len(results) >= max_items:
             return
 
-        # Get text value
-        value = _ax_get_attribute(element, "AXValue")
-        if isinstance(value, str) and value.strip():
-            results.append(value.strip())
+        role = ax_get_attribute(element, "AXRole") or ""
 
-        # Also check AXTitle and AXDescription
-        title = _ax_get_attribute(element, "AXTitle")
-        if isinstance(title, str) and title.strip():
-            results.append(title.strip())
+        # Skip entire subtrees for UI chrome roles
+        if role in self._SKIP_ROLES:
+            return
 
-        description = _ax_get_attribute(element, "AXDescription")
-        if isinstance(description, str) and description.strip():
-            results.append(description.strip())
-
-        # Check static text
-        role = _ax_get_attribute(element, "AXRole")
-        if role == "AXStaticText":
-            st_value = _ax_get_attribute(element, "AXValue")
-            if isinstance(st_value, str) and st_value.strip():
-                if st_value.strip() not in results:
-                    results.append(st_value.strip())
+        # Extract text only from content-bearing roles
+        if role in self._CONTENT_ROLES:
+            value = ax_get_attribute(element, "AXValue")
+            if isinstance(value, str):
+                stripped = value.strip()
+                if len(stripped) >= self._MIN_TEXT_LEN and stripped not in results:
+                    results.append(stripped)
 
         # Recurse into children
-        children = _ax_get_attribute(element, "AXChildren")
+        children = ax_get_attribute(element, "AXChildren")
         if children:
             for child in children:
                 if len(results) >= max_items:
@@ -310,6 +314,93 @@ class InputObserver:
                 self._collect_text(
                     child, results, max_depth, max_items, depth + 1
                 )
+
+    def _extract_conversation_turns(
+        self, window, max_turns: int = 15
+    ) -> list[ConversationTurn] | None:
+        """Try to extract structured conversation turns from a chat window.
+
+        Walks the AX tree looking for message-like groups: containers with
+        child elements where one is short (speaker name) and another is
+        longer (message body). Falls back to None if structure can't be detected.
+        """
+        try:
+            turns = self._walk_for_messages(window, max_turns, max_depth=8)
+            if len(turns) >= 2:
+                return turns
+        except Exception:
+            logger.debug("Conversation extraction failed", exc_info=True)
+        return None
+
+    def _walk_for_messages(
+        self, element, max_turns: int, max_depth: int, depth: int = 0
+    ) -> list[ConversationTurn]:
+        """Recursively search for message-like group elements."""
+        if depth > max_depth:
+            return []
+
+        role = ax_get_attribute(element, "AXRole") or ""
+        turns: list[ConversationTurn] = []
+
+        # Look for groups/cells that might be message containers
+        if role in {"AXGroup", "AXCell", "AXRow"}:
+            turn = self._try_parse_message_group(element)
+            if turn is not None:
+                turns.append(turn)
+                if len(turns) >= max_turns:
+                    return turns
+
+        children = ax_get_attribute(element, "AXChildren")
+        if children:
+            for child in children:
+                if len(turns) >= max_turns:
+                    break
+                child_turns = self._walk_for_messages(
+                    child, max_turns - len(turns), max_depth, depth + 1
+                )
+                turns.extend(child_turns)
+
+        return turns
+
+    def _try_parse_message_group(self, element) -> ConversationTurn | None:
+        """Check if an AX element looks like a chat message container.
+
+        Heuristic: a group containing at least two text children where one
+        is short (likely a speaker name, <= 40 chars) and another is longer
+        (likely the message body, > 5 chars).
+        """
+        children = ax_get_attribute(element, "AXChildren")
+        if not children or len(children) < 2:
+            return None
+
+        texts: list[tuple[str, str]] = []  # (role, value)
+        for child in children[:10]:  # limit scan
+            child_role = ax_get_attribute(child, "AXRole") or ""
+            if child_role == "AXStaticText":
+                val = ax_get_attribute(child, "AXValue")
+                if isinstance(val, str) and val.strip():
+                    texts.append((child_role, val.strip()))
+            elif child_role in {"AXGroup", "AXTextArea"}:
+                # Nested group might contain the message text
+                nested_text = _collect_child_text(child, max_depth=3, max_chars=500)
+                if nested_text.strip():
+                    texts.append((child_role, nested_text.strip()))
+
+        if len(texts) < 2:
+            return None
+
+        # Heuristic: find a short text (speaker) and a longer text (body)
+        speaker = None
+        body = None
+        for _, text in texts:
+            if len(text) <= 40 and speaker is None:
+                speaker = text
+            elif len(text) > 5 and body is None:
+                body = text
+
+        if speaker and body:
+            return ConversationTurn(speaker=speaker, text=body)
+        return None
 
     def _get_browser_url(self, app_element, app_name: str) -> str:
         """Try to extract the current URL from a browser app."""
@@ -319,14 +410,14 @@ class InputObserver:
 
         # For Safari
         if app_name == "Safari":
-            window = _ax_get_attribute(app_element, "AXFocusedWindow")
+            window = ax_get_attribute(app_element, "AXFocusedWindow")
             if window:
-                doc = _ax_get_attribute(window, "AXDocument")
+                doc = ax_get_attribute(window, "AXDocument")
                 if isinstance(doc, str):
                     return doc
 
         # For Chrome-based browsers, try the address bar
-        window = _ax_get_attribute(app_element, "AXFocusedWindow")
+        window = ax_get_attribute(app_element, "AXFocusedWindow")
         if window:
             toolbar = self._find_element_by_role(window, "AXToolbar", max_depth=3)
             if toolbar:
@@ -334,7 +425,7 @@ class InputObserver:
                     toolbar, "AXTextField", max_depth=3
                 )
                 if text_field:
-                    value = _ax_get_attribute(text_field, "AXValue")
+                    value = ax_get_attribute(text_field, "AXValue")
                     if isinstance(value, str):
                         return value
 
@@ -345,11 +436,11 @@ class InputObserver:
         if depth > max_depth:
             return None
 
-        el_role = _ax_get_attribute(element, "AXRole")
+        el_role = ax_get_attribute(element, "AXRole")
         if el_role == role:
             return element
 
-        children = _ax_get_attribute(element, "AXChildren")
+        children = ax_get_attribute(element, "AXChildren")
         if children:
             for child in children:
                 result = self._find_element_by_role(

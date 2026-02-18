@@ -25,37 +25,7 @@ try:
 except ImportError:
     HAS_INJECTION = False
 
-
-def _ax_get_attribute(element, attribute: str):
-    """Safely get an accessibility attribute."""
-    if not HAS_INJECTION:
-        return None
-    err, value = ApplicationServices.AXUIElementCopyAttributeValue(
-        element, attribute, None
-    )
-    if err == 0:
-        return value
-    return None
-
-
-def _ax_set_attribute(element, attribute: str, value) -> bool:
-    """Safely set an accessibility attribute."""
-    if not HAS_INJECTION:
-        return False
-    err = ApplicationServices.AXUIElementSetAttributeValue(
-        element, attribute, value
-    )
-    return err == 0
-
-
-def _ax_is_attribute_settable(element, attribute: str) -> bool:
-    """Check if an accessibility attribute is settable."""
-    if not HAS_INJECTION:
-        return False
-    err, settable = ApplicationServices.AXUIElementIsAttributeSettable(
-        element, attribute, None
-    )
-    return err == 0 and settable
+from .ax_utils import ax_get_attribute, ax_is_attribute_settable, ax_set_attribute
 
 
 class TextInjector:
@@ -99,17 +69,17 @@ class TextInjector:
         if not HAS_INJECTION or self._system_wide is None:
             return False
 
-        focused = _ax_get_attribute(self._system_wide, "AXFocusedUIElement")
+        focused = ax_get_attribute(self._system_wide, "AXFocusedUIElement")
         if focused is None:
             return False
 
-        if not _ax_is_attribute_settable(focused, "AXValue"):
+        if not ax_is_attribute_settable(focused, "AXValue"):
             return False
 
-        current_value = _ax_get_attribute(focused, "AXValue") or ""
+        current_value = ax_get_attribute(focused, "AXValue") or ""
         new_value = current_value + text
 
-        if _ax_set_attribute(focused, "AXValue", new_value):
+        if ax_set_attribute(focused, "AXValue", new_value):
             # Try to trigger a confirm/change notification
             ApplicationServices.AXUIElementPerformAction(
                 focused, "AXConfirm"
@@ -136,21 +106,19 @@ class TextInjector:
                 AppKit.NSPasteboardTypeString
             )
 
-        # Set our text
-        pasteboard.clearContents()
-        pasteboard.setString_forType_(text, AppKit.NSPasteboardTypeString)
-
-        # Simulate Cmd+V
-        self._simulate_cmd_v()
-        time.sleep(0.1)  # Brief pause for the paste to register
-
-        # Restore clipboard
-        if old_content is not None:
-            time.sleep(0.05)
+        # Set our text, paste, and always restore the clipboard
+        try:
             pasteboard.clearContents()
-            pasteboard.setString_forType_(
-                old_content, AppKit.NSPasteboardTypeString
-            )
+            pasteboard.setString_forType_(text, AppKit.NSPasteboardTypeString)
+            self._simulate_cmd_v()
+            time.sleep(0.1)  # Brief pause for the paste to register
+        finally:
+            if old_content is not None:
+                time.sleep(0.05)
+                pasteboard.clearContents()
+                pasteboard.setString_forType_(
+                    old_content, AppKit.NSPasteboardTypeString
+                )
 
         return True
 

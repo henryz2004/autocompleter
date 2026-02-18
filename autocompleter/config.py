@@ -26,6 +26,12 @@ class Config:
     max_tokens: int = 150
     temperature: float = 0.7
 
+    # Per-mode overrides (continuation = low entropy, reply = higher entropy)
+    continuation_temperature: float = 0.3
+    continuation_max_tokens: int = 80
+    reply_temperature: float = 0.8
+    reply_max_tokens: int = 200
+
     # Suggestion behavior
     num_suggestions: int = 3
     debounce_ms: int = 500

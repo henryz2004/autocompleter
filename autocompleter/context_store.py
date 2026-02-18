@@ -22,6 +22,7 @@ class ContextEntry:
     content: str
     timestamp: float
     entry_type: str  # "visible_text", "user_input", "conversation"
+    window_title: str = ""
 
 
 class ContextStore:
@@ -66,7 +67,8 @@ class ContextStore:
                 source_url TEXT DEFAULT '',
                 content TEXT NOT NULL,
                 timestamp REAL NOT NULL,
-                entry_type TEXT NOT NULL
+                entry_type TEXT NOT NULL,
+                window_title TEXT DEFAULT ''
             );
 
             CREATE INDEX IF NOT EXISTS idx_timestamp
@@ -79,6 +81,14 @@ class ContextStore:
                 ON context_entries(entry_type);
             """
         )
+        # Migrate: add window_title column if missing (existing DBs)
+        try:
+            conn.execute("SELECT window_title FROM context_entries LIMIT 1")
+        except sqlite3.OperationalError:
+            conn.execute(
+                "ALTER TABLE context_entries ADD COLUMN window_title TEXT DEFAULT ''"
+            )
+            conn.commit()
 
     def add_entry(
         self,
@@ -86,6 +96,7 @@ class ContextStore:
         content: str,
         entry_type: str,
         source_url: str = "",
+        window_title: str = "",
         timestamp: float | None = None,
     ) -> int:
         """Store a new context entry. Returns the entry ID."""
@@ -108,20 +119,25 @@ class ContextStore:
 
         cursor = conn.execute(
             """
-            INSERT INTO context_entries (source_app, source_url, content, timestamp, entry_type)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO context_entries
+                (source_app, source_url, content, timestamp, entry_type, window_title)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (source_app, source_url, content, timestamp, entry_type),
+            (source_app, source_url, content, timestamp, entry_type, window_title),
         )
         conn.commit()
         return cursor.lastrowid  # type: ignore[return-value]
+
+    _SELECT_COLS = (
+        "id, source_app, source_url, content, timestamp, entry_type, window_title"
+    )
 
     def get_recent(self, limit: int = 50) -> list[ContextEntry]:
         """Get the most recent context entries."""
         conn = self._get_conn()
         cursor = conn.execute(
-            """
-            SELECT id, source_app, source_url, content, timestamp, entry_type
+            f"""
+            SELECT {self._SELECT_COLS}
             FROM context_entries
             ORDER BY timestamp DESC
             LIMIT ?
@@ -136,8 +152,8 @@ class ContextStore:
         """Get recent entries from a specific app."""
         conn = self._get_conn()
         cursor = conn.execute(
-            """
-            SELECT id, source_app, source_url, content, timestamp, entry_type
+            f"""
+            SELECT {self._SELECT_COLS}
             FROM context_entries
             WHERE source_app = ?
             ORDER BY timestamp DESC
@@ -151,8 +167,8 @@ class ContextStore:
         """Simple text search across context entries."""
         conn = self._get_conn()
         cursor = conn.execute(
-            """
-            SELECT id, source_app, source_url, content, timestamp, entry_type
+            f"""
+            SELECT {self._SELECT_COLS}
             FROM context_entries
             WHERE content LIKE ?
             ORDER BY timestamp DESC
@@ -195,6 +211,107 @@ class ContextStore:
                 total_chars += len(line)
 
         return "\n".join(parts)
+
+    def get_continuation_context(
+        self,
+        before_cursor: str,
+        after_cursor: str,
+        source_app: str,
+        window_title: str = "",
+        source_url: str = "",
+        max_local_chars: int = 300,
+    ) -> str:
+        """Build lean context for continuation mode.
+
+        Tier 1 (mandatory): before_cursor and after_cursor — sent raw.
+        Tier 2 (minimal local semantics): recent visible text, capped aggressively.
+        Tier 3 (light metadata): app, window_title, url. No timestamps.
+        """
+        parts: list[str] = []
+
+        # Tier 3: metadata header (light)
+        meta_parts = [f"App: {source_app}"]
+        if window_title:
+            meta_parts.append(f"Window: {window_title}")
+        if source_url:
+            meta_parts.append(f"URL: {source_url}")
+        parts.append(" | ".join(meta_parts))
+
+        # Tier 2: recent local context (a few hundred chars max)
+        app_entries = self.get_by_source(source_app, limit=5)
+        local_chars = 0
+        local_parts: list[str] = []
+        for entry in app_entries:
+            if entry.entry_type == "user_input":
+                continue  # Skip raw input — we have cursor state
+            snippet = entry.content[:max_local_chars - local_chars]
+            if snippet.strip():
+                local_parts.append(snippet.strip())
+                local_chars += len(snippet)
+            if local_chars >= max_local_chars:
+                break
+        if local_parts:
+            parts.append("Recent context:\n" + "\n".join(local_parts))
+
+        # Tier 1: cursor state (raw, always included)
+        parts.append(f"Text before cursor:\n{before_cursor}")
+        if after_cursor.strip():
+            parts.append(f"Text after cursor:\n{after_cursor}")
+
+        return "\n\n".join(parts)
+
+    def get_reply_context(
+        self,
+        conversation_turns: list[dict[str, str]],
+        source_app: str,
+        window_title: str = "",
+        source_url: str = "",
+        draft_text: str = "",
+        max_turns: int = 8,
+    ) -> str:
+        """Build context for reply mode.
+
+        Tier 1: Structured recent turns with speaker labels.
+        Tier 2: Draft state if user has typed a partial reply.
+        Tier 3: Metadata with timestamps (useful for pacing).
+        """
+        parts: list[str] = []
+
+        # Tier 3: metadata
+        meta_parts = [f"App: {source_app}"]
+        if window_title:
+            meta_parts.append(f"Channel: {window_title}")
+        if source_url:
+            meta_parts.append(f"URL: {source_url}")
+        parts.append(" | ".join(meta_parts))
+
+        # Tier 1: conversation turns
+        turns = conversation_turns[-max_turns:]
+        if turns:
+            turn_lines = []
+            for turn in turns:
+                speaker = turn.get("speaker", "Unknown")
+                text = turn.get("text", "")
+                turn_lines.append(f"- {speaker}: {text}")
+            parts.append("Conversation:\n" + "\n".join(turn_lines))
+        else:
+            # Fall back to recent visible text from this app
+            app_entries = self.get_by_source(source_app, limit=10)
+            fallback_parts: list[str] = []
+            total = 0
+            for entry in app_entries:
+                if total > 1500:
+                    break
+                fallback_parts.append(entry.content)
+                total += len(entry.content)
+            if fallback_parts:
+                parts.append("Recent visible text:\n" + "\n".join(fallback_parts))
+
+        # Tier 2: draft state
+        if draft_text.strip():
+            parts.append(f"Draft so far:\n{draft_text}")
+
+        return "\n\n".join(parts)
 
     def prune(self, max_age_hours: int = 72, max_entries: int = 5000) -> int:
         """Remove old entries to keep the store bounded. Returns count removed."""

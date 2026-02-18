@@ -7,66 +7,63 @@ calls an external LLM API with short max token limit, and returns
 
 from __future__ import annotations
 
+import enum
 import logging
 import time
 from dataclasses import dataclass
+from typing import Optional
 
 from .config import Config
+
+
+class AutocompleteMode(enum.Enum):
+    """Determines how context is assembled and what kind of suggestion to generate."""
+    CONTINUATION = "continuation"  # User has draft text, predict next words
+    REPLY = "reply"               # Input is empty/short, suggest a full response
 
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT_COMPLETION = """\
-You are a contextual autocomplete assistant. Your job is to complete text the \
-user is currently typing, using conversation context to make intelligent, \
-relevant completions.
+You are a text completion engine. Complete text at the cursor position only.
 
 Rules:
-- Generate exactly {num_suggestions} distinct suggestions
-- Each suggestion should be 1-2 sentences maximum
-- Suggestions should naturally continue or complete the user's current input
-- Use the provided context to infer what the user likely means or wants to say
-- Do not repeat what the user has already typed — only output the completion
-- Do not include meta-commentary, just the completion text
-- Separate each suggestion with the delimiter: ---SUGGESTION---
-- Output ONLY the suggestions separated by the delimiter, nothing else
+- Generate exactly {num_suggestions} distinct completions
+- Complete naturally from the cursor — do not restate text before the cursor
+- Do not introduce new topics or tangents
+- Preserve the existing formatting, tone, and style
+- Keep completion length proportional to what's already written
+- Each completion should be short (a few words to 1-2 sentences max)
+- Separate each completion with the delimiter: ---SUGGESTION---
+- Output ONLY the completions separated by the delimiter, nothing else
 """
 
 SYSTEM_PROMPT_REPLY = """\
-You are a contextual reply assistant. The user has an empty input field and \
-you should suggest short messages they might want to send as their next \
-response in the conversation.
+You are a conversational reply assistant. Suggest messages the user might \
+send as their next response in the conversation.
 
 Rules:
 - Generate exactly {num_suggestions} distinct reply suggestions
-- Each suggestion should be 1-2 sentences maximum
-- Base suggestions on the visible conversation context
-- Suggest realistic, natural responses the user might actually send
-- Vary the tone and intent across suggestions (e.g. agree, ask follow-up, etc.)
-- Do not include meta-commentary, just the reply text
+- Respond to the latest message in the conversation
+- Match the tone and formality of the conversation
+- Do not invent facts or context not present in the conversation
+- Keep length proportional to the conversation thread
+- Vary intent across suggestions (e.g. agree, ask follow-up, provide info)
+- Do not repeat or quote content already in the conversation
 - Separate each suggestion with the delimiter: ---SUGGESTION---
 - Output ONLY the suggestions separated by the delimiter, nothing else
 """
 
 USER_PROMPT_TEMPLATE_COMPLETION = """\
-Context from the current session:
 {context}
 
-Currently typing in: {app_name}
-Current input so far:
-{current_input}
-
-Generate {num_suggestions} short, context-aware completions for this input.\
+Complete the text at the cursor position. Generate {num_suggestions} \
+short, natural completions.\
 """
 
 USER_PROMPT_TEMPLATE_REPLY = """\
-Context from the current session:
 {context}
 
-Currently typing in: {app_name}
-The input field is currently empty.
-
-Generate {num_suggestions} short reply suggestions the user might send next, \
-based on the conversation context above.\
+Generate {num_suggestions} short reply suggestions the user might send next.\
 """
 
 
@@ -113,6 +110,7 @@ class SuggestionEngine:
         current_input: str,
         context: str,
         app_name: str = "Unknown",
+        mode: Optional[AutocompleteMode] = None,
     ) -> list[Suggestion]:
         """Generate completion suggestions using the configured LLM.
 
@@ -120,6 +118,7 @@ class SuggestionEngine:
             current_input: The text the user has typed so far.
             context: Sliced context from the context store.
             app_name: Name of the app where the user is typing.
+            mode: Explicit mode override. If None, inferred from current_input.
 
         Returns:
             A list of Suggestion objects.
@@ -133,33 +132,36 @@ class SuggestionEngine:
 
         self._last_request_time = time.time()
 
-        is_completion = bool(current_input.strip())
+        if mode is None:
+            mode = detect_mode(current_input)
 
-        if is_completion:
-            system = SYSTEM_PROMPT_COMPLETION.format(
-                num_suggestions=self.config.num_suggestions
-            )
+        num = self.config.num_suggestions
+        ctx = context or "(no context yet)"
+
+        if mode == AutocompleteMode.CONTINUATION:
+            system = SYSTEM_PROMPT_COMPLETION.format(num_suggestions=num)
             user_msg = USER_PROMPT_TEMPLATE_COMPLETION.format(
-                context=context or "(no context yet)",
-                app_name=app_name,
-                current_input=current_input,
-                num_suggestions=self.config.num_suggestions,
+                context=ctx, num_suggestions=num,
             )
+            temperature = self.config.continuation_temperature
+            max_tokens = self.config.continuation_max_tokens
         else:
-            system = SYSTEM_PROMPT_REPLY.format(
-                num_suggestions=self.config.num_suggestions
-            )
+            system = SYSTEM_PROMPT_REPLY.format(num_suggestions=num)
             user_msg = USER_PROMPT_TEMPLATE_REPLY.format(
-                context=context or "(no context yet)",
-                app_name=app_name,
-                num_suggestions=self.config.num_suggestions,
+                context=ctx, num_suggestions=num,
             )
+            temperature = self.config.reply_temperature
+            max_tokens = self.config.reply_max_tokens
 
         try:
             if self.config.llm_provider == "anthropic":
-                return self._call_anthropic(system, user_msg)
+                return self._call_anthropic(
+                    system, user_msg, temperature=temperature, max_tokens=max_tokens,
+                )
             elif self.config.llm_provider == "openai":
-                return self._call_openai(system, user_msg)
+                return self._call_openai(
+                    system, user_msg, temperature=temperature, max_tokens=max_tokens,
+                )
             else:
                 logger.error(f"Unknown LLM provider: {self.config.llm_provider}")
                 return []
@@ -168,13 +170,15 @@ class SuggestionEngine:
             return []
 
     def _call_anthropic(
-        self, system: str, user_msg: str
+        self, system: str, user_msg: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
     ) -> list[Suggestion]:
         client = self._get_anthropic_client()
         response = client.messages.create(
             model=self.config.llm_model,
-            max_tokens=self.config.max_tokens,
-            temperature=self.config.temperature,
+            max_tokens=max_tokens or self.config.max_tokens,
+            temperature=temperature if temperature is not None else self.config.temperature,
             system=system,
             messages=[{"role": "user", "content": user_msg}],
         )
@@ -183,12 +187,16 @@ class SuggestionEngine:
         text = response.content[0].text
         return self._parse_suggestions(text)
 
-    def _call_openai(self, system: str, user_msg: str) -> list[Suggestion]:
+    def _call_openai(
+        self, system: str, user_msg: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> list[Suggestion]:
         client = self._get_openai_client()
         response = client.chat.completions.create(
             model=self.config.llm_model,
-            max_tokens=self.config.max_tokens,
-            temperature=self.config.temperature,
+            max_tokens=max_tokens or self.config.max_tokens,
+            temperature=temperature if temperature is not None else self.config.temperature,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user_msg},
@@ -209,3 +217,19 @@ class SuggestionEngine:
             if text:
                 suggestions.append(Suggestion(text=text, index=i))
         return suggestions
+
+
+# ---- Mode detection (module-level for reuse) ----
+
+MODE_THRESHOLD_CHARS = 5
+
+
+def detect_mode(current_input: str) -> AutocompleteMode:
+    """Determine autocomplete mode from the current input text.
+
+    Continuation: input has meaningful draft text (>= MODE_THRESHOLD_CHARS).
+    Reply: input is empty or very short (< MODE_THRESHOLD_CHARS).
+    """
+    if len(current_input.strip()) >= MODE_THRESHOLD_CHARS:
+        return AutocompleteMode.CONTINUATION
+    return AutocompleteMode.REPLY

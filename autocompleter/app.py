@@ -7,6 +7,7 @@ autocomplete tool.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import queue
 import signal
@@ -28,7 +29,7 @@ from .context_store import ContextStore
 from .hotkey import HotkeyListener
 from .input_observer import InputObserver
 from .overlay import OverlayConfig, SuggestionOverlay
-from .suggestion_engine import Suggestion, SuggestionEngine
+from .suggestion_engine import AutocompleteMode, Suggestion, SuggestionEngine, detect_mode
 from .text_injector import TextInjector
 
 # How often the background observer polls for visible content (seconds)
@@ -122,6 +123,8 @@ class Autocompleter:
         self._observer_thread: threading.Thread | None = None
         self._current_suggestions: list[Suggestion] = []
         self._main_queue: queue.Queue = queue.Queue()
+        self._last_content_hash: str = ""
+        self._last_input_hash: str = ""
 
     def start(self) -> None:
         """Start the autocompleter."""
@@ -240,6 +243,11 @@ class Autocompleter:
         except KeyboardInterrupt:
             self.stop()
 
+    @staticmethod
+    def _hash_content(text: str) -> str:
+        """Fast content hash for dedup."""
+        return hashlib.md5(text.encode("utf-8", errors="replace")).hexdigest()
+
     def _observe_loop(self) -> None:
         """Background loop that observes visible content and stores context."""
         while self._running:
@@ -248,21 +256,28 @@ class Autocompleter:
                 if content and content.text_elements:
                     combined = "\n".join(content.text_elements[:20])
                     if combined.strip():
-                        self.context_store.add_entry(
-                            source_app=content.app_name,
-                            content=combined,
-                            entry_type="visible_text",
-                            source_url=content.url,
-                        )
+                        content_hash = self._hash_content(combined)
+                        if content_hash != self._last_content_hash:
+                            self._last_content_hash = content_hash
+                            self.context_store.add_entry(
+                                source_app=content.app_name,
+                                content=combined,
+                                entry_type="visible_text",
+                                source_url=content.url,
+                                window_title=content.window_title,
+                            )
 
                 # Also store the current input field value
                 focused = self.observer.get_focused_element()
                 if focused and focused.value.strip():
-                    self.context_store.add_entry(
-                        source_app=focused.app_name,
-                        content=focused.value,
-                        entry_type="user_input",
-                    )
+                    input_hash = self._hash_content(focused.value)
+                    if input_hash != self._last_input_hash:
+                        self._last_input_hash = input_hash
+                        self.context_store.add_entry(
+                            source_app=focused.app_name,
+                            content=focused.value,
+                            entry_type="user_input",
+                        )
 
             except Exception:
                 logger.exception("Error in observer loop")
@@ -300,6 +315,10 @@ class Autocompleter:
 
         current_input = focused.value
 
+        # Detect mode early so the entire pipeline knows
+        mode = detect_mode(current_input)
+        logger.debug(f"Detected mode: {mode.value}")
+
         # Capture position now (while we're on the event tap thread with AX access)
         caret_pos = _get_caret_screen_position()
         caret_height = 20.0  # default fallback
@@ -332,31 +351,71 @@ class Autocompleter:
             caret_height=caret_height,
         ))
 
+        # Capture visible content metadata for context assembly
+        visible = self.observer.get_visible_content()
+        window_title = visible.window_title if visible else ""
+        source_url = visible.url if visible else ""
+        conversation_turns = None
+        if visible and visible.conversation_turns:
+            conversation_turns = [
+                {"speaker": t.speaker, "text": t.text}
+                for t in visible.conversation_turns
+            ]
+
         # Dispatch the LLM call to a worker thread so we don't block the tap
         threading.Thread(
             target=self._generate_and_show,
-            args=(current_input, focused.app_name, x, y, caret_height),
+            args=(
+                focused, x, y, caret_height, mode,
+                window_title, source_url, conversation_turns,
+            ),
             daemon=True,
         ).start()
 
         return True
 
     def _generate_and_show(
-        self, current_input: str, app_name: str, x: float, y: float,
+        self,
+        focused,  # FocusedElement (duck typed to avoid circular import)
+        x: float, y: float,
         caret_height: float = 20.0,
+        mode: AutocompleteMode | None = None,
+        window_title: str = "",
+        source_url: str = "",
+        conversation_turns: list[dict[str, str]] | None = None,
     ) -> None:
         """Run the LLM call on a worker thread and show the overlay."""
-        context = self.context_store.get_sliced_context(
-            source_app=app_name,
-            max_chars=self.config.context_window_chars,
-        )
-        logger.debug(f"Context length: {len(context)} chars")
+        app_name = focused.app_name
+        current_input = focused.value
+
+        if mode is None:
+            mode = detect_mode(current_input)
+
+        # Assemble context based on mode
+        if mode == AutocompleteMode.CONTINUATION:
+            context = self.context_store.get_continuation_context(
+                before_cursor=focused.before_cursor,
+                after_cursor=focused.after_cursor,
+                source_app=app_name,
+                window_title=window_title,
+                source_url=source_url,
+            )
+        else:
+            context = self.context_store.get_reply_context(
+                conversation_turns=conversation_turns or [],
+                source_app=app_name,
+                window_title=window_title,
+                source_url=source_url,
+                draft_text=focused.before_cursor if focused.insertion_point else "",
+            )
+        logger.debug(f"Context length: {len(context)} chars, mode: {mode.value}")
 
         t0 = time.time()
         suggestions = self.suggestion_engine.generate_suggestions(
             current_input=current_input,
             context=context,
             app_name=app_name,
+            mode=mode,
         )
         elapsed = time.time() - t0
         logger.info(f"LLM call took {elapsed:.2f}s, got {len(suggestions)} suggestions")
