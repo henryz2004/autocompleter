@@ -15,22 +15,39 @@ from .config import Config
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """\
-You are a contextual autocomplete assistant. Your job is to suggest short, \
-relevant completions for text the user is currently typing in a chat interface.
+SYSTEM_PROMPT_COMPLETION = """\
+You are a contextual autocomplete assistant. Your job is to complete text the \
+user is currently typing, using conversation context to make intelligent, \
+relevant completions.
 
 Rules:
 - Generate exactly {num_suggestions} distinct suggestions
 - Each suggestion should be 1-2 sentences maximum
 - Suggestions should naturally continue or complete the user's current input
-- Use the provided context to make suggestions relevant to the conversation
-- Do not repeat what the user has already typed
+- Use the provided context to infer what the user likely means or wants to say
+- Do not repeat what the user has already typed — only output the completion
 - Do not include meta-commentary, just the completion text
 - Separate each suggestion with the delimiter: ---SUGGESTION---
 - Output ONLY the suggestions separated by the delimiter, nothing else
 """
 
-USER_PROMPT_TEMPLATE = """\
+SYSTEM_PROMPT_REPLY = """\
+You are a contextual reply assistant. The user has an empty input field and \
+you should suggest short messages they might want to send as their next \
+response in the conversation.
+
+Rules:
+- Generate exactly {num_suggestions} distinct reply suggestions
+- Each suggestion should be 1-2 sentences maximum
+- Base suggestions on the visible conversation context
+- Suggest realistic, natural responses the user might actually send
+- Vary the tone and intent across suggestions (e.g. agree, ask follow-up, etc.)
+- Do not include meta-commentary, just the reply text
+- Separate each suggestion with the delimiter: ---SUGGESTION---
+- Output ONLY the suggestions separated by the delimiter, nothing else
+"""
+
+USER_PROMPT_TEMPLATE_COMPLETION = """\
 Context from the current session:
 {context}
 
@@ -38,7 +55,18 @@ Currently typing in: {app_name}
 Current input so far:
 {current_input}
 
-Generate {num_suggestions} short completions for this input.\
+Generate {num_suggestions} short, context-aware completions for this input.\
+"""
+
+USER_PROMPT_TEMPLATE_REPLY = """\
+Context from the current session:
+{context}
+
+Currently typing in: {app_name}
+The input field is currently empty.
+
+Generate {num_suggestions} short reply suggestions the user might send next, \
+based on the conversation context above.\
 """
 
 
@@ -60,7 +88,8 @@ class SuggestionEngine:
             import anthropic
 
             self._anthropic_client = anthropic.Anthropic(
-                api_key=self.config.anthropic_api_key
+                api_key=self.config.anthropic_api_key,
+                timeout=10.0,
             )
         return self._anthropic_client
 
@@ -69,7 +98,8 @@ class SuggestionEngine:
             import openai
 
             self._openai_client = openai.OpenAI(
-                api_key=self.config.openai_api_key
+                api_key=self.config.openai_api_key,
+                timeout=10.0,
             )
         return self._openai_client
 
@@ -98,20 +128,32 @@ class SuggestionEngine:
             logger.debug("Debounce: skipping request (too soon)")
             return []
 
-        if not current_input.strip():
+        if not current_input.strip() and not context.strip():
             return []
 
         self._last_request_time = time.time()
 
-        system = SYSTEM_PROMPT.format(
-            num_suggestions=self.config.num_suggestions
-        )
-        user_msg = USER_PROMPT_TEMPLATE.format(
-            context=context or "(no context yet)",
-            app_name=app_name,
-            current_input=current_input,
-            num_suggestions=self.config.num_suggestions,
-        )
+        is_completion = bool(current_input.strip())
+
+        if is_completion:
+            system = SYSTEM_PROMPT_COMPLETION.format(
+                num_suggestions=self.config.num_suggestions
+            )
+            user_msg = USER_PROMPT_TEMPLATE_COMPLETION.format(
+                context=context or "(no context yet)",
+                app_name=app_name,
+                current_input=current_input,
+                num_suggestions=self.config.num_suggestions,
+            )
+        else:
+            system = SYSTEM_PROMPT_REPLY.format(
+                num_suggestions=self.config.num_suggestions
+            )
+            user_msg = USER_PROMPT_TEMPLATE_REPLY.format(
+                context=context or "(no context yet)",
+                app_name=app_name,
+                num_suggestions=self.config.num_suggestions,
+            )
 
         try:
             if self.config.llm_provider == "anthropic":
@@ -136,6 +178,8 @@ class SuggestionEngine:
             system=system,
             messages=[{"role": "user", "content": user_msg}],
         )
+        if not response.content:
+            return []
         text = response.content[0].text
         return self._parse_suggestions(text)
 
@@ -150,6 +194,8 @@ class SuggestionEngine:
                 {"role": "user", "content": user_msg},
             ],
         )
+        if not response.choices:
+            return []
         text = response.choices[0].message.content or ""
         return self._parse_suggestions(text)
 

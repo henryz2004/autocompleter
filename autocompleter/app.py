@@ -35,12 +35,15 @@ from .text_injector import TextInjector
 OBSERVE_INTERVAL = 2.0
 
 
-def _get_caret_screen_position() -> tuple[float, float] | None:
+def _get_caret_screen_position() -> tuple[float, float, float] | None:
     """Try to get the text cursor (caret) position on screen.
 
     Uses the focused element's AXSelectedTextRange + AXBoundsForRange
     to get the actual caret location, which is more accurate than using
     the element's position.
+
+    Returns:
+        (x, y, caret_height) in AX screen coordinates, or None.
     """
     if not HAS_APPKIT:
         return None
@@ -84,7 +87,7 @@ def _get_caret_screen_position() -> tuple[float, float] | None:
             )
             # Validate: reject degenerate rects (zero size or negative coords)
             if rect.size.height > 0 and rect.origin.x > 0 and rect.origin.y >= 0:
-                return (rect.origin.x, rect.origin.y + rect.size.height)
+                return (rect.origin.x, rect.origin.y + rect.size.height, rect.size.height)
             else:
                 logger.debug("Caret rect is degenerate, ignoring")
         else:
@@ -296,15 +299,13 @@ class Autocompleter:
         )
 
         current_input = focused.value
-        if not current_input.strip():
-            logger.debug("Input field is empty, skipping")
-            return True
 
         # Capture position now (while we're on the event tap thread with AX access)
         caret_pos = _get_caret_screen_position()
+        caret_height = 20.0  # default fallback
         if caret_pos:
-            x, y = caret_pos
-            logger.debug(f"Using caret position: ({x:.0f}, {y:.0f})")
+            x, y, caret_height = caret_pos
+            logger.debug(f"Using caret position: ({x:.0f}, {y:.0f}), caret_h={caret_height:.0f}")
         elif focused.position:
             x, y = focused.position
             if focused.size:
@@ -314,17 +315,24 @@ class Autocompleter:
             x, y = 100.0, 100.0
             logger.debug("No position available, using default (100, 100)")
 
+        # Show loading indicator immediately
+        self._run_on_main(lambda: self.overlay.show(
+            [Suggestion(text="Generating...", index=0)], x, y,
+            caret_height=caret_height,
+        ))
+
         # Dispatch the LLM call to a worker thread so we don't block the tap
         threading.Thread(
             target=self._generate_and_show,
-            args=(current_input, focused.app_name, x, y),
+            args=(current_input, focused.app_name, x, y, caret_height),
             daemon=True,
         ).start()
 
         return True
 
     def _generate_and_show(
-        self, current_input: str, app_name: str, x: float, y: float
+        self, current_input: str, app_name: str, x: float, y: float,
+        caret_height: float = 20.0,
     ) -> None:
         """Run the LLM call on a worker thread and show the overlay."""
         context = self.context_store.get_sliced_context(
@@ -344,6 +352,7 @@ class Autocompleter:
 
         if not suggestions:
             logger.debug("No suggestions generated")
+            self._run_on_main(self.overlay.hide)
             return
 
         for i, s in enumerate(suggestions):
@@ -352,7 +361,9 @@ class Autocompleter:
         self._current_suggestions = suggestions
 
         # Dispatch overlay show to main thread
-        self._run_on_main(lambda: self.overlay.show(suggestions, x, y))
+        self._run_on_main(lambda: self.overlay.show(
+            suggestions, x, y, caret_height=caret_height,
+        ))
 
     def _on_nav_up(self) -> bool:
         """Handle up arrow — only intercept when overlay is visible."""

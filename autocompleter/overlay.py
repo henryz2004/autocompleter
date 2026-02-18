@@ -39,6 +39,52 @@ class OverlayConfig:
     item_height: float = 32.0
 
 
+def _measure_text_height(text: str, font, available_width: float) -> float:
+    """Measure the height needed to render wrapped text."""
+    if not HAS_APPKIT:
+        return 20.0
+    paragraph_style = AppKit.NSMutableParagraphStyle.alloc().init()
+    paragraph_style.setLineBreakMode_(AppKit.NSLineBreakByWordWrapping)
+    attrs = {
+        AppKit.NSFontAttributeName: font,
+        AppKit.NSParagraphStyleAttributeName: paragraph_style,
+    }
+    attr_str = AppKit.NSAttributedString.alloc().initWithString_attributes_(
+        text, attrs
+    )
+    bounding = attr_str.boundingRectWithSize_options_(
+        AppKit.NSMakeSize(available_width, 1e6),
+        AppKit.NSStringDrawingUsesLineFragmentOrigin,
+    )
+    return bounding.size.height
+
+
+def _compute_item_heights(
+    suggestions: list[Suggestion], config: OverlayConfig,
+) -> list[float]:
+    """Compute per-item heights accounting for text wrapping."""
+    if not HAS_APPKIT:
+        return [config.item_height] * len(suggestions)
+    font = AppKit.NSFont.systemFontOfSize_(config.font_size)
+    # Available width for text inside each item (item padding: 8 each side + 8 inner each side)
+    available_width = config.width - 2 * config.padding - 16
+    heights = []
+    for s in suggestions:
+        text_h = _measure_text_height(s.text, font, available_width)
+        item_h = max(config.item_height, text_h + 12)
+        heights.append(item_h)
+    return heights
+
+
+def _compute_overlay_height(
+    suggestions: list[Suggestion], config: OverlayConfig,
+) -> float:
+    """Compute total overlay height with dynamic per-item sizing."""
+    item_heights = _compute_item_heights(suggestions, config)
+    total = config.padding * 2 + sum(item_heights)
+    return min(total, config.max_height)
+
+
 if HAS_APPKIT:
 
     class SuggestionOverlayView(AppKit.NSView):
@@ -51,11 +97,13 @@ if HAS_APPKIT:
             self._config = config
             self._suggestions: list[Suggestion] = []
             self._selected_index: int = 0
+            self._item_heights: list[float] = []
             return self
 
         def setSuggestions_(self, suggestions):
             self._suggestions = suggestions
             self._selected_index = 0
+            self._item_heights = _compute_item_heights(suggestions, self._config)
             self.setNeedsDisplay_(True)
 
         def setSelectedIndex_(self, index):
@@ -88,15 +136,23 @@ if HAS_APPKIT:
                 1.0,
             )
 
+            paragraph_style = AppKit.NSMutableParagraphStyle.alloc().init()
+            paragraph_style.setLineBreakMode_(AppKit.NSLineBreakByWordWrapping)
+
             y = self.bounds().size.height - cfg.padding
 
             for i, suggestion in enumerate(self._suggestions):
-                y -= cfg.item_height
+                item_h = (
+                    self._item_heights[i]
+                    if i < len(self._item_heights)
+                    else cfg.item_height
+                )
+                y -= item_h
                 item_rect = NSMakeRect(
                     cfg.padding,
                     y,
                     self.bounds().size.width - 2 * cfg.padding,
-                    cfg.item_height,
+                    item_h,
                 )
 
                 # Highlight selected item
@@ -109,10 +165,11 @@ if HAS_APPKIT:
                     highlight.set()
                     highlight_path.fill()
 
-                # Draw text
+                # Draw text with word wrapping
                 attrs = {
                     AppKit.NSFontAttributeName: font,
                     AppKit.NSForegroundColorAttributeName: text_color,
+                    AppKit.NSParagraphStyleAttributeName: paragraph_style,
                 }
                 text = AppKit.NSAttributedString.alloc().initWithString_attributes_(
                     suggestion.text, attrs
@@ -121,7 +178,7 @@ if HAS_APPKIT:
                     item_rect.origin.x + 8,
                     item_rect.origin.y + 6,
                     item_rect.size.width - 16,
-                    cfg.item_height - 12,
+                    item_h - 12,
                 )
                 text.drawInRect_(text_rect)
 
@@ -148,11 +205,14 @@ class SuggestionOverlay:
         x: float,
         y: float,
         on_accept=None,
+        caret_height: float = 20.0,
     ) -> None:
         """Show the overlay with suggestions at the given screen coordinates.
 
         x, y are in macOS screen coordinates (origin = top-left of primary
         screen, y increases downward — matching the Accessibility API).
+        caret_height is the height of the caret in AX coordinates, used
+        to position the overlay above the caret when flipping.
         """
         if not HAS_APPKIT:
             logger.warning("AppKit not available; overlay cannot be shown.")
@@ -166,11 +226,7 @@ class SuggestionOverlay:
             self.hide()
             return
 
-        height = min(
-            self._config.padding * 2
-            + self._config.item_height * len(suggestions),
-            self._config.max_height,
-        )
+        height = _compute_overlay_height(suggestions, self._config)
 
         # Convert from top-left origin (AX coords) to bottom-left origin (AppKit coords).
         # AX coords: origin at top-left of primary display, Y increases downward.
@@ -179,13 +235,18 @@ class SuggestionOverlay:
         # Its height is the pivot for the Y flip regardless of which monitor
         # the target is on.
         screens = AppKit.NSScreen.screens()
+        primary_height = 0.0
         if screens and len(screens) > 0:
             # screens()[0] is always the primary display
             primary_height = screens[0].frame().size.height
             # Flip: ns_y = primary_height - ax_y - overlay_height
+            # This places the overlay's top edge at the caret bottom (below caret)
             ns_y = primary_height - y - height
         else:
             ns_y = y
+
+        # caret_ns_y is the caret's bottom edge in AppKit coords (used for flip)
+        caret_ns_y = primary_height - y if primary_height else y
 
         logger.debug(
             f"Overlay show: AX pos=({x:.0f}, {y:.0f}) -> "
@@ -202,6 +263,10 @@ class SuggestionOverlay:
                 f"size=({f.size.width:.0f}, {f.size.height:.0f})"
             )
 
+        x, ns_y = self._clamp_to_screen(
+            x, ns_y, self._config.width, height,
+            caret_ns_y=caret_ns_y, caret_height=caret_height,
+        )
         frame = NSMakeRect(x, ns_y, self._config.width, height)
 
         if self._window is None:
@@ -251,6 +316,69 @@ class SuggestionOverlay:
         if self._on_accept:
             self._on_accept(suggestion)
         return suggestion
+
+    def _clamp_to_screen(
+        self, x: float, ns_y: float, width: float, height: float,
+        caret_ns_y: float = 0.0, caret_height: float = 20.0,
+    ) -> tuple:
+        """Adjust overlay position so it stays within screen bounds.
+
+        Args:
+            x, ns_y: Position in AppKit coordinates (origin bottom-left).
+            width, height: Overlay dimensions.
+            caret_ns_y: Caret bottom edge in AppKit coordinates.
+            caret_height: Height of the caret in points.
+
+        Returns:
+            Adjusted (x, ns_y).
+        """
+        if not HAS_APPKIT:
+            return (x, ns_y)
+
+        # Find the screen containing the overlay origin
+        target_screen = None
+        for scr in AppKit.NSScreen.screens():
+            sf = scr.frame()
+            if (
+                sf.origin.x <= x < sf.origin.x + sf.size.width
+                and sf.origin.y <= ns_y < sf.origin.y + sf.size.height
+            ):
+                target_screen = scr
+                break
+
+        if target_screen is None:
+            screens = AppKit.NSScreen.screens()
+            if screens:
+                target_screen = screens[0]
+            else:
+                return (x, ns_y)
+
+        sf = target_screen.frame()
+        screen_left = sf.origin.x
+        screen_right = sf.origin.x + sf.size.width
+        screen_bottom = sf.origin.y
+        screen_top = sf.origin.y + sf.size.height
+
+        # Shift left if overlay extends past the right edge
+        if x + width > screen_right:
+            x = screen_right - width
+
+        # Shift right if overlay extends past the left edge
+        if x < screen_left:
+            x = screen_left
+
+        # If overlay extends below the bottom edge, flip above the caret
+        if ns_y < screen_bottom:
+            # Place overlay bottom at the caret top (above the caret)
+            ns_y = caret_ns_y + caret_height
+            if ns_y + height > screen_top:
+                ns_y = screen_top - height
+
+        # Clamp to top if overlay extends above the top edge
+        if ns_y + height > screen_top:
+            ns_y = screen_top - height
+
+        return (x, ns_y)
 
     def _create_window(self, frame) -> None:
         """Create the borderless floating window."""

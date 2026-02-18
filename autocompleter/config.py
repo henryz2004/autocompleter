@@ -22,7 +22,7 @@ class Config:
     llm_provider: str = "anthropic"  # "anthropic" or "openai"
     anthropic_api_key: str = ""
     openai_api_key: str = ""
-    llm_model: str = "claude-sonnet-4-20250514"
+    llm_model: str = "claude-haiku-4-5-20251001"
     max_tokens: int = 150
     temperature: float = 0.7
 
@@ -38,7 +38,7 @@ class Config:
 
     # Overlay
     overlay_width: int = 400
-    overlay_max_height: int = 200
+    overlay_max_height: int = 300
     overlay_font_size: int = 13
     overlay_opacity: float = 0.95
 
@@ -73,7 +73,7 @@ def load_config() -> Config:
     config = Config(
         llm_provider=os.environ.get("AUTOCOMPLETER_LLM_PROVIDER", "anthropic"),
         llm_model=os.environ.get(
-            "AUTOCOMPLETER_LLM_MODEL", "claude-sonnet-4-20250514"
+            "AUTOCOMPLETER_LLM_MODEL", "claude-haiku-4-5-20251001"
         ),
         hotkey=os.environ.get("AUTOCOMPLETER_HOTKEY", "ctrl+space"),
     )

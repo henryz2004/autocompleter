@@ -58,13 +58,23 @@ class TestSuggestionEngine:
         engine._last_request_time = time.time() - 1.0
         assert engine.can_request()
 
-    def test_empty_input_returns_empty(self, engine):
-        result = engine.generate_suggestions("", "some context")
+    def test_empty_input_and_empty_context_returns_empty(self, engine):
+        result = engine.generate_suggestions("", "")
         assert result == []
 
-    def test_whitespace_input_returns_empty(self, engine):
-        result = engine.generate_suggestions("   ", "some context")
+    def test_whitespace_input_and_whitespace_context_returns_empty(self, engine):
+        result = engine.generate_suggestions("   ", "   ")
         assert result == []
+
+    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_anthropic")
+    def test_empty_input_with_context_calls_llm(self, mock_call, engine):
+        mock_call.return_value = [
+            Suggestion(text="Sounds good!", index=0),
+        ]
+        result = engine.generate_suggestions("", "some context")
+        assert len(result) == 1
+        assert result[0].text == "Sounds good!"
+        mock_call.assert_called_once()
 
     @patch("autocompleter.suggestion_engine.SuggestionEngine._call_anthropic")
     def test_generate_calls_anthropic(self, mock_call, engine):
