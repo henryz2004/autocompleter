@@ -293,6 +293,8 @@ class SuggestionEngine:
         app_name: str = "Unknown",
         mode: Optional[AutocompleteMode] = None,
         before_cursor: Optional[str] = None,
+        feedback_stats: Optional[dict] = None,
+        negative_patterns: Optional[list[str]] = None,
     ) -> Generator[Suggestion, None, None]:
         """Generate completion suggestions via streaming, yielding each as it completes.
 
@@ -307,6 +309,8 @@ class SuggestionEngine:
             mode: Explicit mode override. If None, inferred from before_cursor.
             before_cursor: Text before the cursor. Used for mode detection
                 when mode is None. Falls back to current_input if not provided.
+            feedback_stats: Optional dict from ContextStore.get_feedback_stats().
+            negative_patterns: Optional list of recently dismissed suggestion texts.
 
         Yields:
             Suggestion objects, in the order they are completed by the LLM.
@@ -345,6 +349,18 @@ class SuggestionEngine:
             )
             temperature = self.config.reply_temperature
             max_tokens = self.config.reply_max_tokens
+
+        # Apply feedback-based temperature adjustment
+        if feedback_stats is not None:
+            temperature = adjust_temperature(temperature, feedback_stats.get("accept_rate", 0.5))
+
+        # Append negative patterns to system prompt
+        if negative_patterns:
+            avoided = "\n".join(f"- {p}" for p in negative_patterns)
+            system += (
+                "\n\nAvoid generating suggestions similar to these recently "
+                "dismissed completions:\n" + avoided
+            )
 
         logger.debug(
             f"--- LLM STREAM REQUEST ({self.config.llm_provider}/{self.config.llm_model}, "

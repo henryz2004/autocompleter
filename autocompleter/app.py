@@ -654,6 +654,19 @@ class Autocompleter:
             logger.info(f"[CTX]   | {line}")
         logger.info("[CTX] --- END CONTEXT ---")
 
+        # Fetch feedback stats and dismissed patterns for suggestion tuning
+        try:
+            feedback_stats = self.context_store.get_feedback_stats(
+                source_app=app_name,
+            )
+            negative_patterns = self.context_store.get_recent_dismissed_patterns(
+                source_app=app_name,
+            )
+        except Exception:
+            logger.debug("Could not fetch feedback data", exc_info=True)
+            feedback_stats = None
+            negative_patterns = None
+
         t0 = time.time()
         suggestions: list[Suggestion] = []
 
@@ -663,6 +676,8 @@ class Autocompleter:
                 context=context,
                 app_name=app_name,
                 mode=mode,
+                feedback_stats=feedback_stats,
+                negative_patterns=negative_patterns,
             ):
                 # Check if a newer trigger has superseded this one
                 if generation_id != self._generation_id:
