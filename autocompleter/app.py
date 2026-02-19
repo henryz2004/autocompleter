@@ -716,14 +716,18 @@ class Autocompleter:
 
             suggestion = self.overlay.accept_selection()
             if suggestion:
+                focused = self.observer.get_focused_element()
+                app_name = focused.app_name if focused else "Unknown"
+                app_pid = focused.app_pid if focused else 0
                 success = self.injector.inject(
                     suggestion.text,
                     replace=self._replace_on_inject,
                     insertion_point=cursor_pos,
+                    app_name=app_name,
+                    app_pid=app_pid,
                 )
                 if success:
                     logger.info(f"Injected: {suggestion.text[:60]}")
-                    app_name = focused.app_name if focused else "Unknown"
                     self.context_store.add_entry(
                         source_app=app_name,
                         content=suggestion.text,

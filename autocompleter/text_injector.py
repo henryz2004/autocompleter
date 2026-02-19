@@ -6,8 +6,9 @@ not just visual insertion.
 
 Strategy:
 1. Primary: Use the Accessibility API's AXValue setter + AXConfirmAction
-2. Fallback: Use CGEvents to simulate keyboard input character-by-character
+2. CDP injection: Use Chrome DevTools Protocol for Chromium-based apps
 3. Fallback: Use NSPasteboard (clipboard) + Cmd+V simulation
+4. Fallback: Use CGEvents to simulate keyboard input character-by-character
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ except ImportError:
     HAS_INJECTION = False
 
 from .ax_utils import ax_get_attribute, ax_is_attribute_settable, ax_set_attribute
+from .cdp_injector import CDPConnection, find_debug_port, is_chromium_app
 
 
 class TextInjector:
@@ -42,6 +44,7 @@ class TextInjector:
 
     def inject(
         self, text: str, replace: bool = False, insertion_point: Optional[int] = None,
+        app_name: str = "", app_pid: int = 0,
     ) -> bool:
         """Inject text into the currently focused input.
 
@@ -59,6 +62,8 @@ class TextInjector:
                 When None, text is appended to the end (backward-compatible).
                 Only used by the AX API strategy; clipboard paste and
                 keystrokes naturally inject at the OS cursor position.
+            app_name: App name for CDP injection (Chromium-based apps).
+            app_pid: App PID for CDP injection port discovery.
 
         Returns True if injection succeeded.
         """
@@ -70,6 +75,11 @@ class TextInjector:
             if self._inject_via_ax(text, insertion_point=insertion_point):
                 logger.debug("Injected text via AX API")
                 return True
+
+        # Try CDP injection for Chromium-based apps
+        if self._inject_via_cdp(text, app_name=app_name, app_pid=app_pid):
+            logger.debug("Injected text via CDP")
+            return True
 
         # Fall back to clipboard paste.
         # NOTE: Clipboard paste simulates Cmd+V, which inserts at the
@@ -88,6 +98,50 @@ class TextInjector:
 
         logger.warning("All injection methods failed")
         return False
+
+    def _inject_via_cdp(
+        self, text: str, app_name: str = "", app_pid: int = 0,
+    ) -> bool:
+        """Inject text via the Chrome DevTools Protocol.
+
+        Only attempted for Chromium-based apps.  Tries Input.insertText
+        first, falling back to document.execCommand('insertText').
+
+        Returns True if injection succeeded.
+        """
+        if not app_name or not is_chromium_app(app_name):
+            return False
+
+        port = find_debug_port(app_pid)
+        if port is None:
+            logger.debug(
+                f"No CDP debug port found for {app_name!r} (PID {app_pid})"
+            )
+            return False
+
+        cdp = CDPConnection(port=port)
+        try:
+            if not cdp.connect_to_target():
+                logger.debug(f"CDP: could not connect to target for {app_name!r}")
+                return False
+
+            # Primary: Input.insertText
+            if cdp.insert_text(text):
+                logger.debug("CDP: injected via Input.insertText")
+                return True
+
+            # Fallback: document.execCommand
+            if cdp.insert_text_via_js(text):
+                logger.debug("CDP: injected via execCommand")
+                return True
+
+            logger.debug("CDP: both insertion methods failed")
+            return False
+        except Exception:
+            logger.debug("CDP injection error", exc_info=True)
+            return False
+        finally:
+            cdp.close()
 
     def _inject_via_ax(
         self, text: str, insertion_point: Optional[int] = None, replace: bool = False,
