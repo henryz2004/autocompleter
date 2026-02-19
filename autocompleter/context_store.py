@@ -219,12 +219,15 @@ class ContextStore:
         source_app: str,
         window_title: str = "",
         source_url: str = "",
-        max_local_chars: int = 300,
+        max_local_chars: int = 600,
+        visible_text: list[str] | None = None,
     ) -> str:
         """Build lean context for continuation mode.
 
         Tier 1 (mandatory): before_cursor and after_cursor — sent raw.
-        Tier 2 (minimal local semantics): recent visible text, capped aggressively.
+        Tier 2 (live surroundings): visible text from the current window,
+            passed directly rather than pulled from stale DB entries.
+            Falls back to recent DB entries if visible_text is not provided.
         Tier 3 (light metadata): app, window_title, url. No timestamps.
         """
         parts: list[str] = []
@@ -237,21 +240,38 @@ class ContextStore:
             meta_parts.append(f"URL: {source_url}")
         parts.append(" | ".join(meta_parts))
 
-        # Tier 2: recent local context (a few hundred chars max)
-        app_entries = self.get_by_source(source_app, limit=5)
+        # Tier 2: live visible text (preferred) or recent DB entries (fallback)
         local_chars = 0
         local_parts: list[str] = []
-        for entry in app_entries:
-            if entry.entry_type == "user_input":
-                continue  # Skip raw input — we have cursor state
-            snippet = entry.content[:max_local_chars - local_chars]
-            if snippet.strip():
-                local_parts.append(snippet.strip())
+        if visible_text:
+            for element in visible_text:
+                snippet = element.strip()
+                if not snippet:
+                    continue
+                # Skip elements that are just the cursor text itself (avoid duplication)
+                if snippet == before_cursor.strip() or snippet == after_cursor.strip():
+                    continue
+                remaining = max_local_chars - local_chars
+                if remaining <= 0:
+                    break
+                snippet = snippet[:remaining]
+                local_parts.append(snippet)
                 local_chars += len(snippet)
-            if local_chars >= max_local_chars:
-                break
+        else:
+            # Fallback: pull from DB
+            app_entries = self.get_by_source(source_app, limit=5)
+            for entry in app_entries:
+                if entry.entry_type == "user_input":
+                    continue  # Skip raw input — we have cursor state
+                remaining = max_local_chars - local_chars
+                if remaining <= 0:
+                    break
+                snippet = entry.content[:remaining]
+                if snippet.strip():
+                    local_parts.append(snippet.strip())
+                    local_chars += len(snippet)
         if local_parts:
-            parts.append("Recent context:\n" + "\n".join(local_parts))
+            parts.append("Visible context:\n" + "\n".join(local_parts))
 
         # Tier 1: cursor state (raw, always included)
         parts.append(f"Text before cursor:\n{before_cursor}")
@@ -268,12 +288,18 @@ class ContextStore:
         source_url: str = "",
         draft_text: str = "",
         max_turns: int = 8,
+        visible_text: list[str] | None = None,
+        max_age_seconds: float = 300.0,
     ) -> str:
         """Build context for reply mode.
 
         Tier 1: Structured recent turns with speaker labels.
         Tier 2: Draft state if user has typed a partial reply.
         Tier 3: Metadata with timestamps (useful for pacing).
+
+        When conversation_turns is empty, falls back to:
+          1. Live visible_text (if provided)
+          2. Recent DB entries (filtered by max_age_seconds, default 5 min)
         """
         parts: list[str] = []
 
@@ -295,15 +321,29 @@ class ContextStore:
                 turn_lines.append(f"- {speaker}: {text}")
             parts.append("Conversation:\n" + "\n".join(turn_lines))
         else:
-            # Fall back to recent visible text from this app
-            app_entries = self.get_by_source(source_app, limit=10)
+            # Fallback 1: live visible text from the current window
             fallback_parts: list[str] = []
             total = 0
-            for entry in app_entries:
-                if total > 1500:
-                    break
-                fallback_parts.append(entry.content)
-                total += len(entry.content)
+            if visible_text:
+                for element in visible_text:
+                    snippet = element.strip()
+                    if not snippet:
+                        continue
+                    if total + len(snippet) > 1500:
+                        break
+                    fallback_parts.append(snippet)
+                    total += len(snippet)
+            # Fallback 2: recent DB entries (time-filtered)
+            if not fallback_parts:
+                cutoff = time.time() - max_age_seconds
+                app_entries = self.get_by_source(source_app, limit=10)
+                for entry in app_entries:
+                    if entry.timestamp < cutoff:
+                        continue
+                    if total + len(entry.content) > 1500:
+                        break
+                    fallback_parts.append(entry.content)
+                    total += len(entry.content)
             if fallback_parts:
                 parts.append("Recent visible text:\n" + "\n".join(fallback_parts))
 

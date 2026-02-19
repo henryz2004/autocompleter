@@ -125,6 +125,8 @@ class Autocompleter:
         self._main_queue: queue.Queue = queue.Queue()
         self._last_content_hash: str = ""
         self._last_input_hash: str = ""
+        self._generation_id: int = 0  # Monotonic counter; only latest generation updates overlay
+        self._replace_on_inject: bool = False  # True when focused field had baked-in placeholder
 
     def start(self) -> None:
         """Start the autocompleter."""
@@ -248,17 +250,27 @@ class Autocompleter:
         """Fast content hash for dedup."""
         return hashlib.md5(text.encode("utf-8", errors="replace")).hexdigest()
 
+    # Cap stored content to avoid DB bloat from terminal scrollback buffers
+    _MAX_STORE_CHARS = 4000
+
     def _observe_loop(self) -> None:
         """Background loop that observes visible content and stores context."""
         while self._running:
             try:
                 content = self.observer.get_visible_content()
                 if content and content.text_elements:
-                    combined = "\n".join(content.text_elements[:20])
+                    combined = "\n".join(content.text_elements[:50])
+                    if len(combined) > self._MAX_STORE_CHARS:
+                        combined = combined[:self._MAX_STORE_CHARS]
                     if combined.strip():
                         content_hash = self._hash_content(combined)
                         if content_hash != self._last_content_hash:
                             self._last_content_hash = content_hash
+                            logger.debug(
+                                f"Observer: stored {len(content.text_elements)} "
+                                f"elements from {content.app_name!r} "
+                                f"({len(combined)} chars)"
+                            )
                             self.context_store.add_entry(
                                 source_app=content.app_name,
                                 content=combined,
@@ -267,15 +279,22 @@ class Autocompleter:
                                 window_title=content.window_title,
                             )
 
-                # Also store the current input field value
+                # Also store the current input field value (capped)
                 focused = self.observer.get_focused_element()
                 if focused and focused.value.strip():
-                    input_hash = self._hash_content(focused.value)
+                    value = focused.value
+                    if len(value) > self._MAX_STORE_CHARS:
+                        value = value[:self._MAX_STORE_CHARS]
+                    input_hash = self._hash_content(value)
                     if input_hash != self._last_input_hash:
                         self._last_input_hash = input_hash
+                        logger.debug(
+                            f"Observer: stored user_input from {focused.app_name!r} "
+                            f"({len(value)} chars)"
+                        )
                         self.context_store.add_entry(
                             source_app=focused.app_name,
-                            content=focused.value,
+                            content=value,
                             entry_type="user_input",
                         )
 
@@ -294,7 +313,7 @@ class Autocompleter:
         immediately — macOS will disable the tap if it blocks for >1s.
         The actual LLM call is dispatched to a worker thread.
         """
-        logger.debug("Trigger hotkey pressed")
+        logger.info("--- TRIGGER ---")
 
         if self.overlay.is_visible:
             logger.debug("Overlay visible, hiding it")
@@ -304,20 +323,34 @@ class Autocompleter:
         # Gather info quickly (AX calls are fast) then dispatch heavy work
         focused = self.observer.get_focused_element()
         if focused is None:
-            logger.debug("No focused text element found")
+            logger.info("No focused text element found")
             return True
 
-        logger.debug(
-            f"Focused element: app={focused.app_name} role={focused.role} "
-            f"pos={focused.position} size={focused.size} "
-            f"value_len={len(focused.value)}"
+        # Remember whether the field has a baked-in placeholder so the
+        # injector can skip AXValue setting (which bypasses the web app's
+        # placeholder-clearing JS) and use clipboard/keystrokes instead.
+        self._replace_on_inject = focused.placeholder_detected
+
+        logger.info(
+            f"Focused: app={focused.app_name!r} role={focused.role} "
+            f"cursor_pos={focused.insertion_point} value_len={len(focused.value)} "
+            f"placeholder_detected={focused.placeholder_detected}"
         )
+        logger.info(
+            f"Before cursor ({len(focused.before_cursor)} chars): "
+            f"{focused.before_cursor[-120:]!r}"
+        )
+        if focused.after_cursor.strip():
+            logger.info(
+                f"After cursor ({len(focused.after_cursor)} chars): "
+                f"{focused.after_cursor[:120]!r}"
+            )
 
         current_input = focused.value
 
         # Detect mode early so the entire pipeline knows
-        mode = detect_mode(current_input)
-        logger.debug(f"Detected mode: {mode.value}")
+        mode = detect_mode(before_cursor=focused.before_cursor)
+        logger.info(f"Mode: {mode.value} (before_cursor len={len(focused.before_cursor.strip())})")
 
         # Capture position now (while we're on the event tap thread with AX access)
         caret_pos = _get_caret_screen_position()
@@ -355,12 +388,49 @@ class Autocompleter:
         visible = self.observer.get_visible_content()
         window_title = visible.window_title if visible else ""
         source_url = visible.url if visible else ""
+        visible_text_elements: list[str] = []
         conversation_turns = None
-        if visible and visible.conversation_turns:
-            conversation_turns = [
-                {"speaker": t.speaker, "text": t.text}
-                for t in visible.conversation_turns
-            ]
+        if visible:
+            visible_text_elements = visible.text_elements or []
+            logger.info(
+                f"[CTX] Window: {visible.window_title!r} | URL: {visible.url!r} | "
+                f"text_elements: {len(visible_text_elements)} | "
+                f"conversation_turns: {len(visible.conversation_turns) if visible.conversation_turns else 0}"
+            )
+            if visible.conversation_turns:
+                conversation_turns = [
+                    {"speaker": t.speaker, "text": t.text}
+                    for t in visible.conversation_turns
+                ]
+                for i, t in enumerate(visible.conversation_turns):
+                    logger.debug(f"[CTX]   Turn [{i}]: {t.speaker}: {t.text[:100]!r}")
+            # Log a sample of visible text elements
+            for i, elem in enumerate(visible_text_elements[:10]):
+                logger.debug(f"[CTX]   Visible text [{i}]: {elem[:120]!r}")
+            if len(visible_text_elements) > 10:
+                logger.debug(f"[CTX]   ... and {len(visible_text_elements) - 10} more elements")
+
+            # Store fresh observation in context store so the worker thread
+            # sees up-to-date data (fixes stale context at trigger time).
+            if visible.text_elements:
+                combined = "\n".join(visible.text_elements[:50])
+                if combined.strip():
+                    content_hash = self._hash_content(combined)
+                    if content_hash != self._last_content_hash:
+                        self._last_content_hash = content_hash
+                        self.context_store.add_entry(
+                            source_app=visible.app_name,
+                            content=combined,
+                            entry_type="visible_text",
+                            source_url=visible.url,
+                            window_title=visible.window_title,
+                        )
+        else:
+            logger.info("[CTX] No visible content captured")
+
+        # Bump generation counter — only the latest generation updates the overlay
+        self._generation_id += 1
+        gen_id = self._generation_id
 
         # Dispatch the LLM call to a worker thread so we don't block the tap
         threading.Thread(
@@ -368,6 +438,7 @@ class Autocompleter:
             args=(
                 focused, x, y, caret_height, mode,
                 window_title, source_url, conversation_turns,
+                visible_text_elements, gen_id,
             ),
             daemon=True,
         ).start()
@@ -383,13 +454,15 @@ class Autocompleter:
         window_title: str = "",
         source_url: str = "",
         conversation_turns: list[dict[str, str]] | None = None,
+        visible_text_elements: list[str] | None = None,
+        generation_id: int = 0,
     ) -> None:
         """Run the LLM call on a worker thread and show the overlay."""
         app_name = focused.app_name
         current_input = focused.value
 
         if mode is None:
-            mode = detect_mode(current_input)
+            mode = detect_mode(before_cursor=focused.before_cursor)
 
         # Assemble context based on mode
         if mode == AutocompleteMode.CONTINUATION:
@@ -399,6 +472,7 @@ class Autocompleter:
                 source_app=app_name,
                 window_title=window_title,
                 source_url=source_url,
+                visible_text=visible_text_elements,
             )
         else:
             context = self.context_store.get_reply_context(
@@ -406,9 +480,18 @@ class Autocompleter:
                 source_app=app_name,
                 window_title=window_title,
                 source_url=source_url,
-                draft_text=focused.before_cursor if focused.insertion_point else "",
+                draft_text=focused.before_cursor if focused.insertion_point is not None else "",
+                visible_text=visible_text_elements,
             )
-        logger.debug(f"Context length: {len(context)} chars, mode: {mode.value}")
+
+        logger.info(
+            f"[CTX] --- CONTEXT (gen={generation_id}, mode={mode.value}, "
+            f"{len(context)} chars) ---"
+        )
+        # Log the full assembled context so we can inspect exactly what the LLM sees
+        for line in context.splitlines():
+            logger.info(f"[CTX]   | {line}")
+        logger.info("[CTX] --- END CONTEXT ---")
 
         t0 = time.time()
         suggestions = self.suggestion_engine.generate_suggestions(
@@ -418,22 +501,34 @@ class Autocompleter:
             mode=mode,
         )
         elapsed = time.time() - t0
-        logger.info(f"LLM call took {elapsed:.2f}s, got {len(suggestions)} suggestions")
+
+        # Check if a newer trigger has superseded this one
+        if generation_id != self._generation_id:
+            logger.info(
+                f"Generation {generation_id} superseded by {self._generation_id}, "
+                f"discarding {len(suggestions)} results after {elapsed:.2f}s"
+            )
+            return
 
         if not suggestions:
-            logger.debug("No suggestions generated")
+            logger.info(f"No suggestions generated (took {elapsed:.2f}s)")
             self._run_on_main(self.overlay.hide)
             return
 
+        logger.info(
+            f"--- SUGGESTIONS (gen={generation_id}, {elapsed:.2f}s) ---"
+        )
         for i, s in enumerate(suggestions):
-            logger.debug(f"  Suggestion [{i}]: {s.text[:80]}")
+            logger.info(f"  [{i}]: {s.text[:120]}")
 
         self._current_suggestions = suggestions
 
-        # Dispatch overlay show to main thread
-        self._run_on_main(lambda: self.overlay.show(
-            suggestions, x, y, caret_height=caret_height,
-        ))
+        # Dispatch overlay show to main thread (re-check generation to avoid race)
+        def _show():
+            if generation_id == self._generation_id:
+                self.overlay.show(suggestions, x, y, caret_height=caret_height)
+
+        self._run_on_main(_show)
 
     def _on_nav_up(self) -> bool:
         """Handle up arrow — only intercept when overlay is visible."""
@@ -457,7 +552,9 @@ class Autocompleter:
         def _accept():
             suggestion = self.overlay.accept_selection()
             if suggestion:
-                success = self.injector.inject(suggestion.text)
+                success = self.injector.inject(
+                    suggestion.text, replace=self._replace_on_inject,
+                )
                 if success:
                     logger.info(f"Injected: {suggestion.text[:60]}")
                     focused = self.observer.get_focused_element()
@@ -483,13 +580,48 @@ class Autocompleter:
 
 def main():
     """Entry point for the autocompleter."""
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    import argparse
+
+    parser = argparse.ArgumentParser(description="macOS contextual autocompleter")
+    parser.add_argument(
+        "--log-file",
+        type=str,
+        default=None,
+        help="Write logs to this file (in addition to stderr)",
     )
-    # Quiet down noisy loggers
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Console logging level (default: INFO). Log file always gets DEBUG.",
+    )
+    args = parser.parse_args()
+
+    log_fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG)  # Allow everything through; handlers filter
+
+    # Stderr: show INFO+ by default (clean output)
+    console = logging.StreamHandler()
+    console.setLevel(getattr(logging, args.log_level))
+    console.setFormatter(logging.Formatter(log_fmt))
+    root.addHandler(console)
+
+    # File: always DEBUG (full diagnostics)
+    if args.log_file:
+        fh = logging.FileHandler(args.log_file, mode="w")
+        fh.setLevel(logging.DEBUG)
+        fh.setFormatter(logging.Formatter(log_fmt))
+        root.addHandler(fh)
+
+    # Quiet down noisy third-party loggers
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("anthropic").setLevel(logging.WARNING)
+
+    if args.log_file:
+        print(f"Logging to {args.log_file} (file=DEBUG, console={args.log_level})")
 
     config = load_config()
     app = Autocompleter(config)

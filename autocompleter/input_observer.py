@@ -40,6 +40,7 @@ class FocusedElement:
     size: tuple[float, float] | None  # (width, height)
     insertion_point: int | None = None  # Caret position in value (chars from start)
     selection_length: int = 0  # Length of selected text range (0 = no selection)
+    placeholder_detected: bool = False  # True when value was cleared due to placeholder detection
 
     @property
     def before_cursor(self) -> str:
@@ -75,13 +76,33 @@ class VisibleContent:
     conversation_turns: list[ConversationTurn] | None = None
 
 
+# Roles to skip entirely during child-text collection (UI chrome)
+_CHILD_TEXT_SKIP_ROLES = frozenset({
+    "AXToolbar", "AXMenuBar", "AXMenu", "AXMenuItem",
+    "AXButton", "AXScrollBar", "AXSlider", "AXIncrementor",
+    "AXPopUpButton", "AXCheckBox", "AXRadioButton",
+    "AXTabGroup", "AXTab",
+})
+
+
+_MAX_CHILD_TEXT_SIBLINGS = 80  # Max children to iterate per node
+
+# App-specific known placeholder prefixes.  Some Electron apps (Gemini Desktop)
+# bake placeholder text into AXValue with no distinguishing AX attributes.
+# Keyed by app name (as reported by NSWorkspace.localizedName()).
+_APP_PLACEHOLDER_PREFIXES: dict[str, tuple[str, ...]] = {
+    "Google Gemini": ("Ask Gemini",),
+}
+
+
 def _collect_child_text(
     element, max_depth: int = 5, max_chars: int = 2000, depth: int = 0
 ) -> str:
     """Collect text from child elements.
 
-    Used as a fallback when AXValue is empty on contenteditable divs
-    (common in Chromium-based browsers like Edge and Chrome).
+    Concatenates adjacent AXStaticText siblings (handles Electron apps that
+    fragment text into single-character elements). Separates text from
+    different container elements with newlines. Skips UI chrome roles.
     """
     if depth > max_depth:
         return ""
@@ -90,22 +111,43 @@ def _collect_child_text(
     total = 0
     children = ax_get_attribute(element, "AXChildren")
     if children:
-        for child in children:
+        # Buffer adjacent AXStaticText values to concatenate fragments
+        text_buffer: list[str] = []
+        for child in children[:_MAX_CHILD_TEXT_SIBLINGS]:
             if total >= max_chars:
                 break
-            role = ax_get_attribute(child, "AXRole")
+            role = ax_get_attribute(child, "AXRole") or ""
+            if role in _CHILD_TEXT_SKIP_ROLES:
+                continue
             if role == "AXStaticText":
                 val = ax_get_attribute(child, "AXValue")
                 if isinstance(val, str) and val.strip():
-                    parts.append(val.strip())
+                    text_buffer.append(val)
                     total += len(val)
+                else:
+                    # Electron apps (ChatGPT) put text in AXDescription
+                    desc = ax_get_attribute(child, "AXDescription")
+                    if isinstance(desc, str) and desc.strip():
+                        text_buffer.append(desc)
+                        total += len(desc)
             else:
+                # Flush buffered adjacent text fragments
+                if text_buffer:
+                    joined = "".join(text_buffer).strip()
+                    if joined:
+                        parts.append(joined)
+                    text_buffer = []
                 child_text = _collect_child_text(
                     child, max_depth, max_chars - total, depth + 1
                 )
                 if child_text:
                     parts.append(child_text)
                     total += len(child_text)
+        # Flush remaining buffer
+        if text_buffer:
+            joined = "".join(text_buffer).strip()
+            if joined:
+                parts.append(joined)
 
     return "\n".join(parts)
 
@@ -165,28 +207,97 @@ class InputObserver:
                 logger.debug(
                     f"AXValue was empty, collected {len(value)} chars from children"
                 )
+
         selected = ax_get_attribute(focused, "AXSelectedText") or ""
 
-        # Extract cursor position from AXSelectedTextRange
+        # Extract cursor position from AXSelectedTextRange BEFORE placeholder
+        # detection — Strategy 3 below needs insertion_point.
+        # The range is an AXValueRef wrapping a CFRange.  pyobjc's
+        # AXValueGetValue returns it as a (location, length) tuple.
         insertion_point = None
         selection_length = 0
         sel_range = ax_get_attribute(focused, "AXSelectedTextRange")
         if sel_range is not None:
             try:
-                ns_range = sel_range.rangeValue()
-                insertion_point = ns_range.location
-                selection_length = ns_range.length
-                logger.debug(
-                    f"Cursor: insertion_point={insertion_point}, "
-                    f"selection_length={selection_length}"
-                )
+                from ApplicationServices import AXValueGetValue, kAXValueTypeCFRange
+                success, cf_range = AXValueGetValue(sel_range, kAXValueTypeCFRange, None)
+                if success:
+                    # cf_range may be a tuple (location, length) or a struct
+                    if isinstance(cf_range, tuple):
+                        insertion_point = cf_range[0]
+                        selection_length = cf_range[1]
+                    else:
+                        insertion_point = cf_range.location
+                        selection_length = cf_range.length
+                    logger.debug(
+                        f"Cursor: insertion_point={insertion_point}, "
+                        f"selection_length={selection_length}"
+                    )
+                else:
+                    logger.debug("AXValueGetValue failed for AXSelectedTextRange")
             except Exception:
                 logger.debug("Could not extract range from AXSelectedTextRange",
                              exc_info=True)
 
-        # Get PID via AXUIElementGetPid
+        # Get PID via AXUIElementGetPid (needed by Strategy 4 below)
         pid = ax_get_pid(focused)
         app_name = self._get_app_name(pid) if pid else "Unknown"
+
+        # Detect placeholder text — many apps expose placeholder strings
+        # like "Reply..." as AXValue when the field is actually empty.
+        # Strategies (in order):
+        #   1. AXPlaceholderValue match (reliable, used by ChatGPT etc.)
+        #   2. AXNumberOfCharacters == 0 but AXValue is non-empty (web pages)
+        #   3. AXPlaceholderValue attr exists (even empty) + cursor at pos 0
+        #      + short value — catches Electron apps like Claude Desktop that
+        #      don't properly expose their placeholder string.
+        #   4. App-specific known placeholder prefixes (Gemini Desktop etc.)
+        placeholder_raw = ax_get_attribute(focused, "AXPlaceholderValue")
+        placeholder = placeholder_raw or ""
+        num_chars = ax_get_attribute(focused, "AXNumberOfCharacters")
+        placeholder_detected = False
+        if placeholder and value.strip().rstrip("\n") == placeholder.strip():
+            logger.debug(f"[CTX] Value matches AXPlaceholderValue: {placeholder!r}, treating as empty")
+            value = ""
+            placeholder_detected = True
+        elif num_chars is not None and num_chars == 0 and value.strip():
+            logger.debug(
+                f"[CTX] AXNumberOfCharacters=0 but AXValue={value.strip()!r}, treating as placeholder"
+            )
+            value = ""
+            placeholder_detected = True
+        elif (insertion_point == 0 and selection_length == 0
+              and value.strip() and len(value.strip()) < 50):
+            # Strategy 3: cursor at position 0 with short text and no selection.
+            # The user hasn't started typing (cursor at start), so the field
+            # content is almost certainly placeholder/decoration text.
+            # This catches Electron apps (Claude Desktop, Slack) that don't
+            # properly expose AXPlaceholderValue.
+            logger.debug(
+                f"[CTX] Cursor at 0 with short value={value.strip()!r}, "
+                f"placeholder_raw={placeholder_raw!r} — treating as placeholder"
+            )
+            value = ""
+            placeholder_detected = True
+        elif app_name in _APP_PLACEHOLDER_PREFIXES:
+            # Strategy 4: App-specific known placeholder patterns.
+            # Some Electron apps (Gemini Desktop) bake placeholder text into
+            # AXValue with no distinguishing AX attributes.
+            prefixes = _APP_PLACEHOLDER_PREFIXES[app_name]
+            stripped = value.strip()
+            if any(stripped.startswith(p) for p in prefixes) and len(stripped) < 50:
+                logger.debug(
+                    f"[CTX] App={app_name!r} value={stripped!r} matches known "
+                    f"placeholder prefix — treating as placeholder"
+                )
+                value = ""
+                placeholder_detected = True
+        else:
+            if value.strip():
+                logger.debug(
+                    f"[CTX] Placeholder check passed: AXPlaceholderValue={placeholder_raw!r}, "
+                    f"AXNumberOfCharacters={num_chars}, insertion_point={insertion_point}"
+                )
 
         position = ax_get_position(focused)
         size = ax_get_size(focused)
@@ -206,6 +317,7 @@ class InputObserver:
             size=size,
             insertion_point=insertion_point,
             selection_length=selection_length,
+            placeholder_detected=placeholder_detected,
         )
 
     def get_visible_content(self) -> VisibleContent | None:
@@ -235,13 +347,63 @@ class InputObserver:
             if windows and len(windows) > 0:
                 window = windows[0]
             else:
+                logger.debug("[CTX] No window found for %s", app_name)
                 return None
 
         window_title = ax_get_attribute(window, "AXTitle") or ""
+        logger.debug("[CTX] app=%r window=%r", app_name, window_title)
 
-        # Extract text elements from the window
-        text_elements = []
-        self._collect_text(window, text_elements, max_depth=10, max_items=100)
+        # Extract text elements.  For web apps (PWAs, Electron) skip the
+        # browser scaffolding by starting from the AXWebArea — this avoids
+        # needing an artificially high depth limit to punch through the
+        # many wrapper <div>/AXGroup layers that Chromium generates.
+        text_elements: list[str] = []
+        stats: dict[str, int] = {"visited": 0, "max_depth_hit": 0, "skipped_chrome": 0,
+                                  "no_value": 0, "too_short": 0, "placeholder": 0,
+                                  "from_desc": 0}
+        web_area = self._find_element_by_role(window, "AXWebArea", max_depth=15)
+        content_root = web_area if web_area else window
+        self._collect_text(content_root, text_elements, max_depth=20, max_items=100, _stats=stats)
+        logger.debug(
+            "[CTX] _collect_text: %d elements | visited=%d skipped_chrome=%d "
+            "no_value=%d too_short=%d placeholder=%d from_desc=%d max_depth_hit=%d",
+            len(text_elements), stats["visited"], stats["skipped_chrome"],
+            stats["no_value"], stats["too_short"], stats["placeholder"],
+            stats["from_desc"], stats["max_depth_hit"],
+        )
+
+        # Fallback for Electron/Chromium apps: if _collect_text returned nothing,
+        # use _collect_child_text which aggregates text from AXStaticText children
+        # regardless of parent role. This handles:
+        #  - Electron apps that fragment text into 1-2 char AXStaticText elements
+        #  - Apps where content elements have no AXValue but have text children
+        #  - Deeply nested trees without AXWebArea
+        if not text_elements:
+            # Try AXWebArea first (browsers), then fall back to window
+            target = self._find_element_by_role(window, "AXWebArea", max_depth=10)
+            target_label = "AXWebArea"
+            if target is None:
+                target = window
+                target_label = "window"
+            logger.debug("[CTX] Fallback: collecting child text from %s", target_label)
+            raw = _collect_child_text(target, max_depth=15, max_chars=6000)
+            if raw.strip():
+                for line in raw.splitlines():
+                    stripped = line.strip()
+                    if len(stripped) >= self._MIN_TEXT_LEN:
+                        text_elements.append(stripped)
+                logger.debug(
+                    "[CTX] Fallback: collected %d elements from %s (%d chars)",
+                    len(text_elements), target_label, len(raw),
+                )
+            else:
+                logger.debug("[CTX] Fallback: child text from %s was empty", target_label)
+
+        # Reverse so that content elements (deeper in the tree, rendered later)
+        # come first. When truncated, this keeps actual content and drops
+        # top-of-tree UI chrome (headers, navigation, toolbars that passed
+        # the role filter).
+        text_elements.reverse()
 
         # Try to get URL from browser
         url = self._get_browser_url(app_element, app_name)
@@ -275,6 +437,11 @@ class InputObserver:
 
     _MIN_TEXT_LEN = 3  # Skip strings <= 2 chars
 
+    # Cap children iterated per node and total nodes visited to prevent
+    # runaway traversal on highly branched AX trees.
+    _MAX_CHILDREN_PER_NODE = 50
+    _MAX_VISITS = 600
+
     def _collect_text(
         self,
         element,
@@ -282,37 +449,90 @@ class InputObserver:
         max_depth: int,
         max_items: int,
         depth: int = 0,
+        _seen: set[str] | None = None,
+        _stats: dict[str, int] | None = None,
     ) -> None:
         """Recursively collect text content from accessibility elements.
 
         Filters out UI chrome (toolbars, buttons, menus, scrollbars) and
         only extracts from content-bearing roles. Skips very short strings.
+        Uses a set for O(1) dedup checks.
         """
         if depth > max_depth or len(results) >= max_items:
+            if _stats and depth > max_depth:
+                _stats["max_depth_hit"] = _stats.get("max_depth_hit", 0) + 1
             return
 
+        # Global visit budget — stop traversal if we've visited too many nodes
+        if _stats and _stats.get("visited", 0) >= self._MAX_VISITS:
+            return
+
+        if _seen is None:
+            _seen = set()
+
         role = ax_get_attribute(element, "AXRole") or ""
+        if _stats:
+            _stats["visited"] = _stats.get("visited", 0) + 1
 
         # Skip entire subtrees for UI chrome roles
         if role in self._SKIP_ROLES:
+            if _stats:
+                _stats["skipped_chrome"] = _stats.get("skipped_chrome", 0) + 1
             return
 
         # Extract text only from content-bearing roles
         if role in self._CONTENT_ROLES:
             value = ax_get_attribute(element, "AXValue")
-            if isinstance(value, str):
-                stripped = value.strip()
-                if len(stripped) >= self._MIN_TEXT_LEN and stripped not in results:
-                    results.append(stripped)
+            text: str | None = None
+            if isinstance(value, str) and value.strip():
+                text = value.strip()
+            else:
+                # Fallback: many Electron apps (ChatGPT, Slack) put message
+                # text in AXDescription instead of AXValue.
+                desc = ax_get_attribute(element, "AXDescription")
+                if isinstance(desc, str) and desc.strip():
+                    text = desc.strip()
+                    if _stats:
+                        _stats["from_desc"] = _stats.get("from_desc", 0) + 1
+                else:
+                    if _stats:
+                        _stats["no_value"] = _stats.get("no_value", 0) + 1
 
-        # Recurse into children
+            if text is not None:
+                if len(text) < self._MIN_TEXT_LEN:
+                    if _stats:
+                        _stats["too_short"] = _stats.get("too_short", 0) + 1
+                elif text in _seen:
+                    pass  # dedup
+                else:
+                    # For input fields, skip placeholder text so it doesn't
+                    # pollute visible context (e.g. "Reply..." in chat sidebars)
+                    if role in {"AXTextField", "AXTextArea"}:
+                        ph = ax_get_attribute(element, "AXPlaceholderValue")
+                        nc = ax_get_attribute(element, "AXNumberOfCharacters")
+                        if (ph and text.rstrip("\n") == ph.strip()) or (
+                            nc is not None and nc == 0 and text
+                        ):
+                            if _stats:
+                                _stats["placeholder"] = _stats.get("placeholder", 0) + 1
+                        else:
+                            _seen.add(text)
+                            results.append(text)
+                    else:
+                        _seen.add(text)
+                        results.append(text)
+
+        # Recurse into children (capped per node to avoid wide-tree blowup)
         children = ax_get_attribute(element, "AXChildren")
         if children:
-            for child in children:
+            for child in children[:self._MAX_CHILDREN_PER_NODE]:
                 if len(results) >= max_items:
                     break
+                if _stats and _stats.get("visited", 0) >= self._MAX_VISITS:
+                    break
                 self._collect_text(
-                    child, results, max_depth, max_items, depth + 1
+                    child, results, max_depth, max_items, depth + 1, _seen,
+                    _stats,
                 )
 
     def _extract_conversation_turns(
@@ -332,10 +552,18 @@ class InputObserver:
             logger.debug("Conversation extraction failed", exc_info=True)
         return None
 
+    _MAX_MSG_VISITS = 600  # visit budget for _walk_for_messages
+
     def _walk_for_messages(
-        self, element, max_turns: int, max_depth: int, depth: int = 0
+        self, element, max_turns: int, max_depth: int, depth: int = 0,
+        _visits: list | None = None,
     ) -> list[ConversationTurn]:
         """Recursively search for message-like group elements."""
+        if _visits is None:
+            _visits = [0]
+        _visits[0] += 1
+        if _visits[0] > self._MAX_MSG_VISITS:
+            return []
         if depth > max_depth:
             return []
 
@@ -352,11 +580,12 @@ class InputObserver:
 
         children = ax_get_attribute(element, "AXChildren")
         if children:
-            for child in children:
+            for child in children[:self._MAX_CHILDREN_PER_NODE]:
                 if len(turns) >= max_turns:
                     break
                 child_turns = self._walk_for_messages(
-                    child, max_turns - len(turns), max_depth, depth + 1
+                    child, max_turns - len(turns), max_depth, depth + 1,
+                    _visits,
                 )
                 turns.extend(child_turns)
 
@@ -431,8 +660,18 @@ class InputObserver:
 
         return ""
 
-    def _find_element_by_role(self, element, role: str, max_depth: int, depth: int = 0):
+    _MAX_FIND_VISITS = 500  # visit budget for _find_element_by_role
+
+    def _find_element_by_role(
+        self, element, role: str, max_depth: int, depth: int = 0,
+        _visits: list | None = None,
+    ):
         """Find the first child element matching a given role."""
+        if _visits is None:
+            _visits = [0]
+        _visits[0] += 1
+        if _visits[0] > self._MAX_FIND_VISITS:
+            return None
         if depth > max_depth:
             return None
 
@@ -442,9 +681,9 @@ class InputObserver:
 
         children = ax_get_attribute(element, "AXChildren")
         if children:
-            for child in children:
+            for child in children[:self._MAX_CHILDREN_PER_NODE]:
                 result = self._find_element_by_role(
-                    child, role, max_depth, depth + 1
+                    child, role, max_depth, depth + 1, _visits,
                 )
                 if result is not None:
                     return result

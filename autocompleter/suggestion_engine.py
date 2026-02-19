@@ -111,6 +111,7 @@ class SuggestionEngine:
         context: str,
         app_name: str = "Unknown",
         mode: Optional[AutocompleteMode] = None,
+        before_cursor: Optional[str] = None,
     ) -> list[Suggestion]:
         """Generate completion suggestions using the configured LLM.
 
@@ -118,7 +119,9 @@ class SuggestionEngine:
             current_input: The text the user has typed so far.
             context: Sliced context from the context store.
             app_name: Name of the app where the user is typing.
-            mode: Explicit mode override. If None, inferred from current_input.
+            mode: Explicit mode override. If None, inferred from before_cursor.
+            before_cursor: Text before the cursor. Used for mode detection
+                when mode is None. Falls back to current_input if not provided.
 
         Returns:
             A list of Suggestion objects.
@@ -133,7 +136,9 @@ class SuggestionEngine:
         self._last_request_time = time.time()
 
         if mode is None:
-            mode = detect_mode(current_input)
+            mode = detect_mode(
+                before_cursor=before_cursor if before_cursor is not None else current_input,
+            )
 
         num = self.config.num_suggestions
         ctx = context or "(no context yet)"
@@ -153,18 +158,29 @@ class SuggestionEngine:
             temperature = self.config.reply_temperature
             max_tokens = self.config.reply_max_tokens
 
+        logger.debug(
+            f"--- LLM REQUEST ({self.config.llm_provider}/{self.config.llm_model}, "
+            f"mode={mode.value}, temp={temperature}, max_tok={max_tokens}) ---"
+        )
+        logger.debug(f"System prompt ({len(system)} chars): {system[:200]!r}...")
+        logger.debug(f"User message ({len(user_msg)} chars):")
+        for line in user_msg.splitlines():
+            logger.debug(f"  | {line}")
+
         try:
             if self.config.llm_provider == "anthropic":
-                return self._call_anthropic(
+                results = self._call_anthropic(
                     system, user_msg, temperature=temperature, max_tokens=max_tokens,
                 )
             elif self.config.llm_provider == "openai":
-                return self._call_openai(
+                results = self._call_openai(
                     system, user_msg, temperature=temperature, max_tokens=max_tokens,
                 )
             else:
                 logger.error(f"Unknown LLM provider: {self.config.llm_provider}")
                 return []
+            logger.debug(f"LLM returned {len(results)} suggestions")
+            return results
         except Exception:
             logger.exception("Error generating suggestions")
             return []
@@ -221,15 +237,29 @@ class SuggestionEngine:
 
 # ---- Mode detection (module-level for reuse) ----
 
-MODE_THRESHOLD_CHARS = 5
+MODE_THRESHOLD_CHARS = 3
 
 
-def detect_mode(current_input: str) -> AutocompleteMode:
-    """Determine autocomplete mode from the current input text.
+def detect_mode(
+    before_cursor: str,
+    current_input: str | None = None,
+) -> AutocompleteMode:
+    """Determine autocomplete mode from the text before the cursor.
 
-    Continuation: input has meaningful draft text (>= MODE_THRESHOLD_CHARS).
-    Reply: input is empty or very short (< MODE_THRESHOLD_CHARS).
+    Uses before_cursor (text to the left of the caret) rather than the full
+    field value, so a user with the cursor at the start of a long paragraph
+    correctly gets REPLY mode.
+
+    Continuation: before_cursor has meaningful draft text (>= MODE_THRESHOLD_CHARS).
+    Reply: before_cursor is empty or very short (< MODE_THRESHOLD_CHARS).
+
+    Args:
+        before_cursor: Text before the cursor position.
+        current_input: Deprecated — ignored if before_cursor is provided.
+            Kept for backwards compatibility; callers should migrate to
+            passing before_cursor explicitly.
     """
-    if len(current_input.strip()) >= MODE_THRESHOLD_CHARS:
+    text = before_cursor
+    if len(text.strip()) >= MODE_THRESHOLD_CHARS:
         return AutocompleteMode.CONTINUATION
     return AutocompleteMode.REPLY

@@ -37,19 +37,26 @@ class TextInjector:
         else:
             self._system_wide = None
 
-    def inject(self, text: str) -> bool:
+    def inject(self, text: str, replace: bool = False) -> bool:
         """Inject text into the currently focused input.
 
         Tries multiple strategies in order of preference.
+        When *replace* is True (field has a baked-in placeholder), skip
+        AXValue setting — it bypasses the web app's JS event handlers so
+        the PWA/Electron app never clears its placeholder.  Clipboard
+        paste and keystrokes go through normal input handling, which
+        triggers the placeholder-clearing behaviour.
+
         Returns True if injection succeeded.
         """
         if not text:
             return False
 
-        # Try AX API value setting first
-        if self._inject_via_ax(text):
-            logger.debug("Injected text via AX API")
-            return True
+        # Try AX API value setting first (skip when replacing placeholder)
+        if not replace:
+            if self._inject_via_ax(text):
+                logger.debug("Injected text via AX API")
+                return True
 
         # Fall back to clipboard paste
         if self._inject_via_clipboard(text):

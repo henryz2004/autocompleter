@@ -129,8 +129,31 @@ class TestContextStore:
             after_cursor="",
             source_app="Slack",
         )
-        assert "Recent context:" in context
+        assert "Visible context:" in context
         assert "project deadline" in context
+
+    def test_continuation_context_uses_live_visible_text(self, store):
+        """When visible_text is provided, it should be used instead of DB entries."""
+        store.add_entry("TextEdit", "stale DB content", "visible_text")
+        context = store.get_continuation_context(
+            before_cursor="The quick brown ",
+            after_cursor="over the lazy dog",
+            source_app="TextEdit",
+            visible_text=["Chapter 1: Introduction", "The quick brown fox story begins here."],
+        )
+        assert "Chapter 1: Introduction" in context
+        assert "stale DB content" not in context
+
+    def test_continuation_context_visible_text_deduplicates_cursor(self, store):
+        """Visible text elements matching cursor text should be skipped."""
+        context = store.get_continuation_context(
+            before_cursor="Hello world",
+            after_cursor="",
+            source_app="TextEdit",
+            visible_text=["Hello world", "Surrounding paragraph text"],
+        )
+        # "Hello world" should appear in Tier 1 (cursor) but not in Tier 2 (visible)
+        assert "Surrounding paragraph text" in context
 
     def test_continuation_context_skips_user_input_entries(self, store):
         store.add_entry("Slack", "visible stuff", "visible_text")
@@ -185,6 +208,49 @@ class TestContextStore:
         )
         assert "Recent visible text:" in context
         assert "Some visible conversation text" in context
+
+    def test_reply_context_prefers_live_visible_text(self, store):
+        """When visible_text is provided, it should be used instead of DB entries."""
+        store.add_entry("ChatGPT", "stale DB content from previous session", "visible_text")
+        context = store.get_reply_context(
+            conversation_turns=[],
+            source_app="ChatGPT",
+            visible_text=["Latest AI response about Python", "User's previous question"],
+        )
+        assert "Latest AI response about Python" in context
+        assert "User's previous question" in context
+        assert "stale DB content" not in context
+
+    def test_reply_context_db_fallback_filters_by_age(self, store):
+        """DB fallback should skip entries older than max_age_seconds."""
+        old_time = time.time() - 600  # 10 minutes ago
+        store.add_entry(
+            "ChatGPT", "old conversation content", "visible_text",
+            timestamp=old_time,
+        )
+        store.add_entry(
+            "ChatGPT", "recent conversation content", "visible_text",
+        )
+        # Default max_age_seconds=300 (5 min) should exclude the old entry
+        context = store.get_reply_context(
+            conversation_turns=[],
+            source_app="ChatGPT",
+        )
+        assert "recent conversation content" in context
+        assert "old conversation content" not in context
+
+    def test_reply_context_db_fallback_empty_when_all_stale(self, store):
+        """When all DB entries are too old, fallback should produce no visible text."""
+        old_time = time.time() - 600  # 10 minutes ago
+        store.add_entry(
+            "ChatGPT", "stale content", "visible_text",
+            timestamp=old_time,
+        )
+        context = store.get_reply_context(
+            conversation_turns=[],
+            source_app="ChatGPT",
+        )
+        assert "Recent visible text:" not in context
 
     def test_reply_context_limits_turns(self, store):
         turns = [

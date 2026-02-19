@@ -48,6 +48,16 @@ class TestModeDetection:
     def test_long_input_is_continuation(self):
         assert detect_mode("Hello, how are you doing today?") == AutocompleteMode.CONTINUATION
 
+    def test_before_cursor_empty_with_long_after_is_reply(self):
+        """Cursor at start of a long paragraph should be REPLY, not CONTINUATION."""
+        assert detect_mode(before_cursor="", current_input="This is a long paragraph") == AutocompleteMode.REPLY
+
+    def test_before_cursor_short_is_reply(self):
+        assert detect_mode(before_cursor="Hi") == AutocompleteMode.REPLY
+
+    def test_before_cursor_at_threshold_is_continuation(self):
+        assert detect_mode(before_cursor="abc") == AutocompleteMode.CONTINUATION
+
 
 class TestSuggestionEngine:
     def test_parse_suggestions(self):
