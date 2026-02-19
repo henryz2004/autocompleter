@@ -336,7 +336,10 @@ class SuggestionEngine:
             temperature = self.config.continuation_temperature
             max_tokens = self.config.continuation_max_tokens
         else:
-            system = SYSTEM_PROMPT_REPLY.format(num_suggestions=num)
+            max_lines = getattr(self.config, "max_suggestion_lines", 10)
+            system = SYSTEM_PROMPT_REPLY.format(
+                num_suggestions=num, max_suggestion_lines=max_lines,
+            )
             user_msg = USER_PROMPT_TEMPLATE_REPLY.format(
                 context=ctx, num_suggestions=num,
             )

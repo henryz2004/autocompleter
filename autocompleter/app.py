@@ -26,6 +26,11 @@ except ImportError:
 
 from .config import Config, load_config
 from .context_store import ContextStore
+from .embeddings import (
+    AnthropicEmbeddingProvider,
+    OpenAIEmbeddingProvider,
+    TFIDFEmbeddingProvider,
+)
 from .hotkey import HotkeyListener
 from .input_observer import InputObserver
 from .overlay import OverlayConfig, SuggestionOverlay
@@ -118,6 +123,24 @@ class Autocompleter:
         )
         self.injector = TextInjector()
         self.hotkey_listener = HotkeyListener()
+
+        # Initialize embedding provider for semantic context
+        self._embedding_provider = None
+        if self.config.use_semantic_context:
+            provider_name = self.config.embedding_provider
+            if provider_name == "anthropic":
+                self._embedding_provider = AnthropicEmbeddingProvider(
+                    api_key=self.config.anthropic_api_key,
+                )
+            elif provider_name == "openai":
+                self._embedding_provider = OpenAIEmbeddingProvider(
+                    api_key=self.config.openai_api_key,
+                )
+            else:
+                self._embedding_provider = TFIDFEmbeddingProvider()
+            logger.info(
+                f"Semantic context enabled with {provider_name} embeddings"
+            )
 
         self._running = False
         self._observer_thread: threading.Thread | None = None
@@ -481,6 +504,8 @@ class Autocompleter:
                 window_title=window_title,
                 source_url=source_url,
                 visible_text=visible_text_elements,
+                embedding_provider=self._embedding_provider,
+                use_semantic_context=self.config.use_semantic_context,
             )
         else:
             context = self.context_store.get_reply_context(
@@ -490,6 +515,8 @@ class Autocompleter:
                 source_url=source_url,
                 draft_text=focused.before_cursor if focused.insertion_point is not None else "",
                 visible_text=visible_text_elements,
+                embedding_provider=self._embedding_provider,
+                use_semantic_context=self.config.use_semantic_context,
             )
 
         logger.info(
