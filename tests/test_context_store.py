@@ -1,6 +1,5 @@
 """Tests for the context store."""
 
-import tempfile
 import time
 from pathlib import Path
 
@@ -34,6 +33,17 @@ class TestContextStore:
         assert entries[0].source_app == "Safari"
         assert entries[0].source_url == "https://example.com"
         assert entries[0].entry_type == "visible_text"
+
+    def test_add_with_window_title(self, store):
+        entry_id = store.add_entry(
+            source_app="Slack",
+            content="Message text",
+            entry_type="visible_text",
+            window_title="#general - Slack",
+        )
+        assert entry_id > 0
+        entries = store.get_recent(limit=1)
+        assert entries[0].window_title == "#general - Slack"
 
     def test_deduplication(self, store):
         store.add_entry("Safari", "Same content", "visible_text")
@@ -85,6 +95,178 @@ class TestContextStore:
 
         context = store.get_sliced_context("Safari", max_chars=200)
         assert len(context) <= 400  # Some slack for the last entry
+
+    # ---- Continuation context tests ----
+
+    def test_continuation_context_includes_cursor_state(self, store):
+        store.add_entry("Slack", "Some visible text", "visible_text")
+        context = store.get_continuation_context(
+            before_cursor="Hello, I wanted to ",
+            after_cursor="you about it.",
+            source_app="Slack",
+        )
+        assert "Hello, I wanted to " in context
+        assert "you about it." in context
+        assert "Text before cursor:" in context
+        assert "Text after cursor:" in context
+
+    def test_continuation_context_includes_metadata(self, store):
+        context = store.get_continuation_context(
+            before_cursor="test",
+            after_cursor="",
+            source_app="Slack",
+            window_title="#general",
+            source_url="https://slack.com",
+        )
+        assert "App: Slack" in context
+        assert "Window: #general" in context
+        assert "URL: https://slack.com" in context
+
+    def test_continuation_context_includes_local_context(self, store):
+        store.add_entry("Slack", "Recent chat about project deadline", "visible_text")
+        context = store.get_continuation_context(
+            before_cursor="The deadline is ",
+            after_cursor="",
+            source_app="Slack",
+        )
+        assert "Visible context:" in context
+        assert "project deadline" in context
+
+    def test_continuation_context_uses_live_visible_text(self, store):
+        """When visible_text is provided, it should be used instead of DB entries."""
+        store.add_entry("TextEdit", "stale DB content", "visible_text")
+        context = store.get_continuation_context(
+            before_cursor="The quick brown ",
+            after_cursor="over the lazy dog",
+            source_app="TextEdit",
+            visible_text=["Chapter 1: Introduction", "The quick brown fox story begins here."],
+        )
+        assert "Chapter 1: Introduction" in context
+        assert "stale DB content" not in context
+
+    def test_continuation_context_visible_text_deduplicates_cursor(self, store):
+        """Visible text elements matching cursor text should be skipped."""
+        context = store.get_continuation_context(
+            before_cursor="Hello world",
+            after_cursor="",
+            source_app="TextEdit",
+            visible_text=["Hello world", "Surrounding paragraph text"],
+        )
+        # "Hello world" should appear in Tier 1 (cursor) but not in Tier 2 (visible)
+        assert "Surrounding paragraph text" in context
+
+    def test_continuation_context_skips_user_input_entries(self, store):
+        store.add_entry("Slack", "visible stuff", "visible_text")
+        store.add_entry("Slack", "user typed something", "user_input")
+        context = store.get_continuation_context(
+            before_cursor="test",
+            after_cursor="",
+            source_app="Slack",
+        )
+        assert "user typed something" not in context
+
+    def test_continuation_context_omits_empty_after_cursor(self, store):
+        context = store.get_continuation_context(
+            before_cursor="Hello",
+            after_cursor="",
+            source_app="TextEdit",
+        )
+        assert "Text after cursor:" not in context
+
+    # ---- Reply context tests ----
+
+    def test_reply_context_with_structured_turns(self, store):
+        turns = [
+            {"speaker": "Alice", "text": "Hey, how's the PR?"},
+            {"speaker": "Bob", "text": "Almost done, fixing tests"},
+        ]
+        context = store.get_reply_context(
+            conversation_turns=turns,
+            source_app="Slack",
+            window_title="#dev",
+        )
+        assert "- Alice: Hey, how's the PR?" in context
+        assert "- Bob: Almost done, fixing tests" in context
+        assert "Conversation:" in context
+        assert "Channel: #dev" in context
+
+    def test_reply_context_with_draft(self, store):
+        turns = [{"speaker": "Alice", "text": "Hello"}]
+        context = store.get_reply_context(
+            conversation_turns=turns,
+            source_app="Slack",
+            draft_text="Thanks for",
+        )
+        assert "Draft so far:" in context
+        assert "Thanks for" in context
+
+    def test_reply_context_falls_back_to_flat_text(self, store):
+        store.add_entry("Slack", "Some visible conversation text", "visible_text")
+        context = store.get_reply_context(
+            conversation_turns=[],
+            source_app="Slack",
+        )
+        assert "Recent visible text:" in context
+        assert "Some visible conversation text" in context
+
+    def test_reply_context_prefers_live_visible_text(self, store):
+        """When visible_text is provided, it should be used instead of DB entries."""
+        store.add_entry("ChatGPT", "stale DB content from previous session", "visible_text")
+        context = store.get_reply_context(
+            conversation_turns=[],
+            source_app="ChatGPT",
+            visible_text=["Latest AI response about Python", "User's previous question"],
+        )
+        assert "Latest AI response about Python" in context
+        assert "User's previous question" in context
+        assert "stale DB content" not in context
+
+    def test_reply_context_db_fallback_filters_by_age(self, store):
+        """DB fallback should skip entries older than max_age_seconds."""
+        old_time = time.time() - 600  # 10 minutes ago
+        store.add_entry(
+            "ChatGPT", "old conversation content", "visible_text",
+            timestamp=old_time,
+        )
+        store.add_entry(
+            "ChatGPT", "recent conversation content", "visible_text",
+        )
+        # Default max_age_seconds=300 (5 min) should exclude the old entry
+        context = store.get_reply_context(
+            conversation_turns=[],
+            source_app="ChatGPT",
+        )
+        assert "recent conversation content" in context
+        assert "old conversation content" not in context
+
+    def test_reply_context_db_fallback_empty_when_all_stale(self, store):
+        """When all DB entries are too old, fallback should produce no visible text."""
+        old_time = time.time() - 600  # 10 minutes ago
+        store.add_entry(
+            "ChatGPT", "stale content", "visible_text",
+            timestamp=old_time,
+        )
+        context = store.get_reply_context(
+            conversation_turns=[],
+            source_app="ChatGPT",
+        )
+        assert "Recent visible text:" not in context
+
+    def test_reply_context_limits_turns(self, store):
+        turns = [
+            {"speaker": f"User{i}", "text": f"Message {i}"}
+            for i in range(20)
+        ]
+        context = store.get_reply_context(
+            conversation_turns=turns,
+            source_app="Slack",
+            max_turns=3,
+        )
+        # Should only have the last 3 turns
+        assert "User17:" in context
+        assert "User18:" in context
+        assert "User19:" in context
+        assert "User0:" not in context
 
     def test_prune_by_age(self, store):
         old_time = time.time() - 100 * 3600  # 100 hours ago

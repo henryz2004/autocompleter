@@ -1,5 +1,7 @@
 """Configuration management for the autocompleter."""
 
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,9 +22,15 @@ class Config:
     llm_provider: str = "anthropic"  # "anthropic" or "openai"
     anthropic_api_key: str = ""
     openai_api_key: str = ""
-    llm_model: str = "claude-sonnet-4-20250514"
+    llm_model: str = "claude-haiku-4-5-20251001"
     max_tokens: int = 150
     temperature: float = 0.7
+
+    # Per-mode overrides (continuation = low entropy, reply = higher entropy)
+    continuation_temperature: float = 0.3
+    continuation_max_tokens: int = 80
+    reply_temperature: float = 0.8
+    reply_max_tokens: int = 200
 
     # Suggestion behavior
     num_suggestions: int = 3
@@ -36,7 +44,7 @@ class Config:
 
     # Overlay
     overlay_width: int = 400
-    overlay_max_height: int = 200
+    overlay_max_height: int = 300
     overlay_font_size: int = 13
     overlay_opacity: float = 0.95
 
@@ -48,12 +56,30 @@ class Config:
             self.openai_api_key = os.environ.get("OPENAI_API_KEY", "")
 
 
+def _load_dotenv() -> None:
+    """Load .env file from the project root if it exists."""
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if not env_path.is_file():
+        return
+    with open(env_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip().strip("\"'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+
+
 def load_config() -> Config:
-    """Load configuration, using environment variables and defaults."""
+    """Load configuration, using .env file, environment variables, and defaults."""
+    _load_dotenv()
     config = Config(
         llm_provider=os.environ.get("AUTOCOMPLETER_LLM_PROVIDER", "anthropic"),
         llm_model=os.environ.get(
-            "AUTOCOMPLETER_LLM_MODEL", "claude-sonnet-4-20250514"
+            "AUTOCOMPLETER_LLM_MODEL", "claude-haiku-4-5-20251001"
         ),
         hotkey=os.environ.get("AUTOCOMPLETER_HOTKEY", "ctrl+space"),
     )

@@ -6,7 +6,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from autocompleter.config import Config
-from autocompleter.suggestion_engine import Suggestion, SuggestionEngine
+from autocompleter.suggestion_engine import (
+    AutocompleteMode,
+    Suggestion,
+    SuggestionEngine,
+    detect_mode,
+    MODE_THRESHOLD_CHARS,
+)
 
 
 @pytest.fixture
@@ -23,6 +29,34 @@ def config():
 @pytest.fixture
 def engine(config):
     return SuggestionEngine(config)
+
+
+class TestModeDetection:
+    def test_empty_input_is_reply(self):
+        assert detect_mode("") == AutocompleteMode.REPLY
+
+    def test_whitespace_only_is_reply(self):
+        assert detect_mode("   ") == AutocompleteMode.REPLY
+
+    def test_short_input_is_reply(self):
+        assert detect_mode("Hi") == AutocompleteMode.REPLY
+
+    def test_threshold_input_is_continuation(self):
+        text = "x" * MODE_THRESHOLD_CHARS
+        assert detect_mode(text) == AutocompleteMode.CONTINUATION
+
+    def test_long_input_is_continuation(self):
+        assert detect_mode("Hello, how are you doing today?") == AutocompleteMode.CONTINUATION
+
+    def test_before_cursor_empty_with_long_after_is_reply(self):
+        """Cursor at start of a long paragraph should be REPLY, not CONTINUATION."""
+        assert detect_mode(before_cursor="", current_input="This is a long paragraph") == AutocompleteMode.REPLY
+
+    def test_before_cursor_short_is_reply(self):
+        assert detect_mode(before_cursor="Hi") == AutocompleteMode.REPLY
+
+    def test_before_cursor_at_threshold_is_continuation(self):
+        assert detect_mode(before_cursor="abc") == AutocompleteMode.CONTINUATION
 
 
 class TestSuggestionEngine:
@@ -58,13 +92,62 @@ class TestSuggestionEngine:
         engine._last_request_time = time.time() - 1.0
         assert engine.can_request()
 
-    def test_empty_input_returns_empty(self, engine):
-        result = engine.generate_suggestions("", "some context")
+    def test_empty_input_and_empty_context_returns_empty(self, engine):
+        result = engine.generate_suggestions("", "")
         assert result == []
 
-    def test_whitespace_input_returns_empty(self, engine):
-        result = engine.generate_suggestions("   ", "some context")
+    def test_whitespace_input_and_whitespace_context_returns_empty(self, engine):
+        result = engine.generate_suggestions("   ", "   ")
         assert result == []
+
+    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_anthropic")
+    def test_empty_input_with_context_calls_llm_reply_mode(self, mock_call, engine):
+        mock_call.return_value = [
+            Suggestion(text="Sounds good!", index=0),
+        ]
+        result = engine.generate_suggestions("", "some context")
+        assert len(result) == 1
+        assert result[0].text == "Sounds good!"
+        mock_call.assert_called_once()
+        # Should use reply-mode params
+        _, kwargs = mock_call.call_args
+        assert kwargs.get("temperature") == engine.config.reply_temperature
+        assert kwargs.get("max_tokens") == engine.config.reply_max_tokens
+
+    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_anthropic")
+    def test_generate_continuation_mode_params(self, mock_call, engine):
+        mock_call.return_value = [
+            Suggestion(text="suggestion 1", index=0),
+        ]
+        result = engine.generate_suggestions(
+            "Hello world this is a test", "context",
+            mode=AutocompleteMode.CONTINUATION,
+        )
+        assert len(result) == 1
+        _, kwargs = mock_call.call_args
+        assert kwargs.get("temperature") == engine.config.continuation_temperature
+        assert kwargs.get("max_tokens") == engine.config.continuation_max_tokens
+
+    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_anthropic")
+    def test_generate_reply_mode_params(self, mock_call, engine):
+        mock_call.return_value = [
+            Suggestion(text="reply suggestion", index=0),
+        ]
+        result = engine.generate_suggestions(
+            "", "context", mode=AutocompleteMode.REPLY,
+        )
+        assert len(result) == 1
+        _, kwargs = mock_call.call_args
+        assert kwargs.get("temperature") == engine.config.reply_temperature
+        assert kwargs.get("max_tokens") == engine.config.reply_max_tokens
+
+    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_anthropic")
+    def test_mode_auto_detected_when_not_specified(self, mock_call, engine):
+        mock_call.return_value = [Suggestion(text="s", index=0)]
+        # Long input -> continuation
+        engine.generate_suggestions("Hello world this is long", "ctx")
+        _, kwargs = mock_call.call_args
+        assert kwargs.get("temperature") == engine.config.continuation_temperature
 
     @patch("autocompleter.suggestion_engine.SuggestionEngine._call_anthropic")
     def test_generate_calls_anthropic(self, mock_call, engine):
@@ -72,7 +155,7 @@ class TestSuggestionEngine:
             Suggestion(text="suggestion 1", index=0),
         ]
 
-        result = engine.generate_suggestions("Hello", "context")
+        result = engine.generate_suggestions("Hello world test", "context")
         assert len(result) == 1
         assert result[0].text == "suggestion 1"
         mock_call.assert_called_once()
@@ -87,12 +170,12 @@ class TestSuggestionEngine:
             Suggestion(text="openai suggestion", index=0),
         ]
 
-        result = engine.generate_suggestions("Hello", "context")
+        result = engine.generate_suggestions("Hello world test", "context")
         assert len(result) == 1
         mock_call.assert_called_once()
 
     def test_unknown_provider_returns_empty(self, config):
         config.llm_provider = "unknown"
         engine = SuggestionEngine(config)
-        result = engine.generate_suggestions("Hello", "context")
+        result = engine.generate_suggestions("Hello world test", "context")
         assert result == []
