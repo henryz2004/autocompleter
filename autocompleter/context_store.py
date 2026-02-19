@@ -261,6 +261,7 @@ class ContextStore:
         visible_text: list[str] | None = None,
         embedding_provider: Optional[EmbeddingProvider] = None,
         use_semantic_context: bool = False,
+        cross_app_context: str = "",
     ) -> str:
         """Build lean context for continuation mode.
 
@@ -268,7 +269,9 @@ class ContextStore:
         Tier 2 (live surroundings): visible text from the current window,
             passed directly rather than pulled from stale DB entries.
             Falls back to recent DB entries if visible_text is not provided.
-        Tier 2.5 (semantic): If embedding_provider is given and
+        Tier 2.5a (cross-app): recent context from other apps the user
+            visited, if provided.
+        Tier 2.5b (semantic): If embedding_provider is given and
             use_semantic_context is True, append semantically relevant
             historical entries.
         Tier 3 (light metadata): app, window_title, url. No timestamps.
@@ -282,6 +285,10 @@ class ContextStore:
         if source_url:
             meta_parts.append(f"URL: {source_url}")
         parts.append(" | ".join(meta_parts))
+
+        # Tier 2.5: cross-app context (between metadata and visible text)
+        if cross_app_context:
+            parts.append(cross_app_context)
 
         # Tier 2: live visible text (preferred) or recent DB entries (fallback)
         local_chars = 0
@@ -361,12 +368,14 @@ class ContextStore:
         max_age_seconds: float = 300.0,
         embedding_provider: Optional[EmbeddingProvider] = None,
         use_semantic_context: bool = False,
+        cross_app_context: str = "",
     ) -> str:
         """Build context for reply mode.
 
         Tier 1: Structured recent turns with speaker labels.
         Tier 1.5: Semantic context blended with conversation turns.
         Tier 2: Draft state if user has typed a partial reply.
+        Tier 2.5: Cross-app context from recently visited apps.
         Tier 3: Metadata with timestamps (useful for pacing).
 
         When conversation_turns is empty, falls back to:
@@ -382,6 +391,10 @@ class ContextStore:
         if source_url:
             meta_parts.append(f"URL: {source_url}")
         parts.append(" | ".join(meta_parts))
+
+        # Tier 2.5: cross-app context
+        if cross_app_context:
+            parts.append(cross_app_context)
 
         # Tier 1: conversation turns
         turns = conversation_turns[-max_turns:]

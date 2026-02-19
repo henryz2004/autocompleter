@@ -26,6 +26,7 @@ except ImportError:
 
 from .config import Config, load_config
 from .context_store import ContextStore
+from .context_trail import ContextTrail
 from .embeddings import (
     AnthropicEmbeddingProvider,
     OpenAIEmbeddingProvider,
@@ -123,6 +124,7 @@ class Autocompleter:
         )
         self.injector = TextInjector()
         self.hotkey_listener = HotkeyListener()
+        self.context_trail = ContextTrail()
 
         # Initialize embedding provider for semantic context
         self._embedding_provider = None
@@ -285,6 +287,8 @@ class Autocompleter:
         while self._running:
             try:
                 content = self.observer.get_visible_content()
+                if content:
+                    self.context_trail.record(content)
                 if content and content.text_elements:
                     combined = "\n".join(content.text_elements[:50])
                     if len(combined) > self._MAX_STORE_CHARS:
@@ -458,6 +462,19 @@ class Autocompleter:
         else:
             logger.info("[CTX] No visible content captured")
 
+        # Fetch cross-app context from the trail
+        cross_app_snapshots = self.context_trail.get_recent_cross_app_context(
+            current_app=focused.app_name,
+            max_age_seconds=60.0,
+            max_entries=3,
+        )
+        cross_app_context = ContextTrail.format_cross_app_context(cross_app_snapshots)
+        if cross_app_context:
+            logger.info(
+                f"[CTX] Cross-app context ({len(cross_app_snapshots)} snapshots):\n"
+                + cross_app_context
+            )
+
         # Bump generation counter — only the latest generation updates the overlay
         self._generation_id += 1
         gen_id = self._generation_id
@@ -469,7 +486,7 @@ class Autocompleter:
             args=(
                 focused, x, y, caret_height, mode,
                 window_title, source_url, conversation_turns,
-                visible_text_elements, gen_id,
+                visible_text_elements, gen_id, cross_app_context,
             ),
             daemon=True,
         ).start()
@@ -487,6 +504,7 @@ class Autocompleter:
         conversation_turns: list[dict[str, str]] | None = None,
         visible_text_elements: list[str] | None = None,
         generation_id: int = 0,
+        cross_app_context: str = "",
     ) -> None:
         """Run the LLM call on a worker thread and show the overlay."""
         app_name = focused.app_name
@@ -506,6 +524,7 @@ class Autocompleter:
                 visible_text=visible_text_elements,
                 embedding_provider=self._embedding_provider,
                 use_semantic_context=self.config.use_semantic_context,
+                cross_app_context=cross_app_context,
             )
         else:
             context = self.context_store.get_reply_context(
@@ -517,6 +536,7 @@ class Autocompleter:
                 visible_text=visible_text_elements,
                 embedding_provider=self._embedding_provider,
                 use_semantic_context=self.config.use_semantic_context,
+                cross_app_context=cross_app_context,
             )
 
         logger.info(
