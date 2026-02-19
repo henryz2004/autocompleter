@@ -23,6 +23,11 @@ except ImportError:
     HAS_ACCESSIBILITY = False
 
 from .ax_utils import ax_get_attribute, ax_get_pid, ax_get_position, ax_get_size
+from .conversation_extractors import (
+    ConversationTurn,
+    _collect_child_text,
+    get_extractor,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,13 +63,6 @@ class FocusedElement:
 
 
 @dataclass
-class ConversationTurn:
-    """A single message in a conversation."""
-    speaker: str
-    text: str
-
-
-@dataclass
 class VisibleContent:
     """Content visible in the active window."""
 
@@ -76,80 +74,12 @@ class VisibleContent:
     conversation_turns: list[ConversationTurn] | None = None
 
 
-# Roles to skip entirely during child-text collection (UI chrome)
-_CHILD_TEXT_SKIP_ROLES = frozenset({
-    "AXToolbar", "AXMenuBar", "AXMenu", "AXMenuItem",
-    "AXButton", "AXScrollBar", "AXSlider", "AXIncrementor",
-    "AXPopUpButton", "AXCheckBox", "AXRadioButton",
-    "AXTabGroup", "AXTab",
-})
-
-
-_MAX_CHILD_TEXT_SIBLINGS = 80  # Max children to iterate per node
-
 # App-specific known placeholder prefixes.  Some Electron apps (Gemini Desktop)
 # bake placeholder text into AXValue with no distinguishing AX attributes.
 # Keyed by app name (as reported by NSWorkspace.localizedName()).
 _APP_PLACEHOLDER_PREFIXES: dict[str, tuple[str, ...]] = {
     "Google Gemini": ("Ask Gemini",),
 }
-
-
-def _collect_child_text(
-    element, max_depth: int = 5, max_chars: int = 2000, depth: int = 0
-) -> str:
-    """Collect text from child elements.
-
-    Concatenates adjacent AXStaticText siblings (handles Electron apps that
-    fragment text into single-character elements). Separates text from
-    different container elements with newlines. Skips UI chrome roles.
-    """
-    if depth > max_depth:
-        return ""
-
-    parts: list[str] = []
-    total = 0
-    children = ax_get_attribute(element, "AXChildren")
-    if children:
-        # Buffer adjacent AXStaticText values to concatenate fragments
-        text_buffer: list[str] = []
-        for child in children[:_MAX_CHILD_TEXT_SIBLINGS]:
-            if total >= max_chars:
-                break
-            role = ax_get_attribute(child, "AXRole") or ""
-            if role in _CHILD_TEXT_SKIP_ROLES:
-                continue
-            if role == "AXStaticText":
-                val = ax_get_attribute(child, "AXValue")
-                if isinstance(val, str) and val.strip():
-                    text_buffer.append(val)
-                    total += len(val)
-                else:
-                    # Electron apps (ChatGPT) put text in AXDescription
-                    desc = ax_get_attribute(child, "AXDescription")
-                    if isinstance(desc, str) and desc.strip():
-                        text_buffer.append(desc)
-                        total += len(desc)
-            else:
-                # Flush buffered adjacent text fragments
-                if text_buffer:
-                    joined = "".join(text_buffer).strip()
-                    if joined:
-                        parts.append(joined)
-                    text_buffer = []
-                child_text = _collect_child_text(
-                    child, max_depth, max_chars - total, depth + 1
-                )
-                if child_text:
-                    parts.append(child_text)
-                    total += len(child_text)
-        # Flush remaining buffer
-        if text_buffer:
-            joined = "".join(text_buffer).strip()
-            if joined:
-                parts.append(joined)
-
-    return "\n".join(parts)
 
 
 class InputObserver:
@@ -409,7 +339,7 @@ class InputObserver:
         url = self._get_browser_url(app_element, app_name)
 
         # Try structured conversation extraction for chat-like apps
-        conversation_turns = self._extract_conversation_turns(window)
+        conversation_turns = self._extract_conversation_turns(window, app_name=app_name)
 
         return VisibleContent(
             app_name=app_name,
@@ -536,99 +466,26 @@ class InputObserver:
                 )
 
     def _extract_conversation_turns(
-        self, window, max_turns: int = 15
+        self, window, max_turns: int = 15, app_name: str = ""
     ) -> list[ConversationTurn] | None:
         """Try to extract structured conversation turns from a chat window.
 
-        Walks the AX tree looking for message-like groups: containers with
-        child elements where one is short (speaker name) and another is
-        longer (message body). Falls back to None if structure can't be detected.
+        Uses app-specific extractors when available (Gemini, Slack, ChatGPT,
+        Claude Desktop, iMessage). Falls back to a generic heuristic for
+        unknown apps.
         """
+        extractor = get_extractor(app_name)
+        logger.debug(
+            "[CTX] Using %s for app %r",
+            type(extractor).__name__, app_name,
+        )
         try:
-            turns = self._walk_for_messages(window, max_turns, max_depth=8)
-            if len(turns) >= 2:
-                return turns
+            return extractor.extract(window, max_turns)
         except Exception:
-            logger.debug("Conversation extraction failed", exc_info=True)
-        return None
-
-    _MAX_MSG_VISITS = 600  # visit budget for _walk_for_messages
-
-    def _walk_for_messages(
-        self, element, max_turns: int, max_depth: int, depth: int = 0,
-        _visits: list | None = None,
-    ) -> list[ConversationTurn]:
-        """Recursively search for message-like group elements."""
-        if _visits is None:
-            _visits = [0]
-        _visits[0] += 1
-        if _visits[0] > self._MAX_MSG_VISITS:
-            return []
-        if depth > max_depth:
-            return []
-
-        role = ax_get_attribute(element, "AXRole") or ""
-        turns: list[ConversationTurn] = []
-
-        # Look for groups/cells that might be message containers
-        if role in {"AXGroup", "AXCell", "AXRow"}:
-            turn = self._try_parse_message_group(element)
-            if turn is not None:
-                turns.append(turn)
-                if len(turns) >= max_turns:
-                    return turns
-
-        children = ax_get_attribute(element, "AXChildren")
-        if children:
-            for child in children[:self._MAX_CHILDREN_PER_NODE]:
-                if len(turns) >= max_turns:
-                    break
-                child_turns = self._walk_for_messages(
-                    child, max_turns - len(turns), max_depth, depth + 1,
-                    _visits,
-                )
-                turns.extend(child_turns)
-
-        return turns
-
-    def _try_parse_message_group(self, element) -> ConversationTurn | None:
-        """Check if an AX element looks like a chat message container.
-
-        Heuristic: a group containing at least two text children where one
-        is short (likely a speaker name, <= 40 chars) and another is longer
-        (likely the message body, > 5 chars).
-        """
-        children = ax_get_attribute(element, "AXChildren")
-        if not children or len(children) < 2:
-            return None
-
-        texts: list[tuple[str, str]] = []  # (role, value)
-        for child in children[:10]:  # limit scan
-            child_role = ax_get_attribute(child, "AXRole") or ""
-            if child_role == "AXStaticText":
-                val = ax_get_attribute(child, "AXValue")
-                if isinstance(val, str) and val.strip():
-                    texts.append((child_role, val.strip()))
-            elif child_role in {"AXGroup", "AXTextArea"}:
-                # Nested group might contain the message text
-                nested_text = _collect_child_text(child, max_depth=3, max_chars=500)
-                if nested_text.strip():
-                    texts.append((child_role, nested_text.strip()))
-
-        if len(texts) < 2:
-            return None
-
-        # Heuristic: find a short text (speaker) and a longer text (body)
-        speaker = None
-        body = None
-        for _, text in texts:
-            if len(text) <= 40 and speaker is None:
-                speaker = text
-            elif len(text) > 5 and body is None:
-                body = text
-
-        if speaker and body:
-            return ConversationTurn(speaker=speaker, text=body)
+            logger.debug(
+                "Conversation extraction failed with %s",
+                type(extractor).__name__, exc_info=True,
+            )
         return None
 
     def _get_browser_url(self, app_element, app_name: str) -> str:
