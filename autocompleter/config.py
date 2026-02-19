@@ -42,6 +42,10 @@ class Config:
     max_context_entries: int = 5000
     context_window_chars: int = 4000
 
+    # Semantic context (embeddings)
+    embedding_provider: str = "tfidf"  # "tfidf", "anthropic", or "openai"
+    use_semantic_context: bool = True
+
     # Overlay
     overlay_width: int = 400
     overlay_max_height: int = 300

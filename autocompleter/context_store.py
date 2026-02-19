@@ -7,11 +7,19 @@ to the suggestion engine: recent observations + relevant historical context.
 
 from __future__ import annotations
 
+import json
+import logging
 import sqlite3
 import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from .embeddings import EmbeddingProvider
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -68,7 +76,8 @@ class ContextStore:
                 content TEXT NOT NULL,
                 timestamp REAL NOT NULL,
                 entry_type TEXT NOT NULL,
-                window_title TEXT DEFAULT ''
+                window_title TEXT DEFAULT '',
+                embeddings BLOB DEFAULT NULL
             );
 
             CREATE INDEX IF NOT EXISTS idx_timestamp
@@ -87,6 +96,14 @@ class ContextStore:
         except sqlite3.OperationalError:
             conn.execute(
                 "ALTER TABLE context_entries ADD COLUMN window_title TEXT DEFAULT ''"
+            )
+            conn.commit()
+        # Migrate: add embeddings column if missing (existing DBs)
+        try:
+            conn.execute("SELECT embeddings FROM context_entries LIMIT 1")
+        except sqlite3.OperationalError:
+            conn.execute(
+                "ALTER TABLE context_entries ADD COLUMN embeddings BLOB DEFAULT NULL"
             )
             conn.commit()
 
@@ -221,13 +238,18 @@ class ContextStore:
         source_url: str = "",
         max_local_chars: int = 600,
         visible_text: list[str] | None = None,
+        embedding_provider: Optional[EmbeddingProvider] = None,
+        use_semantic_context: bool = False,
     ) -> str:
         """Build lean context for continuation mode.
 
-        Tier 1 (mandatory): before_cursor and after_cursor — sent raw.
+        Tier 1 (mandatory): before_cursor and after_cursor -- sent raw.
         Tier 2 (live surroundings): visible text from the current window,
             passed directly rather than pulled from stale DB entries.
             Falls back to recent DB entries if visible_text is not provided.
+        Tier 2.5 (semantic): If embedding_provider is given and
+            use_semantic_context is True, append semantically relevant
+            historical entries.
         Tier 3 (light metadata): app, window_title, url. No timestamps.
         """
         parts: list[str] = []
@@ -262,7 +284,7 @@ class ContextStore:
             app_entries = self.get_by_source(source_app, limit=5)
             for entry in app_entries:
                 if entry.entry_type == "user_input":
-                    continue  # Skip raw input — we have cursor state
+                    continue  # Skip raw input -- we have cursor state
                 remaining = max_local_chars - local_chars
                 if remaining <= 0:
                     break
@@ -272,6 +294,32 @@ class ContextStore:
                     local_chars += len(snippet)
         if local_parts:
             parts.append("Visible context:\n" + "\n".join(local_parts))
+
+        # Tier 2.5: semantic context (optional)
+        if use_semantic_context and embedding_provider is not None:
+            query = before_cursor.strip()
+            if query:
+                try:
+                    semantic_entries = self.get_semantically_relevant(
+                        query=query,
+                        provider=embedding_provider,
+                        top_k=3,
+                        max_age_hours=24,
+                    )
+                    # Deduplicate against already-included visible context
+                    existing = set(local_parts)
+                    semantic_parts = [
+                        s for s in semantic_entries if s not in existing
+                    ]
+                    if semantic_parts:
+                        parts.append(
+                            "Related context:\n" + "\n".join(semantic_parts[:3])
+                        )
+                except Exception:
+                    logger.debug(
+                        "Semantic context lookup failed in continuation mode",
+                        exc_info=True,
+                    )
 
         # Tier 1: cursor state (raw, always included)
         parts.append(f"Text before cursor:\n{before_cursor}")
@@ -290,10 +338,13 @@ class ContextStore:
         max_turns: int = 8,
         visible_text: list[str] | None = None,
         max_age_seconds: float = 300.0,
+        embedding_provider: Optional[EmbeddingProvider] = None,
+        use_semantic_context: bool = False,
     ) -> str:
         """Build context for reply mode.
 
         Tier 1: Structured recent turns with speaker labels.
+        Tier 1.5: Semantic context blended with conversation turns.
         Tier 2: Draft state if user has typed a partial reply.
         Tier 3: Metadata with timestamps (useful for pacing).
 
@@ -347,11 +398,154 @@ class ContextStore:
             if fallback_parts:
                 parts.append("Recent visible text:\n" + "\n".join(fallback_parts))
 
+        # Tier 1.5: semantic context (optional)
+        if use_semantic_context and embedding_provider is not None:
+            # Build query from last conversation turn or draft
+            query = ""
+            if turns:
+                query = turns[-1].get("text", "")
+            elif draft_text.strip():
+                query = draft_text.strip()
+
+            if query:
+                try:
+                    semantic_entries = self.get_semantically_relevant(
+                        query=query,
+                        provider=embedding_provider,
+                        top_k=3,
+                        max_age_hours=24,
+                    )
+                    if semantic_entries:
+                        parts.append(
+                            "Related context:\n" + "\n".join(semantic_entries[:3])
+                        )
+                except Exception:
+                    logger.debug(
+                        "Semantic context lookup failed in reply mode",
+                        exc_info=True,
+                    )
+
         # Tier 2: draft state
         if draft_text.strip():
             parts.append(f"Draft so far:\n{draft_text}")
 
         return "\n\n".join(parts)
+
+    # ---- Semantic context ----
+
+    def _serialize_embedding(self, vector: list[float]) -> bytes:
+        """Serialize an embedding vector to bytes for SQLite storage."""
+        return json.dumps(vector).encode("utf-8")
+
+    def _deserialize_embedding(self, blob: bytes) -> list[float]:
+        """Deserialize an embedding vector from SQLite bytes."""
+        return json.loads(blob.decode("utf-8"))
+
+    def _cache_embedding(self, entry_id: int, vector: list[float]) -> None:
+        """Store a computed embedding in the database."""
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE context_entries SET embeddings = ? WHERE id = ?",
+            (self._serialize_embedding(vector), entry_id),
+        )
+        conn.commit()
+
+    def get_semantically_relevant(
+        self,
+        query: str,
+        provider: EmbeddingProvider,
+        top_k: int = 5,
+        max_age_hours: float = 24,
+    ) -> list[str]:
+        """Find the most semantically relevant stored entries for a query.
+
+        Uses cached embeddings when available; computes and caches them lazily
+        for entries that don't have them yet.
+
+        Args:
+            query: The text to find relevant context for.
+            provider: An EmbeddingProvider instance.
+            top_k: Number of top results to return.
+            max_age_hours: Only consider entries from the last N hours.
+
+        Returns:
+            List of content strings sorted by semantic relevance.
+        """
+        from .embeddings import cosine_similarity
+
+        if not query.strip():
+            return []
+
+        conn = self._get_conn()
+        cutoff = time.time() - (max_age_hours * 3600)
+
+        cursor = conn.execute(
+            """
+            SELECT id, content, embeddings
+            FROM context_entries
+            WHERE timestamp > ?
+            ORDER BY timestamp DESC
+            LIMIT 200
+            """,
+            (cutoff,),
+        )
+        rows = cursor.fetchall()
+        if not rows:
+            return []
+
+        # Separate entries with and without cached embeddings
+        entries_with_cache: list[tuple[int, str, list[float]]] = []
+        entries_without_cache: list[tuple[int, str, int]] = []  # (id, content, index)
+
+        for row in rows:
+            entry_id, content, emb_blob = row
+            if emb_blob is not None:
+                vector = self._deserialize_embedding(emb_blob)
+                entries_with_cache.append((entry_id, content, vector))
+            else:
+                entries_without_cache.append(
+                    (entry_id, content, len(entries_with_cache) + len(entries_without_cache))
+                )
+
+        # Compute missing embeddings
+        if entries_without_cache:
+            texts_to_embed = [content for _, content, _ in entries_without_cache]
+            # Include query so vocabulary is shared (important for TF-IDF)
+            all_texts = texts_to_embed + [query]
+            all_vectors = provider.embed(all_texts)
+
+            if all_vectors and len(all_vectors) == len(all_texts):
+                for i, (entry_id, content, _) in enumerate(entries_without_cache):
+                    vector = all_vectors[i]
+                    self._cache_embedding(entry_id, vector)
+                    entries_with_cache.append((entry_id, content, vector))
+                query_vector_from_batch = all_vectors[-1]
+            else:
+                query_vector_from_batch = None
+        else:
+            query_vector_from_batch = None
+
+        # Compute query embedding
+        if query_vector_from_batch is not None:
+            query_vector = query_vector_from_batch
+        else:
+            # All entries had cached embeddings; embed query alone with corpus
+            all_contents = [content for _, content, _ in entries_with_cache]
+            all_texts = all_contents + [query]
+            all_vectors = provider.embed(all_texts)
+            if all_vectors and len(all_vectors) == len(all_texts):
+                query_vector = all_vectors[-1]
+            else:
+                return []
+
+        # Score entries by cosine similarity
+        scored: list[tuple[str, float]] = []
+        for _, content, vector in entries_with_cache:
+            score = cosine_similarity(query_vector, vector)
+            scored.append((content, score))
+
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return [content for content, _ in scored[:top_k]]
 
     def prune(self, max_age_hours: int = 72, max_entries: int = 5000) -> int:
         """Remove old entries to keep the store bounded. Returns count removed."""
