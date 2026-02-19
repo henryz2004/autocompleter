@@ -432,9 +432,10 @@ class Autocompleter:
         self._generation_id += 1
         gen_id = self._generation_id
 
-        # Dispatch the LLM call to a worker thread so we don't block the tap
+        # Dispatch the LLM call to a worker thread so we don't block the tap.
+        # Use the streaming path by default for faster perceived response.
         threading.Thread(
-            target=self._generate_and_show,
+            target=self._generate_and_show_streaming,
             args=(
                 focused, x, y, caret_height, mode,
                 window_title, source_url, conversation_turns,
@@ -529,6 +530,114 @@ class Autocompleter:
                 self.overlay.show(suggestions, x, y, caret_height=caret_height)
 
         self._run_on_main(_show)
+
+    def _generate_and_show_streaming(
+        self,
+        focused,  # FocusedElement (duck typed to avoid circular import)
+        x: float, y: float,
+        caret_height: float = 20.0,
+        mode: AutocompleteMode | None = None,
+        window_title: str = "",
+        source_url: str = "",
+        conversation_turns: list[dict[str, str]] | None = None,
+        visible_text_elements: list[str] | None = None,
+        generation_id: int = 0,
+    ) -> None:
+        """Run the streaming LLM call on a worker thread, updating the overlay incrementally."""
+        app_name = focused.app_name
+        current_input = focused.value
+
+        if mode is None:
+            mode = detect_mode(before_cursor=focused.before_cursor)
+
+        # Assemble context based on mode
+        if mode == AutocompleteMode.CONTINUATION:
+            context = self.context_store.get_continuation_context(
+                before_cursor=focused.before_cursor,
+                after_cursor=focused.after_cursor,
+                source_app=app_name,
+                window_title=window_title,
+                source_url=source_url,
+                visible_text=visible_text_elements,
+            )
+        else:
+            context = self.context_store.get_reply_context(
+                conversation_turns=conversation_turns or [],
+                source_app=app_name,
+                window_title=window_title,
+                source_url=source_url,
+                draft_text=focused.before_cursor if focused.insertion_point is not None else "",
+                visible_text=visible_text_elements,
+            )
+
+        logger.info(
+            f"[CTX] --- CONTEXT (gen={generation_id}, mode={mode.value}, "
+            f"{len(context)} chars) ---"
+        )
+        for line in context.splitlines():
+            logger.info(f"[CTX]   | {line}")
+        logger.info("[CTX] --- END CONTEXT ---")
+
+        t0 = time.time()
+        suggestions: list[Suggestion] = []
+
+        try:
+            for suggestion in self.suggestion_engine.generate_suggestions_stream(
+                current_input=current_input,
+                context=context,
+                app_name=app_name,
+                mode=mode,
+            ):
+                # Check if a newer trigger has superseded this one
+                if generation_id != self._generation_id:
+                    elapsed = time.time() - t0
+                    logger.info(
+                        f"Generation {generation_id} superseded by {self._generation_id}, "
+                        f"abandoning stream after {len(suggestions)} suggestions ({elapsed:.2f}s)"
+                    )
+                    return
+
+                suggestions.append(suggestion)
+                logger.info(
+                    f"Stream [{generation_id}]: suggestion {suggestion.index} arrived "
+                    f"({time.time() - t0:.2f}s): {suggestion.text[:80]!r}"
+                )
+
+                # Capture a snapshot of suggestions for the closure
+                snapshot = list(suggestions)
+
+                def _update(snp=snapshot):
+                    if generation_id == self._generation_id:
+                        self.overlay.show(snp, x, y, caret_height=caret_height)
+
+                self._run_on_main(_update)
+
+        except Exception:
+            logger.exception(f"Error during streaming generation {generation_id}")
+
+        elapsed = time.time() - t0
+
+        # Final check: if superseded, discard
+        if generation_id != self._generation_id:
+            logger.info(
+                f"Generation {generation_id} superseded by {self._generation_id}, "
+                f"discarding after stream completed ({elapsed:.2f}s)"
+            )
+            return
+
+        if not suggestions:
+            logger.info(f"No suggestions from stream (took {elapsed:.2f}s)")
+            self._run_on_main(self.overlay.hide)
+            return
+
+        logger.info(
+            f"--- STREAM COMPLETE (gen={generation_id}, {elapsed:.2f}s, "
+            f"{len(suggestions)} suggestions) ---"
+        )
+        for i, s in enumerate(suggestions):
+            logger.info(f"  [{i}]: {s.text[:120]}")
+
+        self._current_suggestions = suggestions
 
     def _on_nav_up(self) -> bool:
         """Handle up arrow — only intercept when overlay is visible."""

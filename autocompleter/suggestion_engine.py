@@ -3,6 +3,11 @@
 Receives current input + sliced context from the context store,
 calls an external LLM API with short max token limit, and returns
 1-3 short completions. Includes debouncing to avoid excessive API calls.
+
+Supports both blocking (generate_suggestions) and streaming
+(generate_suggestions_stream) modes. The streaming mode yields
+Suggestion objects one at a time as delimiters are encountered in
+the token stream, enabling the overlay to update incrementally.
 """
 
 from __future__ import annotations
@@ -11,7 +16,7 @@ import enum
 import logging
 import time
 from dataclasses import dataclass
-from typing import Optional
+from typing import Generator, Optional
 
 from .config import Config
 
@@ -233,6 +238,181 @@ class SuggestionEngine:
             if text:
                 suggestions.append(Suggestion(text=text, index=i))
         return suggestions
+
+    # ---- Streaming API ----
+
+    _DELIMITER = "---SUGGESTION---"
+
+    def generate_suggestions_stream(
+        self,
+        current_input: str,
+        context: str,
+        app_name: str = "Unknown",
+        mode: Optional[AutocompleteMode] = None,
+        before_cursor: Optional[str] = None,
+    ) -> Generator[Suggestion, None, None]:
+        """Generate completion suggestions via streaming, yielding each as it completes.
+
+        Yields Suggestion objects one at a time as they become available
+        from the LLM token stream. Each suggestion is emitted as soon as the
+        ``---SUGGESTION---`` delimiter (or end-of-stream) is encountered.
+
+        Args:
+            current_input: The text the user has typed so far.
+            context: Sliced context from the context store.
+            app_name: Name of the app where the user is typing.
+            mode: Explicit mode override. If None, inferred from before_cursor.
+            before_cursor: Text before the cursor. Used for mode detection
+                when mode is None. Falls back to current_input if not provided.
+
+        Yields:
+            Suggestion objects, in the order they are completed by the LLM.
+        """
+        if not self.can_request():
+            logger.debug("Debounce: skipping streaming request (too soon)")
+            return
+
+        if not current_input.strip() and not context.strip():
+            return
+
+        self._last_request_time = time.time()
+
+        if mode is None:
+            mode = detect_mode(
+                before_cursor=before_cursor if before_cursor is not None else current_input,
+            )
+
+        num = self.config.num_suggestions
+        ctx = context or "(no context yet)"
+
+        if mode == AutocompleteMode.CONTINUATION:
+            system = SYSTEM_PROMPT_COMPLETION.format(num_suggestions=num)
+            user_msg = USER_PROMPT_TEMPLATE_COMPLETION.format(
+                context=ctx, num_suggestions=num,
+            )
+            temperature = self.config.continuation_temperature
+            max_tokens = self.config.continuation_max_tokens
+        else:
+            system = SYSTEM_PROMPT_REPLY.format(num_suggestions=num)
+            user_msg = USER_PROMPT_TEMPLATE_REPLY.format(
+                context=ctx, num_suggestions=num,
+            )
+            temperature = self.config.reply_temperature
+            max_tokens = self.config.reply_max_tokens
+
+        logger.debug(
+            f"--- LLM STREAM REQUEST ({self.config.llm_provider}/{self.config.llm_model}, "
+            f"mode={mode.value}, temp={temperature}, max_tok={max_tokens}) ---"
+        )
+
+        try:
+            if self.config.llm_provider == "anthropic":
+                yield from self._call_anthropic_stream(
+                    system, user_msg, temperature=temperature, max_tokens=max_tokens,
+                )
+            elif self.config.llm_provider == "openai":
+                yield from self._call_openai_stream(
+                    system, user_msg, temperature=temperature, max_tokens=max_tokens,
+                )
+            else:
+                logger.error(f"Unknown LLM provider: {self.config.llm_provider}")
+                return
+        except Exception:
+            logger.exception("Error during streaming suggestions")
+            return
+
+    def _call_anthropic_stream(
+        self, system: str, user_msg: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> Generator[Suggestion, None, None]:
+        """Stream tokens from Anthropic and yield suggestions at delimiters."""
+        client = self._get_anthropic_client()
+        suggestion_index = 0
+        buffer = ""
+
+        try:
+            with client.messages.stream(
+                model=self.config.llm_model,
+                max_tokens=max_tokens or self.config.max_tokens,
+                temperature=temperature if temperature is not None else self.config.temperature,
+                system=system,
+                messages=[{"role": "user", "content": user_msg}],
+            ) as stream:
+                for text in stream.text_stream:
+                    buffer += text
+                    # Check for complete delimiters in the buffer
+                    while self._DELIMITER in buffer:
+                        before, _, buffer = buffer.partition(self._DELIMITER)
+                        text_stripped = before.strip()
+                        if text_stripped:
+                            logger.debug(
+                                f"Stream yielding suggestion [{suggestion_index}]: "
+                                f"{text_stripped[:80]!r}"
+                            )
+                            yield Suggestion(text=text_stripped, index=suggestion_index)
+                            suggestion_index += 1
+        except Exception:
+            logger.exception("Error during Anthropic stream")
+            # Fall through to yield whatever is in the buffer
+
+        # Yield any remaining text after the stream ends
+        remaining = buffer.strip()
+        if remaining:
+            logger.debug(
+                f"Stream yielding final suggestion [{suggestion_index}]: "
+                f"{remaining[:80]!r}"
+            )
+            yield Suggestion(text=remaining, index=suggestion_index)
+
+    def _call_openai_stream(
+        self, system: str, user_msg: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> Generator[Suggestion, None, None]:
+        """Stream tokens from OpenAI and yield suggestions at delimiters."""
+        client = self._get_openai_client()
+        suggestion_index = 0
+        buffer = ""
+
+        try:
+            response = client.chat.completions.create(
+                model=self.config.llm_model,
+                max_tokens=max_tokens or self.config.max_tokens,
+                temperature=temperature if temperature is not None else self.config.temperature,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user_msg},
+                ],
+                stream=True,
+            )
+            for chunk in response:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    token = chunk.choices[0].delta.content
+                    buffer += token
+                    # Check for complete delimiters in the buffer
+                    while self._DELIMITER in buffer:
+                        before, _, buffer = buffer.partition(self._DELIMITER)
+                        text_stripped = before.strip()
+                        if text_stripped:
+                            logger.debug(
+                                f"Stream yielding suggestion [{suggestion_index}]: "
+                                f"{text_stripped[:80]!r}"
+                            )
+                            yield Suggestion(text=text_stripped, index=suggestion_index)
+                            suggestion_index += 1
+        except Exception:
+            logger.exception("Error during OpenAI stream")
+            # Fall through to yield whatever is in the buffer
+
+        # Yield any remaining text after the stream ends
+        remaining = buffer.strip()
+        if remaining:
+            logger.debug(
+                f"Stream yielding final suggestion [{suggestion_index}]: "
+                f"{remaining[:80]!r}"
+            )
+            yield Suggestion(text=remaining, index=suggestion_index)
 
 
 # ---- Mode detection (module-level for reuse) ----
