@@ -611,6 +611,7 @@ class Autocompleter:
         conversation_turns: list[dict[str, str]] | None = None,
         visible_text_elements: list[str] | None = None,
         generation_id: int = 0,
+        cross_app_context: str = "",
     ) -> None:
         """Run the streaming LLM call on a worker thread, updating the overlay incrementally."""
         app_name = focused.app_name
@@ -628,6 +629,9 @@ class Autocompleter:
                 window_title=window_title,
                 source_url=source_url,
                 visible_text=visible_text_elements,
+                embedding_provider=self._embedding_provider,
+                use_semantic_context=self.config.use_semantic_context,
+                cross_app_context=cross_app_context,
             )
         else:
             context = self.context_store.get_reply_context(
@@ -637,6 +641,9 @@ class Autocompleter:
                 source_url=source_url,
                 draft_text=focused.before_cursor if focused.insertion_point is not None else "",
                 visible_text=visible_text_elements,
+                embedding_provider=self._embedding_provider,
+                use_semantic_context=self.config.use_semantic_context,
+                cross_app_context=cross_app_context,
             )
 
         logger.info(
