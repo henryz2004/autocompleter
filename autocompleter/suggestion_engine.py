@@ -117,6 +117,8 @@ class SuggestionEngine:
         app_name: str = "Unknown",
         mode: Optional[AutocompleteMode] = None,
         before_cursor: Optional[str] = None,
+        feedback_stats: Optional[dict] = None,
+        negative_patterns: Optional[list[str]] = None,
     ) -> list[Suggestion]:
         """Generate completion suggestions using the configured LLM.
 
@@ -127,6 +129,10 @@ class SuggestionEngine:
             mode: Explicit mode override. If None, inferred from before_cursor.
             before_cursor: Text before the cursor. Used for mode detection
                 when mode is None. Falls back to current_input if not provided.
+            feedback_stats: Optional dict from ContextStore.get_feedback_stats().
+                Used to adjust temperature based on accept rate.
+            negative_patterns: Optional list of recently dismissed suggestion
+                texts. Appended to the system prompt to avoid similar suggestions.
 
         Returns:
             A list of Suggestion objects.
@@ -162,6 +168,18 @@ class SuggestionEngine:
             )
             temperature = self.config.reply_temperature
             max_tokens = self.config.reply_max_tokens
+
+        # Adjust temperature based on feedback stats
+        if feedback_stats is not None:
+            temperature = adjust_temperature(temperature, feedback_stats.get("accept_rate", 0.5))
+
+        # Append negative patterns to system prompt
+        if negative_patterns:
+            avoided = "\n".join(f"- {p}" for p in negative_patterns)
+            system += (
+                "\n\nThe user recently dismissed these suggestions. "
+                "Avoid generating similar completions:\n" + avoided
+            )
 
         logger.debug(
             f"--- LLM REQUEST ({self.config.llm_provider}/{self.config.llm_model}, "
@@ -443,3 +461,21 @@ def detect_mode(
     if len(text.strip()) >= MODE_THRESHOLD_CHARS:
         return AutocompleteMode.CONTINUATION
     return AutocompleteMode.REPLY
+
+
+def adjust_temperature(base_temp: float, accept_rate: float) -> float:
+    """Adjust LLM temperature based on suggestion accept rate.
+
+    If accept rate is below 0.3, lower temperature by 0.1 (more conservative).
+    If accept rate is above 0.7, raise by 0.05 (more creative).
+    Otherwise, keep the base temperature unchanged.
+
+    Result is clamped to [0.1, 1.0].
+    """
+    if accept_rate < 0.3:
+        temp = base_temp - 0.1
+    elif accept_rate > 0.7:
+        temp = base_temp + 0.05
+    else:
+        temp = base_temp
+    return max(0.1, min(1.0, temp))

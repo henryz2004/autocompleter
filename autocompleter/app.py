@@ -127,6 +127,9 @@ class Autocompleter:
         self._last_input_hash: str = ""
         self._generation_id: int = 0  # Monotonic counter; only latest generation updates overlay
         self._replace_on_inject: bool = False  # True when focused field had baked-in placeholder
+        self._trigger_time: float | None = None  # Timestamp of last trigger for latency tracking
+        self._trigger_mode: str = "continuation"  # Mode used for the current suggestions
+        self._trigger_app: str = "Unknown"  # App name for the current suggestions
 
     def start(self) -> None:
         """Start the autocompleter."""
@@ -314,6 +317,7 @@ class Autocompleter:
         The actual LLM call is dispatched to a worker thread.
         """
         logger.info("--- TRIGGER ---")
+        self._trigger_time = time.time()
 
         if self.overlay.is_visible:
             logger.debug("Overlay visible, hiding it")
@@ -350,6 +354,8 @@ class Autocompleter:
 
         # Detect mode early so the entire pipeline knows
         mode = detect_mode(before_cursor=focused.before_cursor)
+        self._trigger_mode = mode.value
+        self._trigger_app = focused.app_name
         logger.info(f"Mode: {mode.value} (before_cursor len={len(focused.before_cursor.strip())})")
 
         # Capture position now (while we're on the event tap thread with AX access)
@@ -494,12 +500,27 @@ class Autocompleter:
             logger.info(f"[CTX]   | {line}")
         logger.info("[CTX] --- END CONTEXT ---")
 
+        # Fetch feedback stats and dismissed patterns for suggestion tuning
+        try:
+            feedback_stats = self.context_store.get_feedback_stats(
+                source_app=app_name,
+            )
+            negative_patterns = self.context_store.get_recent_dismissed_patterns(
+                source_app=app_name,
+            )
+        except Exception:
+            logger.debug("Could not fetch feedback data", exc_info=True)
+            feedback_stats = None
+            negative_patterns = None
+
         t0 = time.time()
         suggestions = self.suggestion_engine.generate_suggestions(
             current_input=current_input,
             context=context,
             app_name=app_name,
             mode=mode,
+            feedback_stats=feedback_stats,
+            negative_patterns=negative_patterns,
         )
         elapsed = time.time() - t0
 
@@ -680,6 +701,22 @@ class Autocompleter:
                         content=suggestion.text,
                         entry_type="accepted_suggestion",
                     )
+                    # Record accepted feedback
+                    latency_ms = None
+                    if self._trigger_time is not None:
+                        latency_ms = (time.time() - self._trigger_time) * 1000
+                    try:
+                        self.context_store.record_feedback(
+                            source_app=self._trigger_app,
+                            mode=self._trigger_mode,
+                            suggestion_text=suggestion.text,
+                            action="accepted",
+                            suggestion_index=suggestion.index,
+                            total_suggestions=len(self._current_suggestions),
+                            latency_ms=latency_ms,
+                        )
+                    except Exception:
+                        logger.debug("Failed to record accepted feedback", exc_info=True)
                 else:
                     logger.warning("Failed to inject suggestion")
 
@@ -690,7 +727,28 @@ class Autocompleter:
         """Handle escape — only intercept when overlay is visible."""
         if not self.overlay.is_visible:
             return False
-        self._run_on_main(self.overlay.hide)
+
+        # Record dismissed feedback for all currently shown suggestions
+        def _dismiss():
+            latency_ms = None
+            if self._trigger_time is not None:
+                latency_ms = (time.time() - self._trigger_time) * 1000
+            for suggestion in self._current_suggestions:
+                try:
+                    self.context_store.record_feedback(
+                        source_app=self._trigger_app,
+                        mode=self._trigger_mode,
+                        suggestion_text=suggestion.text,
+                        action="dismissed",
+                        suggestion_index=suggestion.index,
+                        total_suggestions=len(self._current_suggestions),
+                        latency_ms=latency_ms,
+                    )
+                except Exception:
+                    logger.debug("Failed to record dismissed feedback", exc_info=True)
+            self.overlay.hide()
+
+        self._run_on_main(_dismiss)
         return True
 
 

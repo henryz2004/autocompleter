@@ -79,6 +79,27 @@ class ContextStore:
 
             CREATE INDEX IF NOT EXISTS idx_entry_type
                 ON context_entries(entry_type);
+
+            CREATE TABLE IF NOT EXISTS suggestion_feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp REAL NOT NULL,
+                source_app TEXT NOT NULL,
+                mode TEXT NOT NULL,
+                suggestion_text TEXT NOT NULL,
+                action TEXT NOT NULL,
+                suggestion_index INTEGER,
+                total_suggestions INTEGER,
+                latency_ms REAL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_feedback_timestamp
+                ON suggestion_feedback(timestamp DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_feedback_source_app
+                ON suggestion_feedback(source_app);
+
+            CREATE INDEX IF NOT EXISTS idx_feedback_action
+                ON suggestion_feedback(action);
             """
         )
         # Migrate: add window_title column if missing (existing DBs)
@@ -352,6 +373,142 @@ class ContextStore:
             parts.append(f"Draft so far:\n{draft_text}")
 
         return "\n\n".join(parts)
+
+    def record_feedback(
+        self,
+        source_app: str,
+        mode: str,
+        suggestion_text: str,
+        action: str,
+        suggestion_index: int | None = None,
+        total_suggestions: int | None = None,
+        latency_ms: float | None = None,
+    ) -> int:
+        """Record feedback on a suggestion (accepted, dismissed, regenerated).
+
+        Returns the feedback entry ID.
+        """
+        conn = self._get_conn()
+        cursor = conn.execute(
+            """
+            INSERT INTO suggestion_feedback
+                (timestamp, source_app, mode, suggestion_text, action,
+                 suggestion_index, total_suggestions, latency_ms)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                time.time(),
+                source_app,
+                mode,
+                suggestion_text,
+                action,
+                suggestion_index,
+                total_suggestions,
+                latency_ms,
+            ),
+        )
+        conn.commit()
+        return cursor.lastrowid  # type: ignore[return-value]
+
+    def get_feedback_stats(
+        self,
+        source_app: str | None = None,
+        mode: str | None = None,
+        hours: int = 24,
+    ) -> dict:
+        """Get aggregated feedback statistics.
+
+        Returns a dict with:
+            total_shown, total_accepted, total_dismissed, accept_rate,
+            avg_accepted_index, avg_latency_ms
+        """
+        conn = self._get_conn()
+        cutoff = time.time() - (hours * 3600)
+
+        conditions = ["timestamp > ?"]
+        params: list = [cutoff]
+
+        if source_app is not None:
+            conditions.append("source_app = ?")
+            params.append(source_app)
+        if mode is not None:
+            conditions.append("mode = ?")
+            params.append(mode)
+
+        where = " AND ".join(conditions)
+
+        # Total shown = accepted + dismissed (regenerated doesn't count as
+        # a final disposition, but we include it in the total for completeness)
+        cursor = conn.execute(
+            f"SELECT COUNT(*) FROM suggestion_feedback WHERE {where}",
+            params,
+        )
+        total_shown = cursor.fetchone()[0]
+
+        cursor = conn.execute(
+            f"SELECT COUNT(*) FROM suggestion_feedback WHERE {where} AND action = 'accepted'",
+            params,
+        )
+        total_accepted = cursor.fetchone()[0]
+
+        cursor = conn.execute(
+            f"SELECT COUNT(*) FROM suggestion_feedback WHERE {where} AND action = 'dismissed'",
+            params,
+        )
+        total_dismissed = cursor.fetchone()[0]
+
+        accept_rate = total_accepted / total_shown if total_shown > 0 else 0.0
+
+        cursor = conn.execute(
+            f"SELECT AVG(suggestion_index) FROM suggestion_feedback WHERE {where} AND action = 'accepted' AND suggestion_index IS NOT NULL",
+            params,
+        )
+        row = cursor.fetchone()
+        avg_accepted_index = row[0] if row[0] is not None else 0.0
+
+        cursor = conn.execute(
+            f"SELECT AVG(latency_ms) FROM suggestion_feedback WHERE {where} AND latency_ms IS NOT NULL",
+            params,
+        )
+        row = cursor.fetchone()
+        avg_latency_ms = row[0] if row[0] is not None else 0.0
+
+        return {
+            "total_shown": total_shown,
+            "total_accepted": total_accepted,
+            "total_dismissed": total_dismissed,
+            "accept_rate": accept_rate,
+            "avg_accepted_index": avg_accepted_index,
+            "avg_latency_ms": avg_latency_ms,
+        }
+
+    def get_recent_dismissed_patterns(
+        self,
+        source_app: str | None = None,
+        limit: int = 20,
+    ) -> list[str]:
+        """Return recently dismissed suggestion texts for negative filtering."""
+        conn = self._get_conn()
+        conditions = ["action = 'dismissed'"]
+        params: list = []
+
+        if source_app is not None:
+            conditions.append("source_app = ?")
+            params.append(source_app)
+
+        where = " AND ".join(conditions)
+        params.append(limit)
+
+        cursor = conn.execute(
+            f"""
+            SELECT suggestion_text FROM suggestion_feedback
+            WHERE {where}
+            ORDER BY timestamp DESC
+            LIMIT ?
+            """,
+            params,
+        )
+        return [row[0] for row in cursor.fetchall()]
 
     def prune(self, max_age_hours: int = 72, max_entries: int = 5000) -> int:
         """Remove old entries to keep the store bounded. Returns count removed."""
