@@ -37,6 +37,7 @@ class OverlayConfig:
     border_radius: float = 8.0
     padding: float = 8.0
     item_height: float = 32.0
+    max_suggestion_height: float = 150.0
 
 
 def _measure_text_height(text: str, font, available_width: float) -> float:
@@ -61,26 +62,44 @@ def _measure_text_height(text: str, font, available_width: float) -> float:
 
 def _compute_item_heights(
     suggestions: list[Suggestion], config: OverlayConfig,
+    expanded_index: int = -1,
 ) -> list[float]:
-    """Compute per-item heights accounting for text wrapping."""
+    """Compute per-item heights accounting for text wrapping.
+
+    Args:
+        suggestions: List of suggestions to measure.
+        config: Overlay configuration.
+        expanded_index: Index of the currently selected/expanded suggestion.
+            When a suggestion is expanded (preview mode), it is allowed up to
+            ``config.max_height`` instead of ``config.max_suggestion_height``.
+
+    Returns:
+        List of heights, one per suggestion.
+    """
     if not HAS_APPKIT:
         return [config.item_height] * len(suggestions)
     font = AppKit.NSFont.systemFontOfSize_(config.font_size)
     # Available width for text inside each item (item padding: 8 each side + 8 inner each side)
     available_width = config.width - 2 * config.padding - 16
-    heights = []
-    for s in suggestions:
+    heights: list[float] = []
+    for i, s in enumerate(suggestions):
         text_h = _measure_text_height(s.text, font, available_width)
         item_h = max(config.item_height, text_h + 12)
+        # Clamp to max_suggestion_height (unless this item is expanded)
+        if i == expanded_index:
+            item_h = min(item_h, config.max_height)
+        else:
+            item_h = min(item_h, config.max_suggestion_height)
         heights.append(item_h)
     return heights
 
 
 def _compute_overlay_height(
     suggestions: list[Suggestion], config: OverlayConfig,
+    expanded_index: int = -1,
 ) -> float:
     """Compute total overlay height with dynamic per-item sizing."""
-    item_heights = _compute_item_heights(suggestions, config)
+    item_heights = _compute_item_heights(suggestions, config, expanded_index)
     total = config.padding * 2 + sum(item_heights)
     return min(total, config.max_height)
 
@@ -97,19 +116,53 @@ if HAS_APPKIT:
             self._config = config
             self._suggestions: list[Suggestion] = []
             self._selected_index: int = 0
+            self._preview_mode: bool = False
             self._item_heights: list[float] = []
+            self._full_text_heights: list[float] = []  # unclamped heights
             return self
 
         def setSuggestions_(self, suggestions):
             self._suggestions = suggestions
             self._selected_index = 0
-            self._item_heights = _compute_item_heights(suggestions, self._config)
+            self._preview_mode = False
+            self._recompute_heights()
             self.setNeedsDisplay_(True)
 
         def setSelectedIndex_(self, index):
             if 0 <= index < len(self._suggestions):
+                old = self._selected_index
                 self._selected_index = index
+                # Enable preview mode when selection changes to a truncated item
+                if old != index and self._is_truncated(index):
+                    self._preview_mode = True
+                elif old != index:
+                    self._preview_mode = False
+                self._recompute_heights()
                 self.setNeedsDisplay_(True)
+
+        def _recompute_heights(self):
+            expanded = self._selected_index if self._preview_mode else -1
+            self._item_heights = _compute_item_heights(
+                self._suggestions, self._config, expanded_index=expanded,
+            )
+            # Also compute unclamped heights for truncation detection
+            if HAS_APPKIT:
+                font = AppKit.NSFont.systemFontOfSize_(self._config.font_size)
+                avail_w = self._config.width - 2 * self._config.padding - 16
+                self._full_text_heights = []
+                for s in self._suggestions:
+                    text_h = _measure_text_height(s.text, font, avail_w)
+                    self._full_text_heights.append(max(self._config.item_height, text_h + 12))
+            else:
+                self._full_text_heights = list(self._item_heights)
+
+        def _is_truncated(self, index: int) -> bool:
+            """Check if a suggestion at the given index is being truncated."""
+            if index < 0 or index >= len(self._suggestions):
+                return False
+            if index < len(self._full_text_heights) and index < len(self._item_heights):
+                return self._full_text_heights[index] > self._item_heights[index]
+            return False
 
         def drawRect_(self, rect):
             cfg = self._config
@@ -126,8 +179,15 @@ if HAS_APPKIT:
 
             # Draw each suggestion
             font = AppKit.NSFont.systemFontOfSize_(cfg.font_size)
+            ellipsis_font = AppKit.NSFont.systemFontOfSize_(cfg.font_size - 1)
             text_color = AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
                 cfg.text_color[0], cfg.text_color[1], cfg.text_color[2], 1.0
+            )
+            dim_text_color = AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                cfg.text_color[0] * 0.6,
+                cfg.text_color[1] * 0.6,
+                cfg.text_color[2] * 0.6,
+                1.0,
             )
             highlight = AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
                 cfg.highlight_color[0],
@@ -165,7 +225,11 @@ if HAS_APPKIT:
                     highlight.set()
                     highlight_path.fill()
 
-                # Draw text with word wrapping
+                # Draw text with word wrapping — clip to item rect
+                AppKit.NSGraphicsContext.currentContext().saveGraphicsState()
+                clip_path = AppKit.NSBezierPath.bezierPathWithRect_(item_rect)
+                clip_path.addClip()
+
                 attrs = {
                     AppKit.NSFontAttributeName: font,
                     AppKit.NSForegroundColorAttributeName: text_color,
@@ -182,6 +246,26 @@ if HAS_APPKIT:
                 )
                 text.drawInRect_(text_rect)
 
+                AppKit.NSGraphicsContext.currentContext().restoreGraphicsState()
+
+                # Draw "..." truncation indicator if text is clipped
+                is_truncated = self._is_truncated(i)
+                if is_truncated:
+                    ellipsis_attrs = {
+                        AppKit.NSFontAttributeName: ellipsis_font,
+                        AppKit.NSForegroundColorAttributeName: dim_text_color,
+                    }
+                    ellipsis = AppKit.NSAttributedString.alloc().initWithString_attributes_(
+                        "...", ellipsis_attrs,
+                    )
+                    ellipsis_rect = NSMakeRect(
+                        item_rect.origin.x + item_rect.size.width - 30,
+                        item_rect.origin.y + 2,
+                        24,
+                        14,
+                    )
+                    ellipsis.drawInRect_(ellipsis_rect)
+
 
 class SuggestionOverlay:
     """Manages the floating overlay window for displaying suggestions."""
@@ -194,6 +278,11 @@ class SuggestionOverlay:
         self._selected_index: int = 0
         self._on_accept = None
         self._visible = False
+        # Stored position for resizing during preview mode
+        self._last_x: float = 0.0
+        self._last_ns_y: float = 0.0
+        self._last_caret_ns_y: float = 0.0
+        self._last_caret_height: float = 20.0
 
     @property
     def is_visible(self) -> bool:
@@ -269,6 +358,13 @@ class SuggestionOverlay:
             x, ns_y, self._config.width, height,
             caret_ns_y=caret_ns_y, caret_height=caret_height,
         )
+
+        # Store position for later resizing (preview mode)
+        self._last_x = x
+        self._last_ns_y = ns_y
+        self._last_caret_ns_y = caret_ns_y
+        self._last_caret_height = caret_height
+
         frame = NSMakeRect(x, ns_y, self._config.width, height)
 
         if self._window is None:
@@ -297,7 +393,12 @@ class SuggestionOverlay:
         logger.debug("Overlay hidden")
 
     def move_selection(self, delta: int) -> None:
-        """Move the selection up or down."""
+        """Move the selection up or down.
+
+        When the newly selected item is a multi-line suggestion, preview
+        mode is activated which may resize the overlay to accommodate the
+        expanded content.
+        """
         if not self._suggestions:
             return
         old = self._selected_index
@@ -307,6 +408,40 @@ class SuggestionOverlay:
         logger.debug(f"Overlay selection: {old} -> {self._selected_index}")
         if self._view is not None:
             self._view.setSelectedIndex_(self._selected_index)
+            # Resize overlay if preview mode changed the item heights
+            self._resize_to_fit()
+
+    def _resize_to_fit(self) -> None:
+        """Resize the overlay window to match updated item heights.
+
+        Called after selection changes to accommodate preview mode expansion.
+        """
+        if not HAS_APPKIT or self._window is None or self._view is None:
+            return
+        if not self._suggestions:
+            return
+
+        # Recompute height using the view's current item heights
+        new_height = self._config.padding * 2 + sum(self._view._item_heights)
+        new_height = min(new_height, self._config.max_height)
+
+        current_frame = self._window.frame()
+        if abs(current_frame.size.height - new_height) < 1.0:
+            return  # No meaningful change
+
+        # Keep the top edge in the same place by adjusting ns_y
+        ns_y = current_frame.origin.y + current_frame.size.height - new_height
+        x = current_frame.origin.x
+
+        x, ns_y = self._clamp_to_screen(
+            x, ns_y, self._config.width, new_height,
+            caret_ns_y=self._last_caret_ns_y,
+            caret_height=self._last_caret_height,
+        )
+
+        frame = NSMakeRect(x, ns_y, self._config.width, new_height)
+        self._window.setFrame_display_(frame, True)
+        self._view.setFrame_(NSMakeRect(0, 0, self._config.width, new_height))
 
     def accept_selection(self) -> Suggestion | None:
         """Accept the currently selected suggestion and hide the overlay."""
