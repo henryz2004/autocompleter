@@ -54,6 +54,8 @@ Rules:
 - Keep length proportional to the conversation thread
 - Vary intent across suggestions (e.g. agree, ask follow-up, provide info)
 - Do not repeat or quote content already in the conversation
+- For longer conversations or email-like contexts, suggestions may span \
+multiple sentences or paragraphs (up to ~{max_suggestion_lines} lines)
 - Separate each suggestion with the delimiter: ---SUGGESTION---
 - Output ONLY the suggestions separated by the delimiter, nothing else
 """
@@ -72,10 +74,30 @@ Generate {num_suggestions} short reply suggestions the user might send next.\
 """
 
 
+MAX_PREVIEW_LENGTH = 80
+
+
 @dataclass
 class Suggestion:
     text: str
     index: int
+
+    @property
+    def preview(self) -> str:
+        """Return a truncated single-line preview of the full text.
+
+        Takes the first line (or first sentence), strips whitespace,
+        and truncates to MAX_PREVIEW_LENGTH characters with an ellipsis
+        if the full text is longer or multi-line.
+        """
+        # Take the first line
+        first_line = self.text.split("\n", 1)[0].strip()
+        is_multiline = "\n" in self.text
+        needs_truncation = len(first_line) > MAX_PREVIEW_LENGTH or is_multiline
+        if needs_truncation:
+            truncated = first_line[:MAX_PREVIEW_LENGTH].rstrip()
+            return truncated + "..."
+        return first_line
 
 
 class SuggestionEngine:
@@ -162,7 +184,10 @@ class SuggestionEngine:
             temperature = self.config.continuation_temperature
             max_tokens = self.config.continuation_max_tokens
         else:
-            system = SYSTEM_PROMPT_REPLY.format(num_suggestions=num)
+            max_lines = getattr(self.config, "max_suggestion_lines", 10)
+            system = SYSTEM_PROMPT_REPLY.format(
+                num_suggestions=num, max_suggestion_lines=max_lines,
+            )
             user_msg = USER_PROMPT_TEMPLATE_REPLY.format(
                 context=ctx, num_suggestions=num,
             )

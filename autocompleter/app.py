@@ -172,6 +172,7 @@ class Autocompleter:
         self.hotkey_listener.register("down", self._on_nav_down)
         self.hotkey_listener.register("tab", self._on_nav_accept)
         self.hotkey_listener.register("return", self._on_nav_accept)
+        self.hotkey_listener.register("shift+tab", self._on_partial_accept)
         self.hotkey_listener.register("escape", self._on_nav_dismiss)
 
         # Start the hotkey listener
@@ -721,6 +722,53 @@ class Autocompleter:
                     logger.warning("Failed to inject suggestion")
 
         self._run_on_main(_accept)
+        return True
+
+    @staticmethod
+    def _extract_first_segment(text: str) -> str:
+        """Extract the first sentence or line from a suggestion text.
+
+        Splits on newline first, then on '. ' (sentence boundary).
+        If the text is a single sentence with no newlines, returns
+        the full text.
+        """
+        # Split on newline first
+        first_line = text.split("\n", 1)[0].strip()
+        # If the original text had a newline, use just the first line
+        if "\n" in text:
+            return first_line
+        # Otherwise try splitting on sentence boundary '. '
+        dot_pos = first_line.find(". ")
+        if dot_pos >= 0:
+            return first_line[: dot_pos + 1]  # include the period
+        # Single sentence — return all
+        return text
+
+    def _on_partial_accept(self) -> bool:
+        """Handle shift+tab — inject only the first sentence/line."""
+        if not self.overlay.is_visible:
+            return False
+
+        def _accept_partial():
+            suggestion = self.overlay.accept_selection()
+            if suggestion:
+                partial_text = self._extract_first_segment(suggestion.text)
+                success = self.injector.inject(
+                    partial_text, replace=self._replace_on_inject,
+                )
+                if success:
+                    logger.info(f"Partial inject: {partial_text[:60]}")
+                    focused = self.observer.get_focused_element()
+                    app_name = focused.app_name if focused else "Unknown"
+                    self.context_store.add_entry(
+                        source_app=app_name,
+                        content=partial_text,
+                        entry_type="accepted_suggestion",
+                    )
+                else:
+                    logger.warning("Failed to inject partial suggestion")
+
+        self._run_on_main(_accept_partial)
         return True
 
     def _on_nav_dismiss(self) -> bool:

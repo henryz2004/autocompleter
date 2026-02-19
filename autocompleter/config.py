@@ -48,6 +48,9 @@ class Config:
     overlay_font_size: int = 13
     overlay_opacity: float = 0.95
 
+    # Multi-line suggestions
+    max_suggestion_lines: int = 10
+
     def __post_init__(self):
         self.data_dir.mkdir(parents=True, exist_ok=True)
         if not self.anthropic_api_key:
