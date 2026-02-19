@@ -550,14 +550,21 @@ class Autocompleter:
             return False
 
         def _accept():
+            # Capture the focused element BEFORE injection so we know the
+            # current cursor position. After injection the caret will have
+            # moved, so reading it afterward would give a stale value.
+            focused = self.observer.get_focused_element()
+            cursor_pos = focused.insertion_point if focused else None
+
             suggestion = self.overlay.accept_selection()
             if suggestion:
                 success = self.injector.inject(
-                    suggestion.text, replace=self._replace_on_inject,
+                    suggestion.text,
+                    replace=self._replace_on_inject,
+                    insertion_point=cursor_pos,
                 )
                 if success:
                     logger.info(f"Injected: {suggestion.text[:60]}")
-                    focused = self.observer.get_focused_element()
                     app_name = focused.app_name if focused else "Unknown"
                     self.context_store.add_entry(
                         source_app=app_name,

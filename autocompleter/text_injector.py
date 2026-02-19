@@ -10,8 +10,11 @@ Strategy:
 3. Fallback: Use NSPasteboard (clipboard) + Cmd+V simulation
 """
 
+from __future__ import annotations
+
 import logging
 import time
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +40,9 @@ class TextInjector:
         else:
             self._system_wide = None
 
-    def inject(self, text: str, replace: bool = False) -> bool:
+    def inject(
+        self, text: str, replace: bool = False, insertion_point: Optional[int] = None,
+    ) -> bool:
         """Inject text into the currently focused input.
 
         Tries multiple strategies in order of preference.
@@ -47,6 +52,14 @@ class TextInjector:
         paste and keystrokes go through normal input handling, which
         triggers the placeholder-clearing behaviour.
 
+        Args:
+            text: The text to inject.
+            replace: If True, skip AXValue setting and use clipboard/keystrokes.
+            insertion_point: Character offset at which to splice the text.
+                When None, text is appended to the end (backward-compatible).
+                Only used by the AX API strategy; clipboard paste and
+                keystrokes naturally inject at the OS cursor position.
+
         Returns True if injection succeeded.
         """
         if not text:
@@ -54,16 +67,21 @@ class TextInjector:
 
         # Try AX API value setting first (skip when replacing placeholder)
         if not replace:
-            if self._inject_via_ax(text):
+            if self._inject_via_ax(text, insertion_point=insertion_point):
                 logger.debug("Injected text via AX API")
                 return True
 
-        # Fall back to clipboard paste
+        # Fall back to clipboard paste.
+        # NOTE: Clipboard paste simulates Cmd+V, which inserts at the
+        # current OS cursor position. The insertion_point parameter is
+        # not needed here — the OS handles cursor-aware insertion natively.
         if self._inject_via_clipboard(text):
             logger.debug("Injected text via clipboard paste")
             return True
 
-        # Last resort: simulated keystrokes
+        # Last resort: simulated keystrokes.
+        # NOTE: Like clipboard paste, simulated keystrokes are typed at
+        # the current OS cursor position, so insertion_point is not needed.
         if self._inject_via_keystrokes(text):
             logger.debug("Injected text via simulated keystrokes")
             return True
@@ -71,8 +89,20 @@ class TextInjector:
         logger.warning("All injection methods failed")
         return False
 
-    def _inject_via_ax(self, text: str) -> bool:
-        """Inject by setting AXValue on the focused element."""
+    def _inject_via_ax(
+        self, text: str, insertion_point: Optional[int] = None, replace: bool = False,
+    ) -> bool:
+        """Inject by setting AXValue on the focused element.
+
+        Args:
+            text: The text to inject.
+            insertion_point: Character offset at which to splice the text
+                into the existing value. When None, text is appended to
+                the end. Clamped to [0, len(current_value)] to avoid
+                out-of-bounds errors.
+            replace: If True, replace the entire field value with *text*,
+                ignoring insertion_point.
+        """
         if not HAS_INJECTION or self._system_wide is None:
             return False
 
@@ -84,9 +114,35 @@ class TextInjector:
             return False
 
         current_value = ax_get_attribute(focused, "AXValue") or ""
-        new_value = current_value + text
+
+        if replace:
+            new_value = text
+            cursor_after = len(text)
+        elif insertion_point is not None:
+            # Clamp insertion_point to valid range
+            clamped = max(0, min(insertion_point, len(current_value)))
+            new_value = current_value[:clamped] + text + current_value[clamped:]
+            cursor_after = clamped + len(text)
+        else:
+            # Legacy append behaviour
+            new_value = current_value + text
+            cursor_after = len(new_value)
 
         if ax_set_attribute(focused, "AXValue", new_value):
+            # Move the cursor to just after the injected text so the user
+            # can continue typing seamlessly.
+            try:
+                import ApplicationServices as _AS
+                range_value = _AS.AXValueCreate(
+                    _AS.kAXValueTypeCFRange, (cursor_after, 0),
+                )
+                ax_set_attribute(focused, "AXSelectedTextRange", range_value)
+            except Exception:
+                logger.debug(
+                    "Could not set AXSelectedTextRange after injection",
+                    exc_info=True,
+                )
+
             # Try to trigger a confirm/change notification
             ApplicationServices.AXUIElementPerformAction(
                 focused, "AXConfirm"
