@@ -33,13 +33,10 @@ from .embeddings import (
     TFIDFEmbeddingProvider,
 )
 from .hotkey import HotkeyListener
-from .input_observer import InputObserver
+from .input_observer import InputObserver, VisibleContent
 from .overlay import OverlayConfig, SuggestionOverlay
 from .suggestion_engine import AutocompleteMode, Suggestion, SuggestionEngine, detect_mode
 from .text_injector import TextInjector
-
-# How often the background observer polls for visible content (seconds)
-OBSERVE_INTERVAL = 2.0
 
 
 def _get_caret_screen_position() -> tuple[float, float, float] | None:
@@ -155,6 +152,17 @@ class Autocompleter:
         self._trigger_time: float | None = None  # Timestamp of last trigger for latency tracking
         self._trigger_mode: str = "continuation"  # Mode used for the current suggestions
         self._trigger_app: str = "Unknown"  # App name for the current suggestions
+
+        # Observer loop state
+        self._observe_iteration: int = 0  # Counter for periodic pruning
+        self._observe_consecutive_errors: int = 0  # For exponential backoff
+        self._last_visible_content: VisibleContent | None = None  # Cached for trigger reuse
+        self._last_visible_content_time: float = 0.0  # Timestamp of cached content
+
+        # Dynamic polling state
+        self._current_poll_interval: float = self._POLL_MIN  # Start fast
+        self._last_observed_app: str = ""
+        self._last_observed_window: str = ""
 
     def start(self) -> None:
         """Start the autocompleter."""
@@ -282,20 +290,49 @@ class Autocompleter:
     # Cap stored content to avoid DB bloat from terminal scrollback buffers
     _MAX_STORE_CHARS = 4000
 
+    # Prune the DB every N observer iterations
+    _PRUNE_EVERY = 100
+
+    # Error backoff: max sleep multiplier
+    _MAX_ERROR_BACKOFF = 16
+
+    # Dynamic polling bounds (seconds)
+    _POLL_MIN = 0.5     # Fastest poll rate (right after a change)
+    _POLL_MAX = 4.0     # Slowest poll rate (idle)
+    _POLL_DECAY = 1.5   # Multiply interval by this each idle tick
+
     def _observe_loop(self) -> None:
         """Background loop that observes visible content and stores context."""
         while self._running:
+            content_changed = False
+            input_changed = False
+            activity_detected = False
+
             try:
                 content = self.observer.get_visible_content()
-                if content:
-                    self.context_trail.record(content)
                 if content and content.text_elements:
+                    # Detect app/window switch
+                    if (content.app_name != self._last_observed_app
+                            or content.window_title != self._last_observed_window):
+                        activity_detected = True
+                    self._last_observed_app = content.app_name
+                    self._last_observed_window = content.window_title
+
+                    # Cache for trigger reuse
+                    self._last_visible_content = content
+                    self._last_visible_content_time = time.time()
+
+                    self.context_trail.record(content)
+
                     combined = "\n".join(content.text_elements[:50])
                     if len(combined) > self._MAX_STORE_CHARS:
                         combined = combined[:self._MAX_STORE_CHARS]
                     if combined.strip():
-                        content_hash = self._hash_content(combined)
+                        content_hash = self._hash_content(
+                            f"{content.app_name}\0{content.window_title}\0{content.url}\0{combined}"
+                        )
                         if content_hash != self._last_content_hash:
+                            content_changed = True
                             self._last_content_hash = content_hash
                             logger.debug(
                                 f"Observer: stored {len(content.text_elements)} "
@@ -316,8 +353,9 @@ class Autocompleter:
                     value = focused.value
                     if len(value) > self._MAX_STORE_CHARS:
                         value = value[:self._MAX_STORE_CHARS]
-                    input_hash = self._hash_content(value)
+                    input_hash = self._hash_content(f"{focused.app_name}\0{value}")
                     if input_hash != self._last_input_hash:
+                        input_changed = True
                         self._last_input_hash = input_hash
                         logger.debug(
                             f"Observer: stored user_input from {focused.app_name!r} "
@@ -329,10 +367,43 @@ class Autocompleter:
                             entry_type="user_input",
                         )
 
-            except Exception:
-                logger.exception("Error in observer loop")
+                # Periodic DB pruning
+                self._observe_iteration += 1
+                if self._observe_iteration % self._PRUNE_EVERY == 0:
+                    pruned = self.context_store.prune(
+                        max_age_hours=self.config.max_context_age_hours,
+                        max_entries=self.config.max_context_entries,
+                    )
+                    if pruned:
+                        logger.debug(f"Observer: pruned {pruned} old entries")
 
-            time.sleep(OBSERVE_INTERVAL)
+                # Reset error backoff on success
+                self._observe_consecutive_errors = 0
+
+            except Exception:
+                self._observe_consecutive_errors += 1
+                logger.exception("Error in observer loop")
+                if self._observe_consecutive_errors == 5:
+                    logger.warning(
+                        "Observer: 5 consecutive errors — AX permissions "
+                        "may have been revoked"
+                    )
+
+            # Dynamic polling: fast after changes, decay toward max when idle
+            if activity_detected or content_changed or input_changed:
+                self._current_poll_interval = self._POLL_MIN
+            else:
+                self._current_poll_interval = min(
+                    self._current_poll_interval * self._POLL_DECAY,
+                    self._POLL_MAX,
+                )
+
+            # Error backoff still multiplies on top
+            backoff = min(
+                2 ** self._observe_consecutive_errors,
+                self._MAX_ERROR_BACKOFF,
+            ) if self._observe_consecutive_errors > 0 else 1
+            time.sleep(self._current_poll_interval * backoff)
 
     # ---- Hotkey callbacks (run on background event-tap thread) ----
     # Each returns True to suppress the key event, False to pass it through.
@@ -418,8 +489,15 @@ class Autocompleter:
             caret_height=caret_height,
         ))
 
-        # Capture visible content metadata for context assembly
-        visible = self.observer.get_visible_content()
+        # Reuse cached visible content if fresh enough, otherwise re-fetch.
+        # The observer loop polls dynamically, so if the cache is younger
+        # than the current poll interval, an AX tree re-traversal is redundant.
+        cache_age = time.time() - self._last_visible_content_time
+        if self._last_visible_content is not None and cache_age < self._current_poll_interval:
+            visible = self._last_visible_content
+            logger.debug(f"Using cached visible content ({cache_age:.1f}s old)")
+        else:
+            visible = self.observer.get_visible_content()
         window_title = visible.window_title if visible else ""
         source_url = visible.url if visible else ""
         visible_text_elements: list[str] = []
@@ -449,7 +527,9 @@ class Autocompleter:
             if visible.text_elements:
                 combined = "\n".join(visible.text_elements[:50])
                 if combined.strip():
-                    content_hash = self._hash_content(combined)
+                    content_hash = self._hash_content(
+                        f"{visible.app_name}\0{visible.window_title}\0{visible.url}\0{combined}"
+                    )
                     if content_hash != self._last_content_hash:
                         self._last_content_hash = content_hash
                         self.context_store.add_entry(

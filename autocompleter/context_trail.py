@@ -53,14 +53,19 @@ class ContextTrail:
     def record(self, visible_content: VisibleContent) -> None:
         """Record an observation from the observe loop.
 
-        If the app has changed since the last call, push a snapshot of
-        the *previous* app's content onto the trail.
+        If the app or window has changed since the last call, push a
+        snapshot of the *previous* content onto the trail.  This catches
+        both cross-app switches and intra-app navigation (e.g. switching
+        tabs in a browser or files in an editor).
         """
         app_name = visible_content.app_name
         window_title = visible_content.window_title
 
-        if self._current_app and app_name != self._current_app:
-            # App switch detected -- snapshot the previous app
+        if self._current_app and (
+            app_name != self._current_app
+            or window_title != self._current_window
+        ):
+            # App or window switch detected -- snapshot the previous content
             self._push_snapshot()
 
         # Update tracking state
