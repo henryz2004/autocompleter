@@ -18,19 +18,23 @@ import time
 from dataclasses import dataclass
 from typing import Generator, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .config import Config
 
 
 class SuggestionItem(BaseModel):
     """Pydantic model for a single suggestion."""
-    text: str
+    text: str = Field(description="The suggestion text the user would type")
 
 
 class SuggestionList(BaseModel):
     """Pydantic model wrapping multiple suggestions for reliable count."""
-    suggestions: list[SuggestionItem]
+    suggestions: list[SuggestionItem] = Field(
+        ...,
+        min_length=2,
+        description="List of distinct suggestions",
+    )
 
 
 class AutocompleteMode(enum.Enum):
@@ -53,16 +57,19 @@ Rules:
 """
 
 SYSTEM_PROMPT_REPLY = """\
-You are a conversational reply assistant. You suggest messages the user \
-might send as their next response.
+You are a message suggestion assistant. You suggest messages the user \
+might type next.
 
 Rules:
-- Match the tone and formality of the conversation
-- Do not invent facts or context not present in the conversation
-- Keep length proportional to the conversation thread
-- Vary intent across suggestions (e.g. agree, ask follow-up, provide info)
-- Do not repeat or quote content already in the conversation
-- Output ONLY the reply text, no meta-commentary or descriptions
+- If there is a conversation, suggest replies to the latest message
+- If there is no conversation yet, suggest conversation starters \
+appropriate for the app
+- Match the tone and formality of the context
+- Vary intent across suggestions (e.g. agree, ask follow-up, greet, \
+start a new topic)
+- Do not repeat or quote content already visible
+- Output ONLY the message text, no meta-commentary or descriptions
+- Never refuse to generate suggestions
 """
 
 USER_PROMPT_TEMPLATE_COMPLETION = """\
@@ -75,8 +82,9 @@ Complete the text at the cursor position. Generate exactly \
 USER_PROMPT_TEMPLATE_REPLY = """\
 {context}
 
-Respond to the latest message in the conversation. Generate exactly \
-{num_suggestions} distinct reply suggestions the user might send next. \
+Generate exactly {num_suggestions} distinct suggestions for what the \
+user might type next. If there is a conversation, suggest replies. \
+If there is no conversation, suggest conversation starters. \
 For longer conversations or email-like contexts, suggestions may span \
 multiple sentences or paragraphs (up to ~{max_suggestion_lines} lines).\
 """
@@ -235,6 +243,7 @@ class SuggestionEngine:
         client = self._get_client()
         result = client.create(
             response_model=SuggestionList,
+            max_retries=2,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user_msg},
@@ -341,36 +350,19 @@ class SuggestionEngine:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
     ) -> Generator[Suggestion, None, None]:
-        """Stream suggestions from the LLM via Instructor's create_partial.
+        """Generate suggestions via Instructor with validated count.
 
-        Uses create_partial with SuggestionList so the schema enforces
-        the correct number of items. Yields each new suggestion as soon
-        as it appears in the partial stream.
+        Uses create() with SuggestionList (which has min_length validation
+        and max_retries) to ensure the LLM returns the expected number of
+        items, then yields them one at a time for incremental overlay
+        updates.
         """
-        client = self._get_client()
-        yielded = 0
-        for partial in client.create_partial(
-            response_model=SuggestionList,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user_msg},
-            ],
-            temperature=temperature,
-            max_tokens=max_tokens,
-        ):
-            if partial.suggestions is None:
-                continue
-            # Yield any newly completed suggestions
-            while yielded < len(partial.suggestions):
-                item = partial.suggestions[yielded]
-                if item.text is not None:
-                    logger.debug(
-                        f"Stream yielding suggestion [{yielded}]: {item.text[:80]!r}"
-                    )
-                    yield Suggestion(text=item.text, index=yielded)
-                    yielded += 1
-                else:
-                    break
+        results = self._call_llm(system, user_msg, temperature=temperature, max_tokens=max_tokens)
+        for suggestion in results:
+            logger.debug(
+                f"Stream yielding suggestion [{suggestion.index}]: {suggestion.text[:80]!r}"
+            )
+            yield suggestion
 
 
 # ---- Mode detection (module-level for reuse) ----

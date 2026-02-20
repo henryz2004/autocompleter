@@ -1,6 +1,6 @@
 """Tests for streaming suggestion generation.
 
-Covers Instructor-based structured output streaming via create_iterable,
+Covers Instructor-based structured output via create() with SuggestionList,
 error handling, empty suggestion filtering, backward compatibility of
 the non-streaming path, and generation_id staleness checks.
 """
@@ -47,19 +47,14 @@ def engine(config):
 # ---------------------------------------------------------------------------
 
 def _mock_engine_stream(engine, items: list[SuggestionItem]):
-    """Set up a mock Instructor client for streaming (create_partial).
+    """Set up a mock for streaming by patching _call_llm.
 
-    Simulates create_partial by yielding progressively larger SuggestionList
-    snapshots — one new item per partial update.
+    Since _call_llm_stream delegates to _call_llm, we mock _call_llm
+    to return the expected Suggestion objects.
     """
-    def partial_generator():
-        for i in range(len(items)):
-            yield SuggestionList(suggestions=items[:i + 1])
-
-    mock_client = MagicMock()
-    mock_client.create_partial.return_value = partial_generator()
-    engine._client = mock_client
-    return mock_client
+    suggestions = [Suggestion(text=item.text, index=i) for i, item in enumerate(items)]
+    engine._call_llm = MagicMock(return_value=suggestions)
+    return engine._call_llm
 
 
 # ---------------------------------------------------------------------------
@@ -133,10 +128,8 @@ class TestStreamingSuggestions:
         assert results[1].text == "Single line"
 
     def test_error_during_iteration_raises(self, engine):
-        """Exception during create_partial propagates."""
-        mock_client = MagicMock()
-        mock_client.create_partial.side_effect = RuntimeError("API error")
-        engine._client = mock_client
+        """Exception during _call_llm propagates through _call_llm_stream."""
+        engine._call_llm = MagicMock(side_effect=RuntimeError("API error"))
 
         with pytest.raises(RuntimeError, match="API error"):
             list(engine._call_llm_stream("sys", "user"))
@@ -150,9 +143,11 @@ class TestCallLlm:
     """Test the non-streaming _call_llm method."""
 
     def _mock_engine_with_list(self, engine, items: list[SuggestionItem]):
-        """Set up a mock Instructor client that returns a SuggestionList."""
+        """Set up a mock Instructor client that returns a mock SuggestionList."""
+        mock_result = MagicMock()
+        mock_result.suggestions = items
         mock_client = MagicMock()
-        mock_client.create.return_value = SuggestionList(suggestions=items)
+        mock_client.create.return_value = mock_result
         engine._client = mock_client
         return mock_client
 
@@ -246,7 +241,7 @@ class TestGenerateSuggestionsStream:
 
     def test_continuation_mode_params(self, engine):
         """Continuation mode uses correct temperature and max_tokens."""
-        mock_client = _mock_engine_stream(engine, [SuggestionItem(text="s")])
+        mock_llm = _mock_engine_stream(engine, [SuggestionItem(text="s")])
 
         list(engine.generate_suggestions_stream(
             current_input="Hello world this is a test",
@@ -254,13 +249,14 @@ class TestGenerateSuggestionsStream:
             mode=AutocompleteMode.CONTINUATION,
         ))
 
-        call_kwargs = mock_client.create_partial.call_args[1]
-        assert call_kwargs["temperature"] == engine.config.continuation_temperature
-        assert call_kwargs["max_tokens"] == engine.config.continuation_max_tokens
+        mock_llm.assert_called_once()
+        call_args = mock_llm.call_args
+        assert call_args[1]["temperature"] == engine.config.continuation_temperature
+        assert call_args[1]["max_tokens"] == engine.config.continuation_max_tokens
 
     def test_reply_mode_params(self, engine):
         """Reply mode uses correct temperature and max_tokens."""
-        mock_client = _mock_engine_stream(engine, [SuggestionItem(text="s")])
+        mock_llm = _mock_engine_stream(engine, [SuggestionItem(text="s")])
 
         list(engine.generate_suggestions_stream(
             current_input="",
@@ -268,15 +264,14 @@ class TestGenerateSuggestionsStream:
             mode=AutocompleteMode.REPLY,
         ))
 
-        call_kwargs = mock_client.create_partial.call_args[1]
-        assert call_kwargs["temperature"] == engine.config.reply_temperature
-        assert call_kwargs["max_tokens"] == engine.config.reply_max_tokens
+        mock_llm.assert_called_once()
+        call_args = mock_llm.call_args
+        assert call_args[1]["temperature"] == engine.config.reply_temperature
+        assert call_args[1]["max_tokens"] == engine.config.reply_max_tokens
 
     def test_exception_during_stream_yields_nothing(self, engine):
         """Top-level exception in the provider call yields nothing gracefully."""
-        mock_client = MagicMock()
-        mock_client.create_partial.side_effect = RuntimeError("API down")
-        engine._client = mock_client
+        engine._call_llm = MagicMock(side_effect=RuntimeError("API down"))
 
         results = list(engine.generate_suggestions_stream(
             current_input="test input",
