@@ -1,17 +1,14 @@
 """Tests for streaming suggestion generation.
 
-Covers delimiter-based parsing from simulated streamed chunks,
-partial suggestions on stream completion, error handling, empty
-suggestion filtering, backward compatibility of the non-streaming
-path, and generation_id staleness checks.
+Covers Instructor-based structured output streaming via create_iterable,
+error handling, empty suggestion filtering, backward compatibility of
+the non-streaming path, and generation_id staleness checks.
 """
 
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
-from typing import Generator, List, Optional
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -20,6 +17,8 @@ from autocompleter.suggestion_engine import (
     AutocompleteMode,
     Suggestion,
     SuggestionEngine,
+    SuggestionItem,
+    SuggestionList,
 )
 
 
@@ -39,116 +38,47 @@ def config():
 
 
 @pytest.fixture
-def openai_config():
-    return Config(
-        llm_provider="openai",
-        openai_api_key="test-key",
-        num_suggestions=3,
-        debounce_ms=0,
-        max_tokens=150,
-    )
-
-
-@pytest.fixture
 def engine(config):
     return SuggestionEngine(config)
 
 
-@pytest.fixture
-def openai_engine(openai_config):
-    return SuggestionEngine(openai_config)
-
-
 # ---------------------------------------------------------------------------
-# Helpers — simulate streaming responses
+# Helpers
 # ---------------------------------------------------------------------------
 
-class FakeAnthropicStream:
-    """Simulates anthropic client.messages.stream() context manager.
+def _mock_engine_stream(engine, items: list[SuggestionItem]):
+    """Set up a mock Instructor client for streaming (create_partial).
 
-    Accepts a list of text chunks that will be yielded by text_stream.
+    Simulates create_partial by yielding progressively larger SuggestionList
+    snapshots — one new item per partial update.
     """
+    def partial_generator():
+        for i in range(len(items)):
+            yield SuggestionList(suggestions=items[:i + 1])
 
-    def __init__(self, chunks: list[str]):
-        self._chunks = chunks
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        pass
-
-    @property
-    def text_stream(self):
-        for chunk in self._chunks:
-            yield chunk
-
-
-class FakeAnthropicStreamError:
-    """Simulates an Anthropic stream that raises an error mid-way."""
-
-    def __init__(self, chunks: list[str], error_after: int):
-        self._chunks = chunks
-        self._error_after = error_after
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        pass
-
-    @property
-    def text_stream(self):
-        for i, chunk in enumerate(self._chunks):
-            if i >= self._error_after:
-                raise ConnectionError("Stream interrupted")
-            yield chunk
-
-
-@dataclass
-class FakeOpenAIDelta:
-    content: Optional[str] = None
-
-
-@dataclass
-class FakeOpenAIChoice:
-    delta: FakeOpenAIDelta
-
-
-@dataclass
-class FakeOpenAIChunk:
-    choices: list[FakeOpenAIChoice]
-
-
-def make_openai_chunks(texts: list[str]) -> list[FakeOpenAIChunk]:
-    """Build a list of OpenAI-style streaming chunks."""
-    return [
-        FakeOpenAIChunk(choices=[FakeOpenAIChoice(delta=FakeOpenAIDelta(content=t))])
-        for t in texts
-    ]
+    mock_client = MagicMock()
+    mock_client.create_partial.return_value = partial_generator()
+    engine._client = mock_client
+    return mock_client
 
 
 # ---------------------------------------------------------------------------
-# Tests — Anthropic streaming
+# Tests — Instructor streaming (provider-agnostic)
 # ---------------------------------------------------------------------------
 
-class TestAnthropicStream:
-    """Test _call_anthropic_stream with simulated chunks."""
+class TestStreamingSuggestions:
+    """Test _call_llm_stream with mock Instructor client."""
 
     def test_basic_three_suggestions(self, engine):
-        """Three suggestions separated by delimiters stream correctly."""
-        chunks = [
-            "First suggestion",
-            "---SUGGESTION---",
-            "Second suggestion",
-            "---SUGGESTION---",
-            "Third suggestion",
+        """Three suggestions stream correctly."""
+        items = [
+            SuggestionItem(text="First suggestion"),
+            SuggestionItem(text="Second suggestion"),
+            SuggestionItem(text="Third suggestion"),
         ]
-        mock_client = MagicMock()
-        mock_client.messages.stream.return_value = FakeAnthropicStream(chunks)
-        engine._anthropic_client = mock_client
+        _mock_engine_stream(engine, items)
 
-        results = list(engine._call_anthropic_stream("sys", "user"))
+        results = list(engine._call_llm_stream("sys", "user"))
         assert len(results) == 3
         assert results[0].text == "First suggestion"
         assert results[0].index == 0
@@ -157,266 +87,110 @@ class TestAnthropicStream:
         assert results[2].text == "Third suggestion"
         assert results[2].index == 2
 
-    def test_delimiter_split_across_chunks(self, engine):
-        """Delimiter arriving across multiple chunks is handled correctly."""
-        # "---SUGGESTION---" split as "---SUGG" + "ESTION---"
-        chunks = [
-            "Hello world",
-            "---SUGG",
-            "ESTION---",
-            "Next suggestion",
-        ]
-        mock_client = MagicMock()
-        mock_client.messages.stream.return_value = FakeAnthropicStream(chunks)
-        engine._anthropic_client = mock_client
+    def test_single_suggestion(self, engine):
+        """A single suggestion is yielded correctly."""
+        items = [SuggestionItem(text="Just one suggestion")]
+        _mock_engine_stream(engine, items)
 
-        results = list(engine._call_anthropic_stream("sys", "user"))
-        assert len(results) == 2
-        assert results[0].text == "Hello world"
-        assert results[1].text == "Next suggestion"
-
-    def test_delimiter_in_single_chunk_with_text(self, engine):
-        """Delimiter embedded in a single chunk with surrounding text."""
-        chunks = [
-            "First---SUGGESTION---Second---SUGGESTION---Third",
-        ]
-        mock_client = MagicMock()
-        mock_client.messages.stream.return_value = FakeAnthropicStream(chunks)
-        engine._anthropic_client = mock_client
-
-        results = list(engine._call_anthropic_stream("sys", "user"))
-        assert len(results) == 3
-        assert results[0].text == "First"
-        assert results[1].text == "Second"
-        assert results[2].text == "Third"
-
-    def test_empty_suggestions_skipped(self, engine):
-        """Empty/whitespace-only suggestions are not yielded."""
-        chunks = [
-            "---SUGGESTION---",  # empty before first delimiter
-            "   ",               # whitespace-only
-            "---SUGGESTION---",  # whitespace between delimiters
-            "Real suggestion",
-        ]
-        mock_client = MagicMock()
-        mock_client.messages.stream.return_value = FakeAnthropicStream(chunks)
-        engine._anthropic_client = mock_client
-
-        results = list(engine._call_anthropic_stream("sys", "user"))
-        assert len(results) == 1
-        assert results[0].text == "Real suggestion"
-
-    def test_partial_suggestion_on_stream_end(self, engine):
-        """Text remaining after the last delimiter is yielded as a suggestion."""
-        chunks = [
-            "First",
-            "---SUGGESTION---",
-            "Second (partial, no trailing delimiter)",
-        ]
-        mock_client = MagicMock()
-        mock_client.messages.stream.return_value = FakeAnthropicStream(chunks)
-        engine._anthropic_client = mock_client
-
-        results = list(engine._call_anthropic_stream("sys", "user"))
-        assert len(results) == 2
-        assert results[0].text == "First"
-        assert results[1].text == "Second (partial, no trailing delimiter)"
-
-    def test_stream_error_yields_partial_results(self, engine):
-        """If the stream errors mid-way, whatever was buffered is yielded."""
-        chunks = [
-            "Complete suggestion",
-            "---SUGGESTION---",
-            "Partial before err",
-            "WILL NOT ARRIVE",  # error before this chunk
-        ]
-        mock_client = MagicMock()
-        mock_client.messages.stream.return_value = FakeAnthropicStreamError(
-            chunks, error_after=3,
-        )
-        engine._anthropic_client = mock_client
-
-        results = list(engine._call_anthropic_stream("sys", "user"))
-        assert len(results) == 2
-        assert results[0].text == "Complete suggestion"
-        assert results[1].text == "Partial before err"
-
-    def test_stream_error_at_start_yields_nothing(self, engine):
-        """If the stream errors before any text, nothing is yielded."""
-        chunks = ["some text"]
-        mock_client = MagicMock()
-        mock_client.messages.stream.return_value = FakeAnthropicStreamError(
-            chunks, error_after=0,
-        )
-        engine._anthropic_client = mock_client
-
-        results = list(engine._call_anthropic_stream("sys", "user"))
-        assert len(results) == 0
-
-    def test_empty_stream(self, engine):
-        """Empty stream yields nothing."""
-        mock_client = MagicMock()
-        mock_client.messages.stream.return_value = FakeAnthropicStream([])
-        engine._anthropic_client = mock_client
-
-        results = list(engine._call_anthropic_stream("sys", "user"))
-        assert len(results) == 0
-
-    def test_single_suggestion_no_delimiter(self, engine):
-        """A single suggestion with no delimiter is yielded at stream end."""
-        chunks = ["Just one suggestion"]
-        mock_client = MagicMock()
-        mock_client.messages.stream.return_value = FakeAnthropicStream(chunks)
-        engine._anthropic_client = mock_client
-
-        results = list(engine._call_anthropic_stream("sys", "user"))
+        results = list(engine._call_llm_stream("sys", "user"))
         assert len(results) == 1
         assert results[0].text == "Just one suggestion"
         assert results[0].index == 0
 
-    def test_whitespace_around_delimiter(self, engine):
-        """Whitespace around delimiters is stripped from suggestion text."""
-        chunks = [
-            "  First with spaces  ",
-            "\n---SUGGESTION---\n",
-            "  Second with spaces  ",
+    def test_empty_stream(self, engine):
+        """Empty stream yields nothing."""
+        _mock_engine_stream(engine, [])
+
+        results = list(engine._call_llm_stream("sys", "user"))
+        assert len(results) == 0
+
+    def test_unicode_in_suggestions(self, engine):
+        """Unicode characters pass through correctly."""
+        items = [
+            SuggestionItem(text="Bonjour le monde"),
+            SuggestionItem(text="\u00e9\u00e8\u00ea"),
+            SuggestionItem(text="\u4f60\u597d\u4e16\u754c"),
         ]
-        mock_client = MagicMock()
-        mock_client.messages.stream.return_value = FakeAnthropicStream(chunks)
-        engine._anthropic_client = mock_client
+        _mock_engine_stream(engine, items)
 
-        results = list(engine._call_anthropic_stream("sys", "user"))
-        assert len(results) == 2
-        assert results[0].text == "First with spaces"
-        assert results[1].text == "Second with spaces"
-
-    def test_character_by_character_streaming(self, engine):
-        """Delimiter works even when text arrives one character at a time."""
-        full_text = "Hi---SUGGESTION---Bye"
-        chunks = list(full_text)  # one char per chunk
-        mock_client = MagicMock()
-        mock_client.messages.stream.return_value = FakeAnthropicStream(chunks)
-        engine._anthropic_client = mock_client
-
-        results = list(engine._call_anthropic_stream("sys", "user"))
-        assert len(results) == 2
-        assert results[0].text == "Hi"
-        assert results[1].text == "Bye"
-
-
-# ---------------------------------------------------------------------------
-# Tests — OpenAI streaming
-# ---------------------------------------------------------------------------
-
-class TestOpenAIStream:
-    """Test _call_openai_stream with simulated chunks."""
-
-    def test_basic_three_suggestions(self, openai_engine):
-        """Three suggestions stream correctly via OpenAI."""
-        chunks = make_openai_chunks([
-            "First suggestion",
-            "---SUGGESTION---",
-            "Second suggestion",
-            "---SUGGESTION---",
-            "Third suggestion",
-        ])
-        mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = iter(chunks)
-        openai_engine._openai_client = mock_client
-
-        results = list(openai_engine._call_openai_stream("sys", "user"))
+        results = list(engine._call_llm_stream("sys", "user"))
         assert len(results) == 3
-        assert results[0].text == "First suggestion"
-        assert results[1].text == "Second suggestion"
-        assert results[2].text == "Third suggestion"
+        assert results[0].text == "Bonjour le monde"
+        assert results[1].text == "\u00e9\u00e8\u00ea"
+        assert results[2].text == "\u4f60\u597d\u4e16\u754c"
 
-    def test_delimiter_split_across_chunks(self, openai_engine):
-        """Delimiter split across chunks works for OpenAI."""
-        chunks = make_openai_chunks([
-            "Hello world",
-            "---SUGG",
-            "ESTION---",
-            "Next suggestion",
-        ])
-        mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = iter(chunks)
-        openai_engine._openai_client = mock_client
-
-        results = list(openai_engine._call_openai_stream("sys", "user"))
-        assert len(results) == 2
-        assert results[0].text == "Hello world"
-        assert results[1].text == "Next suggestion"
-
-    def test_empty_suggestions_skipped(self, openai_engine):
-        """Empty suggestions are skipped for OpenAI streaming."""
-        chunks = make_openai_chunks([
-            "---SUGGESTION---",
-            "  \n  ",
-            "---SUGGESTION---",
-            "Real one",
-        ])
-        mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = iter(chunks)
-        openai_engine._openai_client = mock_client
-
-        results = list(openai_engine._call_openai_stream("sys", "user"))
-        assert len(results) == 1
-        assert results[0].text == "Real one"
-
-    def test_stream_error_yields_partial(self, openai_engine):
-        """OpenAI stream error mid-way yields what we have so far."""
-        def error_generator():
-            yield FakeOpenAIChunk(
-                choices=[FakeOpenAIChoice(delta=FakeOpenAIDelta(content="Complete"))]
-            )
-            yield FakeOpenAIChunk(
-                choices=[FakeOpenAIChoice(delta=FakeOpenAIDelta(content="---SUGGESTION---"))]
-            )
-            yield FakeOpenAIChunk(
-                choices=[FakeOpenAIChoice(delta=FakeOpenAIDelta(content="Partial"))]
-            )
-            raise ConnectionError("Stream interrupted")
-
-        mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = error_generator()
-        openai_engine._openai_client = mock_client
-
-        results = list(openai_engine._call_openai_stream("sys", "user"))
-        assert len(results) == 2
-        assert results[0].text == "Complete"
-        assert results[1].text == "Partial"
-
-    def test_none_content_chunks_ignored(self, openai_engine):
-        """Chunks with None content are gracefully skipped."""
-        chunks = [
-            FakeOpenAIChunk(choices=[FakeOpenAIChoice(delta=FakeOpenAIDelta(content="Hello"))]),
-            FakeOpenAIChunk(choices=[FakeOpenAIChoice(delta=FakeOpenAIDelta(content=None))]),
-            FakeOpenAIChunk(choices=[FakeOpenAIChoice(delta=FakeOpenAIDelta(content="---SUGGESTION---"))]),
-            FakeOpenAIChunk(choices=[FakeOpenAIChoice(delta=FakeOpenAIDelta(content="World"))]),
+    def test_multiline_suggestion_text(self, engine):
+        """Suggestions with newlines are preserved."""
+        items = [
+            SuggestionItem(text="Line one\nLine two\nLine three"),
+            SuggestionItem(text="Single line"),
         ]
-        mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = iter(chunks)
-        openai_engine._openai_client = mock_client
+        _mock_engine_stream(engine, items)
 
-        results = list(openai_engine._call_openai_stream("sys", "user"))
+        results = list(engine._call_llm_stream("sys", "user"))
         assert len(results) == 2
-        assert results[0].text == "Hello"
-        assert results[1].text == "World"
+        assert results[0].text == "Line one\nLine two\nLine three"
+        assert results[1].text == "Single line"
 
-    def test_empty_choices_ignored(self, openai_engine):
-        """Chunks with empty choices list are gracefully skipped."""
-        chunks = [
-            FakeOpenAIChunk(choices=[FakeOpenAIChoice(delta=FakeOpenAIDelta(content="Hello"))]),
-            FakeOpenAIChunk(choices=[]),
-            FakeOpenAIChunk(choices=[FakeOpenAIChoice(delta=FakeOpenAIDelta(content=" World"))]),
-        ]
+    def test_error_during_iteration_raises(self, engine):
+        """Exception during create_partial propagates."""
         mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = iter(chunks)
-        openai_engine._openai_client = mock_client
+        mock_client.create_partial.side_effect = RuntimeError("API error")
+        engine._client = mock_client
 
-        results = list(openai_engine._call_openai_stream("sys", "user"))
-        assert len(results) == 1
-        assert results[0].text == "Hello World"
+        with pytest.raises(RuntimeError, match="API error"):
+            list(engine._call_llm_stream("sys", "user"))
+
+
+# ---------------------------------------------------------------------------
+# Tests — _call_llm (non-streaming)
+# ---------------------------------------------------------------------------
+
+class TestCallLlm:
+    """Test the non-streaming _call_llm method."""
+
+    def _mock_engine_with_list(self, engine, items: list[SuggestionItem]):
+        """Set up a mock Instructor client that returns a SuggestionList."""
+        mock_client = MagicMock()
+        mock_client.create.return_value = SuggestionList(suggestions=items)
+        engine._client = mock_client
+        return mock_client
+
+    def test_basic_suggestions(self, engine):
+        """_call_llm returns parsed Suggestion objects."""
+        items = [
+            SuggestionItem(text="First"),
+            SuggestionItem(text="Second"),
+        ]
+        self._mock_engine_with_list(engine, items)
+
+        results = engine._call_llm("sys", "user", temperature=0.5, max_tokens=100)
+        assert len(results) == 2
+        assert results[0].text == "First"
+        assert results[0].index == 0
+        assert results[1].text == "Second"
+        assert results[1].index == 1
+
+    def test_empty_results(self, engine):
+        """Empty suggestions list returns empty list."""
+        self._mock_engine_with_list(engine, [])
+        results = engine._call_llm("sys", "user", temperature=0.5, max_tokens=100)
+        assert results == []
+
+    def test_passes_correct_params(self, engine):
+        """Verify create receives correct parameters."""
+        mock_client = self._mock_engine_with_list(engine, [])
+
+        engine._call_llm("system prompt", "user message", temperature=0.7, max_tokens=200)
+
+        mock_client.create.assert_called_once()
+        call_kwargs = mock_client.create.call_args[1]
+        assert call_kwargs["response_model"] is SuggestionList
+        assert call_kwargs["temperature"] == 0.7
+        assert call_kwargs["max_tokens"] == 200
+        msgs = call_kwargs["messages"]
+        assert msgs[0] == {"role": "system", "content": "system prompt"}
+        assert msgs[1] == {"role": "user", "content": "user message"}
 
 
 # ---------------------------------------------------------------------------
@@ -426,37 +200,15 @@ class TestOpenAIStream:
 class TestGenerateSuggestionsStream:
     """Test the public generate_suggestions_stream method."""
 
-    def test_streams_anthropic(self, engine):
-        """generate_suggestions_stream yields from Anthropic provider."""
-        chunks = [
-            "Alpha",
-            "---SUGGESTION---",
-            "Beta",
+    def test_streams_suggestions(self, engine):
+        """generate_suggestions_stream yields suggestions."""
+        items = [
+            SuggestionItem(text="Alpha"),
+            SuggestionItem(text="Beta"),
         ]
-        mock_client = MagicMock()
-        mock_client.messages.stream.return_value = FakeAnthropicStream(chunks)
-        engine._anthropic_client = mock_client
+        _mock_engine_stream(engine, items)
 
         results = list(engine.generate_suggestions_stream(
-            current_input="Hello world test",
-            context="some context",
-        ))
-        assert len(results) == 2
-        assert results[0].text == "Alpha"
-        assert results[1].text == "Beta"
-
-    def test_streams_openai(self, openai_engine):
-        """generate_suggestions_stream yields from OpenAI provider."""
-        chunks = make_openai_chunks([
-            "Alpha",
-            "---SUGGESTION---",
-            "Beta",
-        ])
-        mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = iter(chunks)
-        openai_engine._openai_client = mock_client
-
-        results = list(openai_engine.generate_suggestions_stream(
             current_input="Hello world test",
             context="some context",
         ))
@@ -492,21 +244,9 @@ class TestGenerateSuggestionsStream:
         ))
         assert results == []
 
-    def test_unknown_provider_returns_empty(self, config):
-        """Unknown LLM provider yields nothing."""
-        config.llm_provider = "unknown"
-        engine = SuggestionEngine(config)
-        results = list(engine.generate_suggestions_stream(
-            current_input="test",
-            context="context",
-        ))
-        assert results == []
-
     def test_continuation_mode_params(self, engine):
         """Continuation mode uses correct temperature and max_tokens."""
-        mock_client = MagicMock()
-        mock_client.messages.stream.return_value = FakeAnthropicStream(["suggestion"])
-        engine._anthropic_client = mock_client
+        mock_client = _mock_engine_stream(engine, [SuggestionItem(text="s")])
 
         list(engine.generate_suggestions_stream(
             current_input="Hello world this is a test",
@@ -514,15 +254,13 @@ class TestGenerateSuggestionsStream:
             mode=AutocompleteMode.CONTINUATION,
         ))
 
-        call_kwargs = mock_client.messages.stream.call_args[1]
+        call_kwargs = mock_client.create_partial.call_args[1]
         assert call_kwargs["temperature"] == engine.config.continuation_temperature
         assert call_kwargs["max_tokens"] == engine.config.continuation_max_tokens
 
     def test_reply_mode_params(self, engine):
         """Reply mode uses correct temperature and max_tokens."""
-        mock_client = MagicMock()
-        mock_client.messages.stream.return_value = FakeAnthropicStream(["suggestion"])
-        engine._anthropic_client = mock_client
+        mock_client = _mock_engine_stream(engine, [SuggestionItem(text="s")])
 
         list(engine.generate_suggestions_stream(
             current_input="",
@@ -530,15 +268,15 @@ class TestGenerateSuggestionsStream:
             mode=AutocompleteMode.REPLY,
         ))
 
-        call_kwargs = mock_client.messages.stream.call_args[1]
+        call_kwargs = mock_client.create_partial.call_args[1]
         assert call_kwargs["temperature"] == engine.config.reply_temperature
         assert call_kwargs["max_tokens"] == engine.config.reply_max_tokens
 
     def test_exception_during_stream_yields_nothing(self, engine):
         """Top-level exception in the provider call yields nothing gracefully."""
         mock_client = MagicMock()
-        mock_client.messages.stream.side_effect = RuntimeError("API down")
-        engine._anthropic_client = mock_client
+        mock_client.create_partial.side_effect = RuntimeError("API down")
+        engine._client = mock_client
 
         results = list(engine.generate_suggestions_stream(
             current_input="test input",
@@ -554,7 +292,7 @@ class TestGenerateSuggestionsStream:
 class TestNonStreamingBackwardCompatibility:
     """Ensure the original generate_suggestions still works unchanged."""
 
-    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_anthropic")
+    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
     def test_non_streaming_still_works(self, mock_call, engine):
         mock_call.return_value = [
             Suggestion(text="suggestion 1", index=0),
@@ -565,15 +303,6 @@ class TestNonStreamingBackwardCompatibility:
         assert result[0].text == "suggestion 1"
         assert result[1].text == "suggestion 2"
         mock_call.assert_called_once()
-
-    def test_parse_suggestions_unchanged(self):
-        """Static _parse_suggestions method still works."""
-        raw = "First---SUGGESTION---Second---SUGGESTION---Third"
-        results = SuggestionEngine._parse_suggestions(raw)
-        assert len(results) == 3
-        assert results[0].text == "First"
-        assert results[1].text == "Second"
-        assert results[2].text == "Third"
 
 
 # ---------------------------------------------------------------------------
@@ -590,22 +319,17 @@ class TestGenerationIdStaleness:
 
     def test_stale_stream_abandoned(self, engine):
         """Simulates the app abandoning a stream when generation_id changes."""
-        chunks = [
-            "First",
-            "---SUGGESTION---",
-            "Second",
-            "---SUGGESTION---",
-            "Third",
+        items = [
+            SuggestionItem(text="First"),
+            SuggestionItem(text="Second"),
+            SuggestionItem(text="Third"),
         ]
-        mock_client = MagicMock()
-        mock_client.messages.stream.return_value = FakeAnthropicStream(chunks)
-        engine._anthropic_client = mock_client
+        _mock_engine_stream(engine, items)
 
         # Simulate what _generate_and_show_streaming does:
         # iterate the generator but check generation_id each time
         generation_id = 1
-        current_generation_id = 1  # mutable via list for closure
-        gen_id_holder = [current_generation_id]
+        gen_id_holder = [1]
 
         collected = []
         for suggestion in engine.generate_suggestions_stream(
@@ -625,16 +349,12 @@ class TestGenerationIdStaleness:
 
     def test_current_stream_not_abandoned(self, engine):
         """When generation_id stays the same, all suggestions are collected."""
-        chunks = [
-            "First",
-            "---SUGGESTION---",
-            "Second",
-            "---SUGGESTION---",
-            "Third",
+        items = [
+            SuggestionItem(text="First"),
+            SuggestionItem(text="Second"),
+            SuggestionItem(text="Third"),
         ]
-        mock_client = MagicMock()
-        mock_client.messages.stream.return_value = FakeAnthropicStream(chunks)
-        engine._anthropic_client = mock_client
+        _mock_engine_stream(engine, items)
 
         generation_id = 1
         gen_id_holder = [1]
@@ -649,90 +369,3 @@ class TestGenerationIdStaleness:
             collected.append(suggestion)
 
         assert len(collected) == 3
-
-
-# ---------------------------------------------------------------------------
-# Tests — edge cases with delimiter splitting
-# ---------------------------------------------------------------------------
-
-class TestDelimiterEdgeCases:
-    """Edge cases for delimiter parsing across chunk boundaries."""
-
-    def test_delimiter_one_char_at_a_time(self, engine):
-        """Delimiter arriving one character at a time."""
-        text = "A---SUGGESTION---B"
-        chunks = list(text)
-        mock_client = MagicMock()
-        mock_client.messages.stream.return_value = FakeAnthropicStream(chunks)
-        engine._anthropic_client = mock_client
-
-        results = list(engine._call_anthropic_stream("sys", "user"))
-        assert len(results) == 2
-        assert results[0].text == "A"
-        assert results[1].text == "B"
-
-    def test_multiple_delimiters_in_one_chunk(self, engine):
-        """Multiple delimiters in a single chunk."""
-        chunks = ["A---SUGGESTION---B---SUGGESTION---C---SUGGESTION---D"]
-        mock_client = MagicMock()
-        mock_client.messages.stream.return_value = FakeAnthropicStream(chunks)
-        engine._anthropic_client = mock_client
-
-        results = list(engine._call_anthropic_stream("sys", "user"))
-        assert len(results) == 4
-        texts = [r.text for r in results]
-        assert texts == ["A", "B", "C", "D"]
-
-    def test_trailing_delimiter_no_text_after(self, engine):
-        """Trailing delimiter with no text after it yields nothing extra."""
-        chunks = ["First---SUGGESTION---Second---SUGGESTION---"]
-        mock_client = MagicMock()
-        mock_client.messages.stream.return_value = FakeAnthropicStream(chunks)
-        engine._anthropic_client = mock_client
-
-        results = list(engine._call_anthropic_stream("sys", "user"))
-        assert len(results) == 2
-        assert results[0].text == "First"
-        assert results[1].text == "Second"
-
-    def test_only_delimiters_no_content(self, engine):
-        """Stream with only delimiters and no real content yields nothing."""
-        chunks = ["---SUGGESTION------SUGGESTION------SUGGESTION---"]
-        mock_client = MagicMock()
-        mock_client.messages.stream.return_value = FakeAnthropicStream(chunks)
-        engine._anthropic_client = mock_client
-
-        results = list(engine._call_anthropic_stream("sys", "user"))
-        assert len(results) == 0
-
-    def test_partial_delimiter_at_end_of_stream(self, engine):
-        """Partial delimiter at end of stream is treated as regular text."""
-        chunks = ["Suggestion text---SUGGES"]
-        mock_client = MagicMock()
-        mock_client.messages.stream.return_value = FakeAnthropicStream(chunks)
-        engine._anthropic_client = mock_client
-
-        results = list(engine._call_anthropic_stream("sys", "user"))
-        assert len(results) == 1
-        # The partial delimiter text is part of the suggestion
-        assert results[0].text == "Suggestion text---SUGGES"
-
-    def test_delimiter_split_every_possible_way(self, engine):
-        """Test splitting the delimiter at every possible position."""
-        delimiter = "---SUGGESTION---"
-        for split_pos in range(1, len(delimiter)):
-            left = delimiter[:split_pos]
-            right = delimiter[split_pos:]
-            chunks = ["Before", left, right, "After"]
-
-            mock_client = MagicMock()
-            mock_client.messages.stream.return_value = FakeAnthropicStream(chunks)
-            engine._anthropic_client = mock_client
-
-            results = list(engine._call_anthropic_stream("sys", "user"))
-            assert len(results) == 2, (
-                f"Failed with delimiter split at position {split_pos}: "
-                f"{left!r} + {right!r}"
-            )
-            assert results[0].text == "Before"
-            assert results[1].text == "After"
