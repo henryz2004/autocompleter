@@ -41,10 +41,9 @@ class AutocompleteMode(enum.Enum):
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT_COMPLETION = """\
-You are a text completion engine. Complete text at the cursor position only.
+You are a text completion engine. You predict what the user will type next.
 
 Rules:
-- Generate exactly {num_suggestions} distinct completions
 - Complete naturally from the cursor — do not restate text before the cursor
 - Do not introduce new topics or tangents
 - Preserve the existing formatting, tone, and style
@@ -54,33 +53,32 @@ Rules:
 """
 
 SYSTEM_PROMPT_REPLY = """\
-You are a conversational reply assistant. Suggest messages the user might \
-send as their next response in the conversation.
+You are a conversational reply assistant. You suggest messages the user \
+might send as their next response.
 
 Rules:
-- Generate exactly {num_suggestions} distinct reply suggestions
-- Respond to the latest message in the conversation
 - Match the tone and formality of the conversation
 - Do not invent facts or context not present in the conversation
 - Keep length proportional to the conversation thread
 - Vary intent across suggestions (e.g. agree, ask follow-up, provide info)
 - Do not repeat or quote content already in the conversation
-- For longer conversations or email-like contexts, suggestions may span \
-multiple sentences or paragraphs (up to ~{max_suggestion_lines} lines)
 - Output ONLY the reply text, no meta-commentary or descriptions
 """
 
 USER_PROMPT_TEMPLATE_COMPLETION = """\
 {context}
 
-Complete the text at the cursor position. Generate {num_suggestions} \
-short, natural completions.\
+Complete the text at the cursor position. Generate exactly \
+{num_suggestions} distinct, short, natural completions.\
 """
 
 USER_PROMPT_TEMPLATE_REPLY = """\
 {context}
 
-Generate {num_suggestions} short reply suggestions the user might send next.\
+Respond to the latest message in the conversation. Generate exactly \
+{num_suggestions} distinct reply suggestions the user might send next. \
+For longer conversations or email-like contexts, suggestions may span \
+multiple sentences or paragraphs (up to ~{max_suggestion_lines} lines).\
 """
 
 
@@ -181,7 +179,7 @@ class SuggestionEngine:
         ctx = context or "(no context yet)"
 
         if mode == AutocompleteMode.CONTINUATION:
-            system = SYSTEM_PROMPT_COMPLETION.format(num_suggestions=num)
+            system = SYSTEM_PROMPT_COMPLETION
             user_msg = USER_PROMPT_TEMPLATE_COMPLETION.format(
                 context=ctx, num_suggestions=num,
             )
@@ -189,11 +187,10 @@ class SuggestionEngine:
             max_tokens = self.config.continuation_max_tokens
         else:
             max_lines = getattr(self.config, "max_suggestion_lines", 10)
-            system = SYSTEM_PROMPT_REPLY.format(
-                num_suggestions=num, max_suggestion_lines=max_lines,
-            )
+            system = SYSTEM_PROMPT_REPLY
             user_msg = USER_PROMPT_TEMPLATE_REPLY.format(
                 context=ctx, num_suggestions=num,
+                max_suggestion_lines=max_lines,
             )
             temperature = self.config.reply_temperature
             max_tokens = self.config.reply_max_tokens
@@ -298,7 +295,7 @@ class SuggestionEngine:
         ctx = context or "(no context yet)"
 
         if mode == AutocompleteMode.CONTINUATION:
-            system = SYSTEM_PROMPT_COMPLETION.format(num_suggestions=num)
+            system = SYSTEM_PROMPT_COMPLETION
             user_msg = USER_PROMPT_TEMPLATE_COMPLETION.format(
                 context=ctx, num_suggestions=num,
             )
@@ -306,11 +303,10 @@ class SuggestionEngine:
             max_tokens = self.config.continuation_max_tokens
         else:
             max_lines = getattr(self.config, "max_suggestion_lines", 10)
-            system = SYSTEM_PROMPT_REPLY.format(
-                num_suggestions=num, max_suggestion_lines=max_lines,
-            )
+            system = SYSTEM_PROMPT_REPLY
             user_msg = USER_PROMPT_TEMPLATE_REPLY.format(
                 context=ctx, num_suggestions=num,
+                max_suggestion_lines=max_lines,
             )
             temperature = self.config.reply_temperature
             max_tokens = self.config.reply_max_tokens
