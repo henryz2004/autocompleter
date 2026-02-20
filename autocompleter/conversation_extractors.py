@@ -539,32 +539,336 @@ class ChatGPTExtractor(ConversationExtractor):
 class ClaudeDesktopExtractor(ConversationExtractor):
     """Extractor for Claude Desktop app.
 
-    Claude Desktop (Electron-based) has a similar structure to ChatGPT
-    with alternating user/assistant message groups.
+    Claude Desktop uses a flat list of sibling groups inside a conversation
+    container.  Each message (user or assistant) is one or more content groups
+    followed by a ``Message actions`` group (AXApplicationGroup with
+    AXDescription 'Message actions').
+
+    Role detection:
+    - Assistant "Message actions" groups contain feedback buttons
+      ('Give positive feedback' / 'Give negative feedback').
+    - User "Message actions" groups only contain a 'Copy' button.
+
+    Assistant messages may include a collapsible "Thought process" section
+    that is skipped so only the actual response text is captured.
     """
 
     app_names: tuple[str, ...] = ("Claude",)
+
+    _MAX_VISITS = 800
 
     def extract(
         self, window_element, max_turns: int = 15
     ) -> Optional[list[ConversationTurn]]:
         try:
-            # Claude Desktop uses a similar article pattern to ChatGPT
-            chatgpt_extractor = ChatGPTExtractor()
-            result = chatgpt_extractor.extract(window_element, max_turns)
-            if result:
-                # Re-label assistant turns
-                for turn in result:
-                    if turn.speaker == "ChatGPT":
-                        turn.speaker = "Claude"
-                return result
+            container = self._find_message_container(window_element)
+            if container is not None:
+                turns = self._parse_conversation(container, max_turns)
+                if turns:
+                    return turns
 
-            # Fallback to generic extraction
-            generic = GenericExtractor()
-            return generic.extract(window_element, max_turns)
+            # Fallback to action-delimited (which itself falls back to generic)
+            return ActionDelimitedExtractor().extract(window_element, max_turns)
         except Exception:
             logger.debug("Claude Desktop conversation extraction failed", exc_info=True)
         return None
+
+    # -- tree search --
+
+    def _find_message_container(
+        self, element, depth: int = 0, _visits: Optional[list] = None
+    ):
+        """Find the group whose direct children include 'Message actions' groups."""
+        if _visits is None:
+            _visits = [0]
+        _visits[0] += 1
+        if _visits[0] > self._MAX_VISITS or depth > 15:
+            return None
+
+        children = ax_get_attribute(element, "AXChildren") or []
+        for child in children[:50]:
+            subrole = ax_get_attribute(child, "AXSubrole") or ""
+            desc = ax_get_attribute(child, "AXDescription") or ""
+            if subrole == "AXApplicationGroup" and desc == "Message actions":
+                return element
+
+        for child in children[:20]:
+            result = self._find_message_container(child, depth + 1, _visits)
+            if result is not None:
+                return result
+        return None
+
+    # -- conversation parsing --
+
+    def _parse_conversation(
+        self, container, max_turns: int
+    ) -> Optional[list[ConversationTurn]]:
+        """Walk the container's children, grouping content by 'Message actions' delimiters."""
+        children = ax_get_attribute(container, "AXChildren") or []
+        turns: list[ConversationTurn] = []
+        pending: list = []  # content groups for the current message
+
+        for child in children:
+            subrole = ax_get_attribute(child, "AXSubrole") or ""
+            desc = ax_get_attribute(child, "AXDescription") or ""
+
+            if subrole == "AXApplicationGroup" and desc == "Message actions":
+                if pending:
+                    is_assistant = self._actions_have_feedback(child)
+                    text = self._extract_message_text(pending, is_assistant)
+                    if text.strip():
+                        speaker = "Claude" if is_assistant else "User"
+                        turns.append(ConversationTurn(speaker=speaker, text=text.strip()))
+                    pending = []
+                continue
+
+            pending.append(child)
+
+        return turns[-max_turns:] if turns else None
+
+    # -- role detection --
+
+    @staticmethod
+    def _actions_have_feedback(actions_group) -> bool:
+        """Return True if the 'Message actions' group contains feedback buttons."""
+        for child in ax_get_attribute(actions_group, "AXChildren") or []:
+            child_desc = ax_get_attribute(child, "AXDescription") or ""
+            if "feedback" in child_desc.lower():
+                return True
+            for gc in ax_get_attribute(child, "AXChildren") or []:
+                gc_desc = ax_get_attribute(gc, "AXDescription") or ""
+                if "feedback" in gc_desc.lower():
+                    return True
+        return False
+
+    # -- text extraction --
+
+    def _extract_message_text(
+        self, groups: list, is_assistant: bool
+    ) -> str:
+        """Collect text from a sequence of content groups for one message."""
+        parts: list[str] = []
+        for group in groups:
+            if is_assistant:
+                text = self._extract_assistant_response(group)
+            else:
+                text = _collect_child_text(group, max_depth=6, max_chars=1500)
+            if text and text.strip():
+                parts.append(text.strip())
+        return "\n".join(parts)
+
+    @staticmethod
+    def _extract_assistant_response(group) -> str:
+        """Extract the response portion of an assistant message, skipping thinking."""
+        children = ax_get_attribute(group, "AXChildren") or []
+        if not children:
+            return _collect_child_text(group, max_depth=6, max_chars=1500)
+
+        # Unwrap single-child wrapper
+        inner = children[0] if len(children) == 1 else group
+        inner_children = ax_get_attribute(inner, "AXChildren") or []
+
+        # Detect whether this group contains a "Thought process" section
+        has_thinking = False
+        past_thinking = False
+        response_parts: list[str] = []
+
+        for child in inner_children:
+            role = ax_get_attribute(child, "AXRole") or ""
+            title = ax_get_attribute(child, "AXTitle") or ""
+
+            # "Thought process" button marks start of thinking section
+            if role == "AXButton" and title == "Thought process":
+                has_thinking = True
+                continue
+
+            if has_thinking and not past_thinking:
+                # Still inside the thinking section — look for "Done" marker
+                child_text = _collect_child_text(child, max_depth=2, max_chars=50)
+                if child_text.strip() == "Done":
+                    past_thinking = True
+                continue
+
+            if past_thinking or not has_thinking:
+                text = _collect_child_text(child, max_depth=6, max_chars=1500)
+                if text and text.strip():
+                    response_parts.append(text.strip())
+
+        if response_parts:
+            return "\n".join(response_parts)
+
+        # No thinking section detected — collect everything
+        return _collect_child_text(group, max_depth=6, max_chars=1500)
+
+
+class ActionDelimitedExtractor(ConversationExtractor):
+    """General extractor for chat UIs where messages are separated by action groups.
+
+    Many Electron/web-based chat apps structure their AX trees with message
+    content groups interleaved with action button groups (copy, react, reply,
+    share, feedback, etc.).  This extractor finds such containers and uses the
+    action groups as delimiters to segment the conversation.
+
+    Role detection heuristic:
+    - Action groups containing feedback/like/dislike buttons → assistant message
+    - Action groups with only copy/share/reply buttons → user message
+
+    This is used as the default fallback before GenericExtractor.  It does NOT
+    perform app-specific filtering (e.g. skipping thinking sections); that
+    belongs in dedicated extractors like ClaudeDesktopExtractor.
+    """
+
+    app_names: tuple[str, ...] = ()  # Fallback only, not registered for any app
+
+    _MAX_VISITS = 800
+    _MIN_ACTION_GROUPS = 2  # Need ≥2 action groups to qualify as a conversation
+
+    # Keywords in button AXDescription that identify an "action delimiter" group
+    _ACTION_KEYWORDS = frozenset({
+        "copy", "react", "reply", "share", "forward", "delete",
+        "feedback", "thumbs", "like", "dislike", "bookmark",
+        "pin", "thread", "more actions", "message actions",
+    })
+
+    # Subset of keywords that signal an assistant/bot message
+    _ASSISTANT_KEYWORDS = frozenset({
+        "feedback", "thumbs", "like", "dislike", "regenerate",
+        "positive", "negative",
+    })
+
+    def extract(
+        self, window_element, max_turns: int = 15
+    ) -> Optional[list[ConversationTurn]]:
+        try:
+            container = self._find_action_container(window_element)
+            if container is not None:
+                turns = self._parse_conversation(container, max_turns)
+                if turns:
+                    return turns
+        except Exception:
+            logger.debug("Action-delimited extraction failed", exc_info=True)
+
+        # Fall back to generic heuristic
+        return GenericExtractor().extract(window_element, max_turns)
+
+    # -- container search --
+
+    def _find_action_container(
+        self, element, depth: int = 0, _visits: Optional[list] = None
+    ):
+        """Find a group with ≥ _MIN_ACTION_GROUPS action-group children."""
+        if _visits is None:
+            _visits = [0]
+        _visits[0] += 1
+        if _visits[0] > self._MAX_VISITS or depth > 15:
+            return None
+
+        children = ax_get_attribute(element, "AXChildren") or []
+
+        action_count = 0
+        for child in children[:60]:
+            if self._is_action_group(child):
+                action_count += 1
+                if action_count >= self._MIN_ACTION_GROUPS:
+                    return element
+
+        for child in children[:20]:
+            result = self._find_action_container(child, depth + 1, _visits)
+            if result is not None:
+                return result
+        return None
+
+    def _is_action_group(self, element) -> bool:
+        """Check if an element looks like a message-action delimiter.
+
+        Matches AXApplicationGroup elements whose description or whose button
+        children's descriptions contain action-related keywords.
+        """
+        subrole = ax_get_attribute(element, "AXSubrole") or ""
+        if subrole != "AXApplicationGroup":
+            return False
+
+        # Check the group's own description
+        desc = (ax_get_attribute(element, "AXDescription") or "").lower()
+        if any(kw in desc for kw in self._ACTION_KEYWORDS):
+            return True
+
+        # Check immediate button children (shallow — max depth 2)
+        return self._has_action_buttons(element, max_depth=2)
+
+    def _has_action_buttons(self, element, max_depth: int, depth: int = 0) -> bool:
+        """Check if element contains buttons with action-like descriptions."""
+        if depth > max_depth:
+            return False
+        children = ax_get_attribute(element, "AXChildren") or []
+        for child in children[:10]:
+            role = ax_get_attribute(child, "AXRole") or ""
+            if role == "AXButton":
+                btn_desc = (ax_get_attribute(child, "AXDescription") or "").lower()
+                if any(kw in btn_desc for kw in self._ACTION_KEYWORDS):
+                    return True
+            if self._has_action_buttons(child, max_depth, depth + 1):
+                return True
+        return False
+
+    # -- conversation parsing --
+
+    def _parse_conversation(
+        self, container, max_turns: int
+    ) -> Optional[list[ConversationTurn]]:
+        """Group children by action-group delimiters into conversation turns."""
+        children = ax_get_attribute(container, "AXChildren") or []
+        turns: list[ConversationTurn] = []
+        pending: list = []
+
+        for child in children:
+            if self._is_action_group(child):
+                if pending:
+                    is_assistant = self._is_assistant_actions(child)
+                    text = self._extract_text_from_groups(pending)
+                    if text.strip():
+                        speaker = "Assistant" if is_assistant else "User"
+                        turns.append(ConversationTurn(
+                            speaker=speaker, text=text.strip(),
+                        ))
+                    pending = []
+                continue
+
+            pending.append(child)
+
+        return turns[-max_turns:] if turns else None
+
+    # -- role detection --
+
+    def _is_assistant_actions(self, action_group) -> bool:
+        """Return True if the action group suggests an assistant/bot message."""
+        return self._has_assistant_indicators(action_group, max_depth=3)
+
+    def _has_assistant_indicators(
+        self, element, max_depth: int, depth: int = 0
+    ) -> bool:
+        if depth > max_depth:
+            return False
+        desc = (ax_get_attribute(element, "AXDescription") or "").lower()
+        if any(kw in desc for kw in self._ASSISTANT_KEYWORDS):
+            return True
+        children = ax_get_attribute(element, "AXChildren") or []
+        for child in children[:10]:
+            if self._has_assistant_indicators(child, max_depth, depth + 1):
+                return True
+        return False
+
+    # -- text extraction --
+
+    @staticmethod
+    def _extract_text_from_groups(groups: list) -> str:
+        """Collect text from a sequence of content groups."""
+        parts: list[str] = []
+        for group in groups:
+            text = _collect_child_text(group, max_depth=6, max_chars=1500)
+            if text and text.strip():
+                parts.append(text.strip())
+        return "\n".join(parts)
 
 
 class IMessageExtractor(ConversationExtractor):
@@ -666,14 +970,15 @@ for _ext in _ALL_EXTRACTORS:
     for _name in _ext.app_names:
         _EXTRACTORS[_name] = _ext
 
-# Singleton generic extractor for fallback
-_GENERIC_EXTRACTOR = GenericExtractor()
+# Default fallback: action-delimited (tries GenericExtractor internally)
+_FALLBACK_EXTRACTOR = ActionDelimitedExtractor()
 
 
 def get_extractor(app_name: str) -> ConversationExtractor:
     """Return the app-specific extractor for the given app name.
 
     If no specific extractor is registered for the app, returns the
-    GenericExtractor as a fallback.
+    ActionDelimitedExtractor as a fallback (which itself falls back to
+    GenericExtractor).
     """
-    return _EXTRACTORS.get(app_name, _GENERIC_EXTRACTOR)
+    return _EXTRACTORS.get(app_name, _FALLBACK_EXTRACTOR)

@@ -60,30 +60,6 @@ class TestModeDetection:
 
 
 class TestSuggestionEngine:
-    def test_parse_suggestions(self):
-        raw = "First suggestion---SUGGESTION---Second suggestion---SUGGESTION---Third"
-        results = SuggestionEngine._parse_suggestions(raw)
-        assert len(results) == 3
-        assert results[0].text == "First suggestion"
-        assert results[1].text == "Second suggestion"
-        assert results[2].text == "Third"
-
-    def test_parse_suggestions_handles_whitespace(self):
-        raw = "  First  \n---SUGGESTION---\n  Second  "
-        results = SuggestionEngine._parse_suggestions(raw)
-        assert len(results) == 2
-        assert results[0].text == "First"
-        assert results[1].text == "Second"
-
-    def test_parse_suggestions_empty(self):
-        results = SuggestionEngine._parse_suggestions("")
-        assert len(results) == 0
-
-    def test_parse_suggestions_single(self):
-        results = SuggestionEngine._parse_suggestions("Just one suggestion")
-        assert len(results) == 1
-        assert results[0].text == "Just one suggestion"
-
     def test_debounce_blocks_rapid_requests(self, engine):
         engine._last_request_time = time.time()
         assert not engine.can_request()
@@ -100,7 +76,7 @@ class TestSuggestionEngine:
         result = engine.generate_suggestions("   ", "   ")
         assert result == []
 
-    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_anthropic")
+    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
     def test_empty_input_with_context_calls_llm_reply_mode(self, mock_call, engine):
         mock_call.return_value = [
             Suggestion(text="Sounds good!", index=0),
@@ -114,7 +90,7 @@ class TestSuggestionEngine:
         assert kwargs.get("temperature") == engine.config.reply_temperature
         assert kwargs.get("max_tokens") == engine.config.reply_max_tokens
 
-    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_anthropic")
+    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
     def test_generate_continuation_mode_params(self, mock_call, engine):
         mock_call.return_value = [
             Suggestion(text="suggestion 1", index=0),
@@ -128,7 +104,7 @@ class TestSuggestionEngine:
         assert kwargs.get("temperature") == engine.config.continuation_temperature
         assert kwargs.get("max_tokens") == engine.config.continuation_max_tokens
 
-    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_anthropic")
+    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
     def test_generate_reply_mode_params(self, mock_call, engine):
         mock_call.return_value = [
             Suggestion(text="reply suggestion", index=0),
@@ -141,7 +117,7 @@ class TestSuggestionEngine:
         assert kwargs.get("temperature") == engine.config.reply_temperature
         assert kwargs.get("max_tokens") == engine.config.reply_max_tokens
 
-    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_anthropic")
+    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
     def test_mode_auto_detected_when_not_specified(self, mock_call, engine):
         mock_call.return_value = [Suggestion(text="s", index=0)]
         # Long input -> continuation
@@ -149,8 +125,8 @@ class TestSuggestionEngine:
         _, kwargs = mock_call.call_args
         assert kwargs.get("temperature") == engine.config.continuation_temperature
 
-    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_anthropic")
-    def test_generate_calls_anthropic(self, mock_call, engine):
+    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
+    def test_generate_calls_llm(self, mock_call, engine):
         mock_call.return_value = [
             Suggestion(text="suggestion 1", index=0),
         ]
@@ -160,22 +136,10 @@ class TestSuggestionEngine:
         assert result[0].text == "suggestion 1"
         mock_call.assert_called_once()
 
-    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_openai")
-    def test_generate_calls_openai(self, mock_call, config):
-        config.llm_provider = "openai"
-        config.openai_api_key = "test-key"
-        engine = SuggestionEngine(config)
-
-        mock_call.return_value = [
-            Suggestion(text="openai suggestion", index=0),
-        ]
-
-        result = engine.generate_suggestions("Hello world test", "context")
-        assert len(result) == 1
-        mock_call.assert_called_once()
-
-    def test_unknown_provider_returns_empty(self, config):
+    def test_unknown_provider_raises_at_client_creation(self, config):
+        """Unknown provider raises when _get_client() is called."""
         config.llm_provider = "unknown"
         engine = SuggestionEngine(config)
+        # generate_suggestions catches exceptions and returns []
         result = engine.generate_suggestions("Hello world test", "context")
         assert result == []

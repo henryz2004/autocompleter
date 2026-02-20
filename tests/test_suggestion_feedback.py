@@ -555,7 +555,7 @@ class TestAdjustTemperature:
 
 
 class TestNegativePatternsInPrompt:
-    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_anthropic")
+    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
     def test_negative_patterns_appended_to_system_prompt(self, mock_call, engine):
         mock_call.return_value = [Suggestion(text="new suggestion", index=0)]
 
@@ -572,7 +572,7 @@ class TestNegativePatternsInPrompt:
         assert "- bad suggestion 1" in system_prompt
         assert "- bad suggestion 2" in system_prompt
 
-    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_anthropic")
+    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
     def test_no_negative_patterns_no_change(self, mock_call, engine):
         mock_call.return_value = [Suggestion(text="suggestion", index=0)]
 
@@ -587,7 +587,7 @@ class TestNegativePatternsInPrompt:
         system_prompt = mock_call.call_args[0][0]
         assert "Avoid generating similar completions" not in system_prompt
 
-    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_anthropic")
+    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
     def test_empty_negative_patterns_no_change(self, mock_call, engine):
         mock_call.return_value = [Suggestion(text="suggestion", index=0)]
 
@@ -602,7 +602,7 @@ class TestNegativePatternsInPrompt:
         system_prompt = mock_call.call_args[0][0]
         assert "Avoid generating similar completions" not in system_prompt
 
-    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_anthropic")
+    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
     def test_reply_mode_negative_patterns(self, mock_call, engine):
         mock_call.return_value = [Suggestion(text="reply", index=0)]
 
@@ -621,7 +621,7 @@ class TestNegativePatternsInPrompt:
 
 
 class TestFeedbackStatsTemperatureIntegration:
-    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_anthropic")
+    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
     def test_low_accept_rate_lowers_temperature(self, mock_call, engine):
         mock_call.return_value = [Suggestion(text="s", index=0)]
 
@@ -638,7 +638,7 @@ class TestFeedbackStatsTemperatureIntegration:
         # continuation_temperature is 0.3, lowered by 0.1 -> 0.2
         assert abs(kwargs["temperature"] - 0.2) < 0.001
 
-    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_anthropic")
+    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
     def test_high_accept_rate_raises_temperature(self, mock_call, engine):
         mock_call.return_value = [Suggestion(text="s", index=0)]
 
@@ -655,7 +655,7 @@ class TestFeedbackStatsTemperatureIntegration:
         # continuation_temperature is 0.3, raised by 0.05 -> 0.35
         assert abs(kwargs["temperature"] - 0.35) < 0.001
 
-    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_anthropic")
+    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
     def test_no_feedback_stats_uses_base_temperature(self, mock_call, engine):
         mock_call.return_value = [Suggestion(text="s", index=0)]
 
