@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from autocompleter.conversation_extractors import (
+    ActionDelimitedExtractor,
     ChatGPTExtractor,
     ClaudeDesktopExtractor,
     ConversationExtractor,
@@ -132,13 +133,13 @@ class TestGetExtractor:
         ext = get_extractor("Messages")
         assert isinstance(ext, IMessageExtractor)
 
-    def test_returns_generic_for_unknown_app(self):
+    def test_returns_action_delimited_for_unknown_app(self):
         ext = get_extractor("SomeRandomApp")
-        assert isinstance(ext, GenericExtractor)
+        assert isinstance(ext, ActionDelimitedExtractor)
 
-    def test_returns_generic_for_empty_string(self):
+    def test_returns_action_delimited_for_empty_string(self):
         ext = get_extractor("")
-        assert isinstance(ext, GenericExtractor)
+        assert isinstance(ext, ActionDelimitedExtractor)
 
     def test_all_extractors_are_conversation_extractor_subclasses(self):
         for name in ["Google Gemini", "Slack", "ChatGPT", "Claude", "Messages", "Unknown"]:
@@ -654,46 +655,412 @@ class TestChatGPTExtractor:
 
 
 # ===========================================================================
-# Tests for ClaudeDesktopExtractor
+# Tests for ActionDelimitedExtractor
 # ===========================================================================
 
-class TestClaudeDesktopExtractor:
-    def test_relabels_assistant_as_claude(self):
-        """Claude Desktop should relabel 'ChatGPT' speaker to 'Claude'."""
-        extractor = ClaudeDesktopExtractor()
+def _make_action_group(button_descs: list[str]):
+    """Build a mock AXApplicationGroup with the given button descriptions."""
+    buttons = [
+        make_ax_element(role="AXButton", description=desc)
+        for desc in button_descs
+    ]
+    return make_ax_element(
+        role="AXGroup",
+        subrole="AXApplicationGroup",
+        children=[
+            make_ax_element(role="AXGroup", children=buttons),
+        ],
+    )
 
-        articles = [
+
+def _make_content_group(*lines: str):
+    """Build a mock content group containing AXStaticText children."""
+    return make_ax_element(
+        role="AXGroup",
+        children=[
             make_ax_element(
                 role="AXGroup",
-                subrole="AXArticle",
-                role_description="article",
                 children=[
-                    make_ax_element(role="AXStaticText", value="Hello Claude"),
+                    make_ax_element(role="AXStaticText", value=line)
+                    for line in lines
                 ],
             ),
-            make_ax_element(
-                role="AXGroup",
-                subrole="AXArticle",
-                role_description="article",
-                children=[
-                    make_ax_element(
-                        role="AXStaticText",
-                        value="Hello! How can I help you today?",
-                    ),
-                ],
-            ),
-        ]
-        container = make_ax_element(role="AXGroup", children=articles)
+        ],
+    )
+
+
+class TestActionDelimitedExtractor:
+    def test_extracts_user_and_assistant(self):
+        """Messages separated by action groups are extracted correctly."""
+        extractor = ActionDelimitedExtractor()
+
+        container = make_ax_element(
+            role="AXGroup",
+            children=[
+                _make_content_group("Hello there"),
+                _make_action_group(["Copy"]),
+                _make_content_group("Hi! How can I help?"),
+                _make_action_group(["Copy", "Give positive feedback", "Give negative feedback"]),
+            ],
+        )
         window = make_ax_element(role="AXWindow", children=[container])
 
         turns = extractor.extract(window)
         assert turns is not None
         assert len(turns) == 2
         assert turns[0].speaker == "User"
-        assert turns[1].speaker == "Claude"
+        assert turns[0].text == "Hello there"
+        assert turns[1].speaker == "Assistant"
+        assert turns[1].text == "Hi! How can I help?"
+
+    def test_multiple_turns(self):
+        """Multiple conversation turns are extracted in order."""
+        extractor = ActionDelimitedExtractor()
+
+        container = make_ax_element(
+            role="AXGroup",
+            children=[
+                _make_content_group("Question 1"),
+                _make_action_group(["Copy"]),
+                _make_content_group("Answer 1"),
+                _make_action_group(["Copy", "Like", "Dislike"]),
+                _make_content_group("Question 2"),
+                _make_action_group(["Copy"]),
+                _make_content_group("Answer 2"),
+                _make_action_group(["Copy", "Thumbs up"]),
+            ],
+        )
+        window = make_ax_element(role="AXWindow", children=[container])
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert len(turns) == 4
+        assert [t.speaker for t in turns] == ["User", "Assistant", "User", "Assistant"]
+
+    def test_requires_min_action_groups(self):
+        """A container with only one action group is not treated as conversation."""
+        extractor = ActionDelimitedExtractor()
+
+        container = make_ax_element(
+            role="AXGroup",
+            children=[
+                _make_content_group("Some text"),
+                _make_action_group(["Copy"]),
+            ],
+        )
+        window = make_ax_element(role="AXWindow", children=[container])
+
+        # Falls through to GenericExtractor, which needs ≥2 speaker+body pairs
+        turns = extractor.extract(window)
+        assert turns is None
+
+    def test_action_group_detected_by_button_description(self):
+        """Action groups without explicit description are detected by button keywords."""
+        extractor = ActionDelimitedExtractor()
+
+        # Action groups have no AXDescription, but buttons have action keywords
+        action1 = make_ax_element(
+            role="AXGroup",
+            subrole="AXApplicationGroup",
+            children=[
+                make_ax_element(role="AXButton", description="Copy"),
+                make_ax_element(role="AXButton", description="Reply"),
+            ],
+        )
+        action2 = make_ax_element(
+            role="AXGroup",
+            subrole="AXApplicationGroup",
+            children=[
+                make_ax_element(role="AXButton", description="Copy"),
+                make_ax_element(role="AXButton", description="React"),
+                make_ax_element(role="AXButton", description="Thumbs up"),
+            ],
+        )
+
+        container = make_ax_element(
+            role="AXGroup",
+            children=[
+                _make_content_group("User message"),
+                action1,
+                _make_content_group("Bot response"),
+                action2,
+            ],
+        )
+        window = make_ax_element(role="AXWindow", children=[container])
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert len(turns) == 2
+        assert turns[0].speaker == "User"
+        assert turns[1].speaker == "Assistant"
+
+    def test_non_application_group_not_treated_as_delimiter(self):
+        """Regular AXGroups with buttons should not be mistaken for action delimiters."""
+        extractor = ActionDelimitedExtractor()
+
+        # A regular group (no AXApplicationGroup subrole) with buttons
+        not_action = make_ax_element(
+            role="AXGroup",
+            children=[
+                make_ax_element(role="AXButton", description="Copy"),
+            ],
+        )
+
+        container = make_ax_element(
+            role="AXGroup",
+            children=[
+                _make_content_group("Some text"),
+                not_action,
+                _make_content_group("More text"),
+            ],
+        )
+        window = make_ax_element(role="AXWindow", children=[container])
+
+        # No action groups found → falls through to generic
+        turns = extractor.extract(window)
+        assert turns is None
 
     def test_falls_back_to_generic(self):
-        """If article pattern fails, ClaudeDesktopExtractor tries GenericExtractor."""
+        """When no action-delimited container found, falls back to GenericExtractor."""
+        extractor = ActionDelimitedExtractor()
+
+        msg1 = make_ax_element(
+            role="AXGroup",
+            children=[
+                make_ax_element(role="AXStaticText", value="Alice"),
+                make_ax_element(role="AXStaticText", value="Hey, how are you?"),
+            ],
+        )
+        msg2 = make_ax_element(
+            role="AXGroup",
+            children=[
+                make_ax_element(role="AXStaticText", value="Bob"),
+                make_ax_element(role="AXStaticText", value="Doing great, thanks!"),
+            ],
+        )
+        window = make_ax_element(role="AXWindow", children=[msg1, msg2])
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert len(turns) == 2
+
+    def test_max_turns_limiting(self):
+        """Respects max_turns parameter."""
+        extractor = ActionDelimitedExtractor()
+
+        children = []
+        for i in range(10):
+            children.append(_make_content_group(f"Message {i}"))
+            children.append(_make_action_group(["Copy"]))
+
+        container = make_ax_element(role="AXGroup", children=children)
+        window = make_ax_element(role="AXWindow", children=[container])
+
+        turns = extractor.extract(window, max_turns=3)
+        assert turns is not None
+        assert len(turns) == 3
+
+    def test_get_extractor_returns_action_delimited_for_unknown(self):
+        """get_extractor returns ActionDelimitedExtractor for unknown apps."""
+        ext = get_extractor("SomeRandomApp")
+        assert isinstance(ext, ActionDelimitedExtractor)
+
+
+# ===========================================================================
+# Tests for ClaudeDesktopExtractor
+# ===========================================================================
+
+def _make_claude_message_actions(has_feedback: bool = False):
+    """Build a mock 'Message actions' group for Claude Desktop tests."""
+    children = [
+        make_ax_element(
+            role="AXGroup",
+            children=[
+                make_ax_element(role="AXButton", description="Copy"),
+            ],
+        ),
+    ]
+    if has_feedback:
+        children.append(
+            make_ax_element(role="AXGroup", children=[
+                make_ax_element(role="AXButton", description="Give positive feedback"),
+            ]),
+        )
+        children.append(
+            make_ax_element(role="AXGroup", children=[
+                make_ax_element(role="AXButton", description="Give negative feedback"),
+            ]),
+        )
+    return make_ax_element(
+        role="AXGroup",
+        subrole="AXApplicationGroup",
+        description="Message actions",
+        children=children,
+    )
+
+
+def _make_claude_user_msg(*lines: str):
+    """Build a mock user message content group for Claude Desktop."""
+    return make_ax_element(
+        role="AXGroup",
+        children=[
+            make_ax_element(
+                role="AXGroup",
+                children=[
+                    make_ax_element(
+                        role="AXGroup",
+                        children=[
+                            make_ax_element(role="AXStaticText", value=line)
+                            for line in lines
+                        ],
+                    ),
+                ],
+            ),
+        ],
+    )
+
+
+def _make_claude_assistant_msg(response_text: str, thinking_text: str = ""):
+    """Build a mock assistant message content group for Claude Desktop."""
+    inner_children = []
+
+    if thinking_text:
+        # Thought process button + thinking content + Done
+        inner_children.append(
+            make_ax_element(role="AXButton", title="Thought process")
+        )
+        inner_children.append(
+            make_ax_element(
+                role="AXGroup",
+                children=[
+                    make_ax_element(role="AXStaticText", value=thinking_text),
+                ],
+            ),
+        )
+        inner_children.append(
+            make_ax_element(
+                role="AXGroup",
+                children=[
+                    make_ax_element(role="AXStaticText", value="Done"),
+                ],
+            ),
+        )
+
+    # Response text
+    inner_children.append(
+        make_ax_element(
+            role="AXGroup",
+            children=[
+                make_ax_element(role="AXStaticText", value=response_text),
+            ],
+        ),
+    )
+
+    return make_ax_element(
+        role="AXGroup",
+        children=[
+            make_ax_element(role="AXGroup", children=inner_children),
+        ],
+    )
+
+
+class TestClaudeDesktopExtractor:
+    def test_extracts_user_and_assistant(self):
+        """Claude Desktop should extract user and assistant turns."""
+        extractor = ClaudeDesktopExtractor()
+
+        container = make_ax_element(
+            role="AXGroup",
+            children=[
+                _make_claude_user_msg("Hello Claude"),
+                _make_claude_message_actions(has_feedback=False),
+                _make_claude_assistant_msg("Hello! How can I help you today?"),
+                _make_claude_message_actions(has_feedback=True),
+            ],
+        )
+        # Wrap in enough nesting that _find_message_container can find it
+        window = make_ax_element(role="AXWindow", children=[container])
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert len(turns) == 2
+        assert turns[0].speaker == "User"
+        assert turns[0].text == "Hello Claude"
+        assert turns[1].speaker == "Claude"
+        assert turns[1].text == "Hello! How can I help you today?"
+
+    def test_skips_thinking_section(self):
+        """Assistant thinking sections should be excluded from extracted text."""
+        extractor = ClaudeDesktopExtractor()
+
+        container = make_ax_element(
+            role="AXGroup",
+            children=[
+                _make_claude_user_msg("What is 2+2?"),
+                _make_claude_message_actions(has_feedback=False),
+                _make_claude_assistant_msg(
+                    response_text="The answer is 4.",
+                    thinking_text="Let me think about this math problem...",
+                ),
+                _make_claude_message_actions(has_feedback=True),
+            ],
+        )
+        window = make_ax_element(role="AXWindow", children=[container])
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert len(turns) == 2
+        assert "thinking" not in turns[1].text.lower()
+        assert "The answer is 4." in turns[1].text
+
+    def test_multi_line_user_message(self):
+        """User messages with multiple lines are captured."""
+        extractor = ClaudeDesktopExtractor()
+
+        container = make_ax_element(
+            role="AXGroup",
+            children=[
+                _make_claude_user_msg("Line one", "Line two", "Line three"),
+                _make_claude_message_actions(has_feedback=False),
+            ],
+        )
+        window = make_ax_element(role="AXWindow", children=[container])
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert len(turns) == 1
+        assert "Line one" in turns[0].text
+        assert "Line three" in turns[0].text
+
+    def test_multiple_turns(self):
+        """Multiple conversation turns are extracted in order."""
+        extractor = ClaudeDesktopExtractor()
+
+        container = make_ax_element(
+            role="AXGroup",
+            children=[
+                _make_claude_user_msg("First question"),
+                _make_claude_message_actions(has_feedback=False),
+                _make_claude_assistant_msg("First answer"),
+                _make_claude_message_actions(has_feedback=True),
+                _make_claude_user_msg("Follow up"),
+                _make_claude_message_actions(has_feedback=False),
+                _make_claude_assistant_msg("Second answer"),
+                _make_claude_message_actions(has_feedback=True),
+            ],
+        )
+        window = make_ax_element(role="AXWindow", children=[container])
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert len(turns) == 4
+        assert turns[0].speaker == "User"
+        assert turns[1].speaker == "Claude"
+        assert turns[2].speaker == "User"
+        assert turns[3].speaker == "Claude"
+
+    def test_falls_back_to_generic(self):
+        """If no 'Message actions' found, falls back to GenericExtractor."""
         extractor = ClaudeDesktopExtractor()
 
         msg1 = make_ax_element(
