@@ -32,31 +32,22 @@ def engine(config):
 
 
 class TestModeDetection:
-    def test_empty_input_is_reply(self):
-        assert detect_mode("") == AutocompleteMode.REPLY
+    @pytest.mark.parametrize("kwargs,description", [
+        (dict(before_cursor=""), "empty input"),
+        (dict(before_cursor="   "), "whitespace only"),
+        (dict(before_cursor="Hi"), "short input"),
+        (dict(before_cursor="", current_input="This is a long paragraph"), "cursor at start of long text"),
+    ])
+    def test_reply_mode_inputs(self, kwargs, description):
+        assert detect_mode(**kwargs) == AutocompleteMode.REPLY, description
 
-    def test_whitespace_only_is_reply(self):
-        assert detect_mode("   ") == AutocompleteMode.REPLY
-
-    def test_short_input_is_reply(self):
-        assert detect_mode("Hi") == AutocompleteMode.REPLY
-
-    def test_threshold_input_is_continuation(self):
-        text = "x" * MODE_THRESHOLD_CHARS
-        assert detect_mode(text) == AutocompleteMode.CONTINUATION
-
-    def test_long_input_is_continuation(self):
-        assert detect_mode("Hello, how are you doing today?") == AutocompleteMode.CONTINUATION
-
-    def test_before_cursor_empty_with_long_after_is_reply(self):
-        """Cursor at start of a long paragraph should be REPLY, not CONTINUATION."""
-        assert detect_mode(before_cursor="", current_input="This is a long paragraph") == AutocompleteMode.REPLY
-
-    def test_before_cursor_short_is_reply(self):
-        assert detect_mode(before_cursor="Hi") == AutocompleteMode.REPLY
-
-    def test_before_cursor_at_threshold_is_continuation(self):
-        assert detect_mode(before_cursor="abc") == AutocompleteMode.CONTINUATION
+    @pytest.mark.parametrize("kwargs,description", [
+        (dict(before_cursor="x" * MODE_THRESHOLD_CHARS), "exactly at threshold"),
+        (dict(before_cursor="Hello, how are you doing today?"), "long input"),
+        (dict(before_cursor="abc"), "before_cursor at threshold"),
+    ])
+    def test_continuation_mode_inputs(self, kwargs, description):
+        assert detect_mode(**kwargs) == AutocompleteMode.CONTINUATION, description
 
 
 class TestSuggestionEngine:
@@ -143,3 +134,24 @@ class TestSuggestionEngine:
         # generate_suggestions catches exceptions and returns []
         result = engine.generate_suggestions("Hello world test", "context")
         assert result == []
+
+    def test_unicode_suggestions_via_instructor(self):
+        """Unicode text passes through the Instructor-based pipeline."""
+        from autocompleter.suggestion_engine import SuggestionItem
+        items = [
+            SuggestionItem(text="Bonjour le monde"),
+            SuggestionItem(text="\u00e9\u00e8\u00ea"),
+            SuggestionItem(text="\u4f60\u597d"),
+        ]
+        mock_result = MagicMock()
+        mock_result.suggestions = items
+        engine = SuggestionEngine(Config(
+            llm_provider="anthropic",
+            anthropic_api_key="test-key",
+        ))
+        engine._client = MagicMock()
+        engine._client.create.return_value = mock_result
+        results = engine._call_llm("sys", "user", temperature=0.5, max_tokens=100)
+        assert len(results) == 3
+        assert results[0].text == "Bonjour le monde"
+        assert results[2].text == "\u4f60\u597d"

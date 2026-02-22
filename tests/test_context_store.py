@@ -206,7 +206,7 @@ class TestContextStore:
             conversation_turns=[],
             source_app="Slack",
         )
-        assert "Recent visible text:" in context
+        assert "Visible page content (no conversation detected):" in context
         assert "Some visible conversation text" in context
 
     def test_reply_context_prefers_live_visible_text(self, store):
@@ -250,7 +250,7 @@ class TestContextStore:
             conversation_turns=[],
             source_app="ChatGPT",
         )
-        assert "Recent visible text:" not in context
+        assert "Visible page content (no conversation detected):" not in context
 
     def test_reply_context_limits_turns(self, store):
         turns = [
@@ -311,6 +311,17 @@ class TestContextStore:
         assert len(entries) == 1
         assert entries[0].content == "Persisted"
         store2.close()
+
+    def test_add_and_retrieve_unicode(self, store):
+        entry_id = store.add_entry(
+            source_app="Safari",
+            content="\u4f60\u597d\u4e16\u754c Bonjour \u00e9\u00e8\u00ea",
+            entry_type="visible_text",
+        )
+        assert entry_id > 0
+        entries = store.get_recent(limit=1)
+        assert "\u4f60\u597d\u4e16\u754c" in entries[0].content
+        assert "Bonjour" in entries[0].content
 
     def test_not_opened_raises(self):
         store = ContextStore(Path("/tmp/unused.db"))

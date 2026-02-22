@@ -295,7 +295,18 @@ class TestGetFeedbackStats:
         assert stats["total_dismissed"] == 2
         assert abs(stats["accept_rate"] - 1 / 3) < 0.01
 
-    def test_filtered_by_source_app(self, store):
+    @pytest.mark.parametrize("filter_kwargs, expected_shown, expected_accepted", [
+        # Filter by source_app
+        (dict(source_app="Slack"), 2, 1),
+        (dict(source_app="Safari"), 1, 0),
+        # Filter by mode
+        (dict(mode="continuation"), 2, 1),
+        (dict(mode="reply"), 1, 0),
+        # Filter by both
+        (dict(source_app="Slack", mode="continuation"), 1, 1),
+    ])
+    def test_filtered_stats(self, store, filter_kwargs, expected_shown, expected_accepted):
+        # Setup: Slack/continuation accepted, Safari/continuation dismissed, Slack/reply dismissed
         store.record_feedback(
             source_app="Slack", mode="continuation",
             suggestion_text="s1", action="accepted",
@@ -308,52 +319,9 @@ class TestGetFeedbackStats:
             source_app="Slack", mode="reply",
             suggestion_text="s3", action="dismissed",
         )
-
-        slack_stats = store.get_feedback_stats(source_app="Slack")
-        assert slack_stats["total_shown"] == 2
-        assert slack_stats["total_accepted"] == 1
-        assert slack_stats["total_dismissed"] == 1
-
-        safari_stats = store.get_feedback_stats(source_app="Safari")
-        assert safari_stats["total_shown"] == 1
-        assert safari_stats["total_accepted"] == 0
-        assert safari_stats["total_dismissed"] == 1
-
-    def test_filtered_by_mode(self, store):
-        store.record_feedback(
-            source_app="Slack", mode="continuation",
-            suggestion_text="s1", action="accepted",
-        )
-        store.record_feedback(
-            source_app="Slack", mode="reply",
-            suggestion_text="s2", action="dismissed",
-        )
-
-        cont_stats = store.get_feedback_stats(mode="continuation")
-        assert cont_stats["total_shown"] == 1
-        assert cont_stats["total_accepted"] == 1
-
-        reply_stats = store.get_feedback_stats(mode="reply")
-        assert reply_stats["total_shown"] == 1
-        assert reply_stats["total_dismissed"] == 1
-
-    def test_filtered_by_app_and_mode(self, store):
-        store.record_feedback(
-            source_app="Slack", mode="continuation",
-            suggestion_text="s1", action="accepted",
-        )
-        store.record_feedback(
-            source_app="Slack", mode="reply",
-            suggestion_text="s2", action="dismissed",
-        )
-        store.record_feedback(
-            source_app="Safari", mode="continuation",
-            suggestion_text="s3", action="accepted",
-        )
-
-        stats = store.get_feedback_stats(source_app="Slack", mode="continuation")
-        assert stats["total_shown"] == 1
-        assert stats["total_accepted"] == 1
+        stats = store.get_feedback_stats(**filter_kwargs)
+        assert stats["total_shown"] == expected_shown
+        assert stats["total_accepted"] == expected_accepted
 
     def test_respects_hours_window(self, store):
         # Record old feedback (beyond the window)
@@ -498,57 +466,28 @@ class TestGetRecentDismissedPatterns:
 
 
 class TestAdjustTemperature:
-    def test_low_accept_rate_lowers_temp(self):
-        # accept_rate < 0.3 -> lower by 0.1
-        result = adjust_temperature(0.5, 0.2)
-        assert abs(result - 0.4) < 0.001
-
-    def test_high_accept_rate_raises_temp(self):
-        # accept_rate > 0.7 -> raise by 0.05
-        result = adjust_temperature(0.5, 0.8)
-        assert abs(result - 0.55) < 0.001
-
-    def test_mid_accept_rate_unchanged(self):
-        # 0.3 <= accept_rate <= 0.7 -> no change
-        result = adjust_temperature(0.5, 0.5)
-        assert abs(result - 0.5) < 0.001
-
-    def test_boundary_0_3_unchanged(self):
-        # Exactly 0.3 should NOT lower
-        result = adjust_temperature(0.5, 0.3)
-        assert abs(result - 0.5) < 0.001
-
-    def test_boundary_0_7_unchanged(self):
-        # Exactly 0.7 should NOT raise
-        result = adjust_temperature(0.5, 0.7)
-        assert abs(result - 0.5) < 0.001
-
-    def test_clamp_lower_bound(self):
-        # Even with very low base temp, should not go below 0.1
-        result = adjust_temperature(0.1, 0.1)
-        assert abs(result - 0.1) < 0.001
-
-    def test_clamp_lower_bound_extreme(self):
-        # 0.05 - 0.1 = -0.05, should clamp to 0.1
-        result = adjust_temperature(0.05, 0.1)
-        assert abs(result - 0.1) < 0.001
-
-    def test_clamp_upper_bound(self):
-        # 1.0 + 0.05 = 1.05, should clamp to 1.0
-        result = adjust_temperature(1.0, 0.9)
-        assert abs(result - 1.0) < 0.001
-
-    def test_clamp_upper_bound_extreme(self):
-        result = adjust_temperature(0.98, 0.8)
-        assert abs(result - 1.0) < 0.001
-
-    def test_zero_accept_rate(self):
-        result = adjust_temperature(0.5, 0.0)
-        assert abs(result - 0.4) < 0.001
-
-    def test_full_accept_rate(self):
-        result = adjust_temperature(0.5, 1.0)
-        assert abs(result - 0.55) < 0.001
+    @pytest.mark.parametrize("base_temp, accept_rate, expected", [
+        # Low rate lowers
+        (0.5, 0.2, 0.4),
+        (0.5, 0.0, 0.4),
+        # High rate raises
+        (0.5, 0.8, 0.55),
+        (0.5, 1.0, 0.55),
+        # Mid rate unchanged
+        (0.5, 0.5, 0.5),
+        # Boundary values unchanged
+        (0.5, 0.3, 0.5),
+        (0.5, 0.7, 0.5),
+        # Clamping lower bound
+        (0.1, 0.1, 0.1),
+        (0.05, 0.1, 0.1),
+        # Clamping upper bound
+        (1.0, 0.9, 1.0),
+        (0.98, 0.8, 1.0),
+    ])
+    def test_adjust_temperature(self, base_temp, accept_rate, expected):
+        result = adjust_temperature(base_temp, accept_rate)
+        assert abs(result - expected) < 0.001
 
 
 # ---- System prompt negative patterns integration tests ----

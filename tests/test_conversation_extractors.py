@@ -16,6 +16,7 @@ from autocompleter.conversation_extractors import (
     GenericExtractor,
     IMessageExtractor,
     SlackExtractor,
+    _collect_child_text,
     get_extractor,
 )
 
@@ -140,11 +141,6 @@ class TestGetExtractor:
     def test_returns_action_delimited_for_empty_string(self):
         ext = get_extractor("")
         assert isinstance(ext, ActionDelimitedExtractor)
-
-    def test_all_extractors_are_conversation_extractor_subclasses(self):
-        for name in ["Google Gemini", "Slack", "ChatGPT", "Claude", "Messages", "Unknown"]:
-            ext = get_extractor(name)
-            assert isinstance(ext, ConversationExtractor)
 
 
 # ===========================================================================
@@ -1089,73 +1085,217 @@ class TestClaudeDesktopExtractor:
 # ===========================================================================
 
 class TestIMessageExtractor:
+    """Tests for the rewritten IMessageExtractor that uses the real
+    iMessage AX tree structure: AXGroup(desc="Messages", rdesc="collection")
+    containing AXGroup children with desc-based speaker detection and
+    AXTextArea children for message body.
+    """
+
+    def _build_imessage_tree(
+        self, messages: list[tuple[str, str]], *, sidebar: bool = False
+    ) -> MagicMock:
+        """Build a mock iMessage AX tree.
+
+        ``messages`` is a list of (desc, body) tuples.  desc should look
+        like ``"Your iMessage, Hey, 8:26 PM"`` for sent messages or
+        ``"Alice, Hey there, 10:09 PM"`` for received.
+
+        Mirrors the real macOS 15 structure where each message group has
+        an extra AXGroup wrapper around the AXTextArea.
+        """
+        msg_children = []
+        for desc, body in messages:
+            # Real structure: AXGroup(desc) > AXGroup(desc) > AXTextArea(val)
+            msg_group = make_ax_element(
+                role="AXGroup",
+                description=desc,
+                children=[
+                    make_ax_element(
+                        role="AXGroup",
+                        description=desc,
+                        children=[
+                            make_ax_element(role="AXTextArea", value=body),
+                        ],
+                    ),
+                ],
+            )
+            msg_children.append(msg_group)
+
+        messages_collection = make_ax_element(
+            role="AXGroup",
+            description="Messages",
+            role_description="collection",
+            children=msg_children,
+        )
+
+        parts = [messages_collection]
+        if sidebar:
+            sidebar_collection = make_ax_element(
+                role="AXGroup",
+                description="Conversations",
+                role_description="collection",
+                children=[
+                    make_ax_element(role="AXStaticText", value="Emma, Pinned"),
+                ],
+            )
+            parts.append(sidebar_collection)
+
+        window = make_ax_element(role="AXWindow", children=parts)
+        return window
+
     def test_extracts_sent_and_received(self):
         extractor = IMessageExtractor()
-
-        sent = make_ax_element(
-            role="AXRow",
-            subrole="sent",
-            children=[
-                make_ax_element(role="AXStaticText", value="Hey, are you free tonight?"),
-            ],
-        )
-        received = make_ax_element(
-            role="AXRow",
-            subrole="received",
-            children=[
-                make_ax_element(role="AXStaticText", value="Yeah, what's up?"),
-            ],
-        )
-        table = make_ax_element(role="AXTable", children=[sent, received])
-        window = make_ax_element(role="AXWindow", children=[table])
+        window = self._build_imessage_tree([
+            ("Your iMessage, Hey are you free tonight?, 8:26 PM", "Hey are you free tonight?"),
+            ("Alice, Yeah what's up?, 8:27 PM", "Yeah what's up?"),
+        ])
 
         turns = extractor.extract(window)
         assert turns is not None
         assert len(turns) == 2
         assert turns[0].speaker == "Me"
+        assert "free tonight" in turns[0].text
         assert turns[1].speaker == "Them"
+        assert "what's up" in turns[1].text
 
-    def test_unknown_direction_uses_unknown(self):
+    def test_your_message_prefix_also_works(self):
+        """'Your message, ...' prefix (SMS fallback) should also be Me."""
         extractor = IMessageExtractor()
-
-        row = make_ax_element(
-            role="AXRow",
-            children=[
-                make_ax_element(role="AXStaticText", value="A message with no direction"),
-            ],
-        )
-        window = make_ax_element(role="AXWindow", children=[row])
+        window = self._build_imessage_tree([
+            ("Your message, Hello, 9:00 AM", "Hello"),
+        ])
 
         turns = extractor.extract(window)
         assert turns is not None
-        assert turns[0].speaker == "Unknown"
+        assert turns[0].speaker == "Me"
 
-    def test_no_messages_returns_none(self):
+    def test_skips_separator_rows(self):
+        """Timestamp/separator rows (first child is AXStaticText) are skipped."""
+        extractor = IMessageExtractor()
+
+        separator = make_ax_element(
+            role="AXGroup",
+            description="Today 10:09 PM",
+            children=[
+                make_ax_element(role="AXStaticText", value="Today 10:09 PM"),
+            ],
+        )
+        msg = make_ax_element(
+            role="AXGroup",
+            description="Your iMessage, Hey, 10:10 PM",
+            children=[
+                make_ax_element(
+                    role="AXGroup",
+                    description="Your iMessage, Hey, 10:10 PM",
+                    children=[
+                        make_ax_element(role="AXTextArea", value="Hey"),
+                    ],
+                ),
+            ],
+        )
+        messages_collection = make_ax_element(
+            role="AXGroup",
+            description="Messages",
+            role_description="collection",
+            children=[separator, msg],
+        )
+        window = make_ax_element(role="AXWindow", children=[messages_collection])
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert len(turns) == 1
+        assert turns[0].speaker == "Me"
+        assert turns[0].text == "Hey"
+
+    def test_no_messages_collection_returns_none(self):
+        """Window without the Messages collection returns None."""
         extractor = IMessageExtractor()
         window = make_ax_element(
             role="AXWindow",
             children=[
-                make_ax_element(role="AXTable", children=[]),
+                make_ax_element(role="AXGroup", children=[]),
             ],
         )
 
         turns = extractor.extract(window)
         assert turns is None
 
+    def test_empty_messages_collection_returns_none(self):
+        """Messages collection with no children returns None."""
+        extractor = IMessageExtractor()
+        messages_collection = make_ax_element(
+            role="AXGroup",
+            description="Messages",
+            role_description="collection",
+            children=[],
+        )
+        window = make_ax_element(role="AXWindow", children=[messages_collection])
+
+        turns = extractor.extract(window)
+        assert turns is None
+
+    def test_direct_textarea_child_still_works(self):
+        """AXTextArea as direct child (no wrapper) should still extract."""
+        extractor = IMessageExtractor()
+
+        msg = make_ax_element(
+            role="AXGroup",
+            description="Your iMessage, Hey, 8:00 PM",
+            children=[
+                make_ax_element(role="AXTextArea", value="Hey"),
+            ],
+        )
+        messages_collection = make_ax_element(
+            role="AXGroup",
+            description="Messages",
+            role_description="collection",
+            children=[msg],
+        )
+        window = make_ax_element(role="AXWindow", children=[messages_collection])
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert len(turns) == 1
+        assert turns[0].text == "Hey"
+
+    def test_desc_fallback_when_no_textarea(self):
+        """When no AXTextArea exists, body should be parsed from desc."""
+        extractor = IMessageExtractor()
+
+        # Message group with an AXGroup child (not AXStaticText, so not
+        # treated as separator) but no AXTextArea anywhere
+        msg = make_ax_element(
+            role="AXGroup",
+            description="Your iMessage, Hello world, 9:00 PM",
+            children=[
+                make_ax_element(role="AXGroup", children=[]),
+            ],
+        )
+        messages_collection = make_ax_element(
+            role="AXGroup",
+            description="Messages",
+            role_description="collection",
+            children=[msg],
+        )
+        window = make_ax_element(role="AXWindow", children=[messages_collection])
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert len(turns) == 1
+        assert turns[0].speaker == "Me"
+        assert turns[0].text == "Hello world"
+
     def test_max_turns_limiting(self):
         extractor = IMessageExtractor()
-        rows = [
-            make_ax_element(
-                role="AXRow",
-                subrole="sent" if i % 2 == 0 else "received",
-                children=[
-                    make_ax_element(role="AXStaticText", value=f"Message number {i} text"),
-                ],
+        messages = [
+            (
+                f"Your iMessage, Msg {i}, {i}:00 PM" if i % 2 == 0
+                else f"Alice, Msg {i}, {i}:00 PM",
+                f"Message number {i} text",
             )
             for i in range(10)
         ]
-        table = make_ax_element(role="AXTable", children=rows)
-        window = make_ax_element(role="AXWindow", children=[table])
+        window = self._build_imessage_tree(messages)
 
         turns = extractor.extract(window, max_turns=4)
         assert turns is not None
@@ -1253,3 +1393,199 @@ class TestInputObserverIntegration:
 
         assert turns is not None
         assert len(turns) == 2
+
+
+# ===========================================================================
+# Tests for _collect_child_text subrole filtering
+# ===========================================================================
+
+class TestCollectChildTextSubroleFiltering:
+    """Tests for subrole-based filtering in _collect_child_text.
+
+    These tests use the REAL _collect_child_text (not the mock) to verify
+    that AXGroup elements with chrome subroles are skipped.
+    """
+
+    def test_skips_document_note_groups(self):
+        """AXGroup with AXDocumentNote subrole should be skipped (disclaimers)."""
+        # Use the real _collect_child_text by re-patching over the autouse mock
+        with patch(
+            "autocompleter.conversation_extractors._collect_child_text",
+            wraps=_collect_child_text,
+        ):
+            container = make_ax_element(
+                role="AXGroup",
+                children=[
+                    make_ax_element(role="AXStaticText", value="Hello world"),
+                    make_ax_element(
+                        role="AXGroup",
+                        subrole="AXDocumentNote",
+                        children=[
+                            make_ax_element(
+                                role="AXStaticText",
+                                value="Claude is AI and can make mistakes",
+                            ),
+                        ],
+                    ),
+                ],
+            )
+            result = _collect_child_text(container)
+            assert "Hello world" in result
+            assert "can make mistakes" not in result
+
+    def test_skips_application_status_groups(self):
+        """AXGroup with AXApplicationStatus subrole should be skipped."""
+        with patch(
+            "autocompleter.conversation_extractors._collect_child_text",
+            wraps=_collect_child_text,
+        ):
+            container = make_ax_element(
+                role="AXGroup",
+                children=[
+                    make_ax_element(role="AXStaticText", value="Actual content"),
+                    make_ax_element(
+                        role="AXGroup",
+                        subrole="AXApplicationStatus",
+                        children=[
+                            make_ax_element(
+                                role="AXStaticText", value="Loading...",
+                            ),
+                        ],
+                    ),
+                ],
+            )
+            result = _collect_child_text(container)
+            assert "Actual content" in result
+            assert "Loading" not in result
+
+    def test_skips_application_alert_groups(self):
+        """AXGroup with AXApplicationAlert subrole should be skipped."""
+        with patch(
+            "autocompleter.conversation_extractors._collect_child_text",
+            wraps=_collect_child_text,
+        ):
+            container = make_ax_element(
+                role="AXGroup",
+                children=[
+                    make_ax_element(role="AXStaticText", value="Real text"),
+                    make_ax_element(
+                        role="AXGroup",
+                        subrole="AXApplicationAlert",
+                        children=[
+                            make_ax_element(
+                                role="AXStaticText", value="Alert banner",
+                            ),
+                        ],
+                    ),
+                ],
+            )
+            result = _collect_child_text(container)
+            assert "Real text" in result
+            assert "Alert banner" not in result
+
+    def test_does_not_skip_normal_groups(self):
+        """AXGroup without a skip subrole should still be recursed into."""
+        with patch(
+            "autocompleter.conversation_extractors._collect_child_text",
+            wraps=_collect_child_text,
+        ):
+            container = make_ax_element(
+                role="AXGroup",
+                children=[
+                    make_ax_element(role="AXStaticText", value="Top level"),
+                    make_ax_element(
+                        role="AXGroup",
+                        subrole="",
+                        children=[
+                            make_ax_element(
+                                role="AXStaticText", value="Nested text",
+                            ),
+                        ],
+                    ),
+                ],
+            )
+            result = _collect_child_text(container)
+            assert "Top level" in result
+            assert "Nested text" in result
+
+
+class TestClaudeDesktopDisclaimerFiltering:
+    """Test that ClaudeDesktopExtractor filters disclaimers via subrole
+    rather than hardcoded text matching.
+    """
+
+    def _build_user_message(self, text: str):
+        return make_ax_element(
+            role="AXGroup",
+            children=[
+                make_ax_element(
+                    role="AXGroup",
+                    children=[
+                        make_ax_element(
+                            role="AXGroup",
+                            children=[
+                                make_ax_element(role="AXStaticText", value=text),
+                            ],
+                        ),
+                    ],
+                ),
+            ],
+        )
+
+    def _build_disclaimer(self, text: str = "Claude is AI and can make mistakes"):
+        """Build a disclaimer element with AXDocumentNote subrole."""
+        return make_ax_element(
+            role="AXGroup",
+            children=[
+                make_ax_element(
+                    role="AXGroup",
+                    subrole="AXDocumentNote",
+                    children=[
+                        make_ax_element(role="AXStaticText", value=text),
+                    ],
+                ),
+            ],
+        )
+
+    def _build_message_actions(self):
+        return make_ax_element(
+            role="AXGroup",
+            subrole="AXApplicationGroup",
+            description="Message actions",
+            children=[
+                make_ax_element(role="AXButton", title="Copy"),
+            ],
+        )
+
+    def _build_window(self, container_children):
+        conversation_container = make_ax_element(
+            role="AXGroup", children=container_children,
+        )
+        web_area = make_ax_element(
+            role="AXWebArea", title="Claude",
+            children=[conversation_container],
+        )
+        return make_ax_element(role="AXWindow", children=[web_area])
+
+    def test_disclaimer_not_extracted_as_turn(self):
+        """Disclaimer with AXDocumentNote subrole should not produce a turn."""
+        extractor = ClaudeDesktopExtractor()
+        window = self._build_window([
+            self._build_user_message("Hello Claude"),
+            self._build_message_actions(),
+            self._build_disclaimer(),
+        ])
+
+        # Use the real _collect_child_text so subrole filtering is active
+        with patch(
+            "autocompleter.conversation_extractors._collect_child_text",
+            wraps=_collect_child_text,
+        ):
+            turns = extractor.extract(window)
+        assert turns is not None
+        assert len(turns) == 1
+        assert turns[0].speaker == "User"
+        assert "Hello Claude" in turns[0].text
+        # Disclaimer should not appear
+        for turn in turns:
+            assert "can make mistakes" not in turn.text

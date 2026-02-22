@@ -101,3 +101,64 @@ def ax_get_pid(element) -> int:
     except Exception:
         pass
     return 0
+
+
+def dump_ax_tree(
+    element,
+    out,
+    max_depth: int = 12,
+    max_children: int = 50,
+    depth: int = 0,
+) -> None:
+    """Recursively dump the AX tree with useful attributes.
+
+    Writes a human-readable representation to *out* (any object with a
+    ``write`` method — a file, ``sys.stdout``, or ``io.StringIO``).
+    """
+    if depth > max_depth:
+        out.write(f"{'  ' * depth}... (depth limit {max_depth})\n")
+        return
+
+    role = ax_get_attribute(element, "AXRole") or "?"
+    subrole = ax_get_attribute(element, "AXSubrole")
+    value = ax_get_attribute(element, "AXValue")
+    title = ax_get_attribute(element, "AXTitle")
+    desc = ax_get_attribute(element, "AXDescription")
+    role_desc = ax_get_attribute(element, "AXRoleDescription")
+    placeholder = ax_get_attribute(element, "AXPlaceholderValue")
+    num_chars = ax_get_attribute(element, "AXNumberOfCharacters")
+    children = ax_get_attribute(element, "AXChildren") or []
+    n_children = len(children) if children else 0
+
+    attrs: list[str] = []
+    if isinstance(value, str):
+        display = value.replace("\n", "\\n")
+        if len(display) > 120:
+            display = display[:120] + "..."
+        attrs.append(f'val="{display}"')
+    elif value is not None:
+        attrs.append(f"val=({type(value).__name__})")
+    if isinstance(title, str) and title.strip():
+        attrs.append(f'title="{title[:80]}"')
+    if isinstance(desc, str) and desc.strip():
+        attrs.append(f'desc="{desc[:80]}"')
+    if subrole:
+        attrs.append(f"subrole={subrole}")
+    if isinstance(role_desc, str) and role_desc.strip():
+        attrs.append(f'rdesc="{role_desc}"')
+    if placeholder is not None:
+        attrs.append(f'placeholder="{placeholder}"')
+    if num_chars is not None:
+        attrs.append(f"numChars={num_chars}")
+
+    indent = "  " * depth
+    attr_str = "  " + " | ".join(attrs) if attrs else ""
+    out.write(f"{indent}[{depth}] {role} ({n_children} ch){attr_str}\n")
+
+    if children:
+        for child in children[:max_children]:
+            dump_ax_tree(child, out, max_depth, max_children, depth + 1)
+        if len(children) > max_children:
+            out.write(
+                f"{indent}  ... +{len(children) - max_children} more children\n"
+            )

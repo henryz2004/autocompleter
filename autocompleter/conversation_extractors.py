@@ -47,6 +47,13 @@ _CHILD_TEXT_SKIP_ROLES = frozenset({
 
 _MAX_CHILD_TEXT_SIBLINGS = 80  # Max children to iterate per node
 
+# Subroles to skip entirely (UI chrome that isn't conversation content)
+_CHILD_TEXT_SKIP_SUBROLES = frozenset({
+    "AXDocumentNote",        # Footer disclaimers ("Claude/ChatGPT can make mistakes...")
+    "AXApplicationStatus",   # Status/loading indicators
+    "AXApplicationAlert",    # Alert banners
+})
+
 
 def _collect_child_text(
     element, max_depth: int = 5, max_chars: int = 2000, depth: int = 0
@@ -90,6 +97,11 @@ def _collect_child_text(
                     if joined:
                         parts.append(joined)
                     text_buffer = []
+                # Skip chrome subroles (disclaimers, status indicators, alerts)
+                if role == "AXGroup":
+                    subrole = ax_get_attribute(child, "AXSubrole") or ""
+                    if subrole in _CHILD_TEXT_SKIP_SUBROLES:
+                        continue
                 child_text = _collect_child_text(
                     child, max_depth, max_chars - total, depth + 1
                 )
@@ -570,8 +582,10 @@ class ClaudeDesktopExtractor(ConversationExtractor):
             # Fallback to action-delimited (which itself falls back to generic)
             return ActionDelimitedExtractor().extract(window_element, max_turns)
         except Exception:
-            logger.debug("Claude Desktop conversation extraction failed", exc_info=True)
-        return None
+            logger.debug(
+                "Claude Desktop conversation extraction failed", exc_info=True,
+            )
+            return None
 
     # -- tree search --
 
@@ -874,9 +888,27 @@ class ActionDelimitedExtractor(ConversationExtractor):
 class IMessageExtractor(ConversationExtractor):
     """Extractor for iMessage (Messages.app).
 
-    iMessage uses AXTable > AXRow pattern with AXCell children containing
-    message text. Messages have role descriptions or subroles indicating
-    sent vs received.
+    iMessage's actual AX tree structure (macOS 15+):
+
+    ::
+
+        AXGroup desc="Messages" rdesc="collection"        ← active chat messages
+          AXGroup desc="Your iMessage, Okkk, 8:26 PM"     ← sent message
+            AXGroup desc="Your iMessage, Okkk, 8:26 PM"   ← extra wrapper
+              AXTextArea val="Okkk"                        ← message body
+          AXGroup desc="Jinpaaaa, can't sleep, 10:09 PM"  ← received message
+            AXGroup desc="Jinpaaaa, can't sleep, 10:09 PM"
+              AXTextArea val="can't sleep"
+        AXGroup desc="Conversations" rdesc="collection"    ← sidebar (other chats)
+
+    The AXTextArea may be a direct child or nested inside one or more
+    AXGroup wrappers (observed on macOS 15).  ``_find_textarea_value``
+    handles variable wrapper depth.
+
+    We find the ``desc="Messages"`` collection, iterate its direct
+    children, parse the parent ``AXDescription`` to determine
+    sent/received, and extract the child ``AXTextArea`` value for the
+    clean message body.
     """
 
     app_names: tuple[str, ...] = ("Messages",)
@@ -887,70 +919,130 @@ class IMessageExtractor(ConversationExtractor):
         self, window_element, max_turns: int = 15
     ) -> Optional[list[ConversationTurn]]:
         try:
-            turns = self._find_imessage_rows(window_element, max_turns, max_depth=10)
+            messages_collection = self._find_messages_collection(
+                window_element, max_depth=10
+            )
+            if messages_collection is None:
+                return None
+
+            turns = self._extract_turns(messages_collection, max_turns)
             if turns and len(turns) >= 1:
                 return turns
         except Exception:
             logger.debug("iMessage conversation extraction failed", exc_info=True)
         return None
 
-    def _find_imessage_rows(
+    def _find_messages_collection(
         self,
         element,
-        max_turns: int,
         max_depth: int,
         depth: int = 0,
         _visits: Optional[list] = None,
-    ) -> list[ConversationTurn]:
-        """Find message rows in iMessage's AX tree."""
+    ):
+        """Find the AXGroup with desc='Messages' and rdesc='collection'."""
         if _visits is None:
             _visits = [0]
         _visits[0] += 1
         if _visits[0] > self._MAX_VISITS or depth > max_depth:
-            return []
+            return None
 
-        turns: list[ConversationTurn] = []
         role = ax_get_attribute(element, "AXRole") or ""
-
-        if role in {"AXRow", "AXCell"}:
-            turn = self._parse_imessage_row(element)
-            if turn is not None:
-                turns.append(turn)
-                if len(turns) >= max_turns:
-                    return turns
+        if role == "AXGroup":
+            rdesc = ax_get_attribute(element, "AXRoleDescription") or ""
+            if rdesc == "collection":
+                desc = ax_get_attribute(element, "AXDescription") or ""
+                if desc == "Messages":
+                    return element
 
         children = ax_get_attribute(element, "AXChildren")
         if children:
             for child in children[:50]:
-                if len(turns) >= max_turns:
-                    break
-                child_turns = self._find_imessage_rows(
-                    child, max_turns - len(turns), max_depth, depth + 1, _visits
+                result = self._find_messages_collection(
+                    child, max_depth, depth + 1, _visits
                 )
-                turns.extend(child_turns)
+                if result is not None:
+                    return result
+        return None
+
+    def _extract_turns(
+        self, messages_collection, max_turns: int
+    ) -> list[ConversationTurn]:
+        """Extract turns from the Messages collection's direct children."""
+        children = ax_get_attribute(messages_collection, "AXChildren")
+        if not children:
+            return []
+
+        turns: list[ConversationTurn] = []
+        for child in children:
+            if len(turns) >= max_turns:
+                break
+
+            role = ax_get_attribute(child, "AXRole") or ""
+            if role != "AXGroup":
+                continue
+
+            desc = ax_get_attribute(child, "AXDescription") or ""
+            if not desc:
+                continue
+
+            # Skip separator/timestamp rows: their first child is
+            # AXStaticText (e.g. "Today 10:09 PM", "Delivered").
+            child_children = ax_get_attribute(child, "AXChildren")
+            if child_children:
+                first_child_role = ax_get_attribute(child_children[0], "AXRole") or ""
+                if first_child_role == "AXStaticText":
+                    continue
+
+            # Determine speaker from parent desc
+            if desc.startswith("Your iMessage, ") or desc.startswith("Your message, "):
+                speaker = "Me"
+            else:
+                speaker = "Them"
+
+            # Extract clean message body from child AXTextArea (may be
+            # nested inside one or more AXGroup wrappers)
+            body = self._find_textarea_value(child)
+            if not body:
+                # Fallback: extract body from desc by stripping prefix and timestamp
+                # desc format: "Your iMessage, <body>, <time>" or "<contact>, <body>, <time>"
+                parts = desc.split(", ", 1)
+                if len(parts) > 1:
+                    body = parts[1].rsplit(", ", 1)[0]
+            if not body or len(body) < 2:
+                continue
+
+            turns.append(ConversationTurn(speaker=speaker, text=body))
 
         return turns
 
-    def _parse_imessage_row(self, element) -> Optional[ConversationTurn]:
-        """Parse an iMessage row into a ConversationTurn."""
-        text = _collect_child_text(element, max_depth=4, max_chars=500)
-        text = text.strip()
-        if not text or len(text) < 3:
-            return None
+    @staticmethod
+    def _find_textarea_value(element, max_depth: int = 4, depth: int = 0) -> str:
+        """Find the AXValue of the first AXTextArea descendant.
 
-        # iMessage uses subrole or description to indicate sent vs received
-        subrole = ax_get_attribute(element, "AXSubrole") or ""
-        desc = ax_get_attribute(element, "AXDescription") or ""
-
-        if "sent" in subrole.lower() or "sent" in desc.lower():
-            speaker = "Me"
-        elif "received" in subrole.lower() or "received" in desc.lower():
-            speaker = "Them"
-        else:
-            # Default heuristic: check for visual indicators
-            speaker = "Unknown"
-
-        return ConversationTurn(speaker=speaker, text=text)
+        Handles variable wrapper depth — the AXTextArea may be a direct
+        child or nested inside one or more AXGroup wrappers.  Only
+        recurses into AXGroup elements to avoid wandering into unrelated
+        subtrees.
+        """
+        if depth > max_depth:
+            return ""
+        children = ax_get_attribute(element, "AXChildren")
+        if not children:
+            return ""
+        for child in children:
+            role = ax_get_attribute(child, "AXRole") or ""
+            if role == "AXTextArea":
+                val = ax_get_attribute(child, "AXValue")
+                if isinstance(val, str) and val.strip():
+                    return val.strip()
+            # Recurse into AXGroup wrappers only
+            if role == "AXGroup":
+                result = IMessageExtractor._find_textarea_value(
+                    child, max_depth, depth + 1
+                )
+                if result:
+                    return result
+        return ""
 
 
 # --- Registry ---

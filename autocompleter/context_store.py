@@ -430,7 +430,10 @@ class ContextStore:
                     fallback_parts.append(entry.content)
                     total += len(entry.content)
             if fallback_parts:
-                parts.append("Recent visible text:\n" + "\n".join(fallback_parts))
+                parts.append(
+                    "Visible page content (no conversation detected):\n"
+                    + "\n".join(fallback_parts)
+                )
 
         # Tier 1.5: semantic context (optional)
         if use_semantic_context and embedding_provider is not None:

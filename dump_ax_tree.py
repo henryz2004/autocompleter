@@ -23,71 +23,8 @@ from ApplicationServices import (
     AXUIElementCreateApplication,
     AXUIElementCreateSystemWide,
 )
-from autocompleter.ax_utils import ax_get_attribute, ax_get_pid
+from autocompleter.ax_utils import ax_get_attribute, dump_ax_tree
 from autocompleter.hotkey import HotkeyListener
-
-
-def dump_tree(
-    element,
-    out,
-    max_depth: int = 12,
-    max_children: int = 50,
-    depth: int = 0,
-    path: str = "",
-):
-    """Recursively dump the AX tree with all useful attributes."""
-    if depth > max_depth:
-        out.write(f"{'  ' * depth}... (depth limit {max_depth})\n")
-        return
-
-    role = ax_get_attribute(element, "AXRole") or "?"
-    subrole = ax_get_attribute(element, "AXSubrole")
-    value = ax_get_attribute(element, "AXValue")
-    title = ax_get_attribute(element, "AXTitle")
-    desc = ax_get_attribute(element, "AXDescription")
-    role_desc = ax_get_attribute(element, "AXRoleDescription")
-    placeholder = ax_get_attribute(element, "AXPlaceholderValue")
-    num_chars = ax_get_attribute(element, "AXNumberOfCharacters")
-    children = ax_get_attribute(element, "AXChildren") or []
-    n_children = len(children) if children else 0
-
-    # Build attribute string
-    attrs = []
-    if isinstance(value, str):
-        display = value.replace("\n", "\\n")
-        if len(display) > 120:
-            display = display[:120] + "..."
-        attrs.append(f'val="{display}"')
-    elif value is not None:
-        attrs.append(f"val=({type(value).__name__})")
-    if isinstance(title, str) and title.strip():
-        attrs.append(f'title="{title[:80]}"')
-    if isinstance(desc, str) and desc.strip():
-        attrs.append(f'desc="{desc[:80]}"')
-    if subrole:
-        attrs.append(f"subrole={subrole}")
-    if isinstance(role_desc, str) and role_desc.strip():
-        attrs.append(f'rdesc="{role_desc}"')
-    if placeholder is not None:
-        attrs.append(f'placeholder="{placeholder}"')
-    if num_chars is not None:
-        attrs.append(f"numChars={num_chars}")
-
-    indent = "  " * depth
-    attr_str = "  " + " | ".join(attrs) if attrs else ""
-    node_path = f"{path}/{role}" if path else role
-    out.write(f"{indent}[{depth}] {role} ({n_children} ch){attr_str}\n")
-
-    if children:
-        for i, child in enumerate(children[:max_children]):
-            dump_tree(
-                child, out, max_depth, max_children,
-                depth + 1, f"{node_path}[{i}]",
-            )
-        if len(children) > max_children:
-            out.write(
-                f"{indent}  ... +{len(children) - max_children} more children\n"
-            )
 
 
 def dump_focused_element(out):
@@ -122,7 +59,7 @@ def dump_focused_element(out):
     children = ax_get_attribute(focused, "AXChildren") or []
     if children:
         for child in children[:20]:
-            dump_tree(child, out, max_depth=4, max_children=10, depth=2)
+            dump_ax_tree(child, out, max_depth=4, max_children=10, depth=2)
     else:
         out.write("    (no children)\n")
 
@@ -166,7 +103,7 @@ def on_trigger(out_path: str | None, max_depth: int):
         f.write("\n")
 
         f.write(f"--- FULL WINDOW TREE (max_depth={max_depth}) ---\n")
-        dump_tree(window, f, max_depth=max_depth)
+        dump_ax_tree(window, f, max_depth=max_depth)
         f.write("\n")
 
         f.flush()

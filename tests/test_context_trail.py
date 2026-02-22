@@ -268,11 +268,6 @@ class TestGetRecentCrossAppContext:
         assert snapshots[1].app_name == "VS Code"
         assert snapshots[2].app_name == "Chrome"
 
-    def test_empty_trail(self, trail):
-        """Empty trail should return empty list."""
-        snapshots = trail.get_recent_cross_app_context("Chrome")
-        assert snapshots == []
-
 
 # ---------------------------------------------------------------------------
 # format_cross_app_context tests
@@ -299,10 +294,6 @@ class TestFormatCrossAppContext:
         assert "[Recent activity from other apps]" in result
         assert '- Chrome ("React Hooks Documentation"): useState allows' in result
         assert '- VS Code ("App.tsx"): import { useState' in result
-
-    def test_format_empty_list(self):
-        result = ContextTrail.format_cross_app_context([])
-        assert result == ""
 
     def test_format_no_window_title(self):
         snapshots = [

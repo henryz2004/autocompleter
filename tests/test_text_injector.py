@@ -386,3 +386,16 @@ class TestEdgeCases:
             result = injector._inject_via_ax("hello", insertion_point=0)
         assert result is True
         assert captured["AXValue"] == "hello"
+
+    def test_inject_unicode_text(self, injector):
+        """Unicode text should be injected correctly."""
+        get, set_, settable, focused, captured = _make_ax_mocks(
+            current_value="\u4f60\u597d"
+        )
+        with patch("autocompleter.text_injector.ax_get_attribute", side_effect=get), \
+             patch("autocompleter.text_injector.ax_set_attribute", side_effect=set_), \
+             patch("autocompleter.text_injector.ax_is_attribute_settable", side_effect=settable), \
+             patch("autocompleter.text_injector.ApplicationServices", MagicMock()):
+            result = injector._inject_via_ax("\u4e16\u754c", insertion_point=2)
+        assert result is True
+        assert captured["AXValue"] == "\u4f60\u597d\u4e16\u754c"
