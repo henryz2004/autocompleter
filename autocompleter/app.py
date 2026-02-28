@@ -39,6 +39,48 @@ from .suggestion_engine import AutocompleteMode, Suggestion, SuggestionEngine, d
 from .text_injector import TextInjector
 
 
+class _Debouncer:
+    """Single-thread debouncer. poke() resets the deadline; fires callback after delay."""
+
+    def __init__(self, delay_s: float, callback):
+        self._delay = delay_s
+        self._callback = callback
+        self._deadline: float = 0.0       # monotonic timestamp; 0 = disarmed
+        self._event = threading.Event()    # wakes the thread on poke/stop
+        self._stopped = False
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()
+
+    def poke(self) -> None:
+        """Called on each keystroke — resets the deadline."""
+        self._deadline = time.monotonic() + self._delay
+        self._event.set()
+
+    def cancel(self) -> None:
+        """Cancel pending trigger without stopping the thread."""
+        self._deadline = 0.0
+
+    def stop(self) -> None:
+        """Permanently stop the debouncer thread."""
+        self._stopped = True
+        self._deadline = 0.0
+        self._event.set()
+
+    def _loop(self) -> None:
+        while not self._stopped:
+            self._event.wait()          # block until poke() or stop()
+            self._event.clear()
+            while not self._stopped and self._deadline > 0:
+                remaining = self._deadline - time.monotonic()
+                if remaining <= 0:
+                    self._deadline = 0.0
+                    self._callback()
+                    break
+                # Sleep until deadline OR a new poke resets it
+                self._event.wait(timeout=remaining)
+                self._event.clear()
+
+
 def _get_caret_screen_position() -> tuple[float, float, float] | None:
     """Try to get the text cursor (caret) position on screen.
 
@@ -164,6 +206,14 @@ class Autocompleter:
         self._last_observed_app: str = ""
         self._last_observed_window: str = ""
 
+        # Auto-trigger state
+        self._auto_trigger_enabled: bool = self.config.auto_trigger_enabled
+        self._last_dismiss_time: float = 0.0
+        self._auto_trigger_debouncer = _Debouncer(
+            delay_s=self.config.auto_trigger_delay_ms / 1000.0,
+            callback=lambda: self._run_on_main(self._fire_auto_trigger),
+        )
+
     def start(self) -> None:
         """Start the autocompleter."""
         logger.info("Starting autocompleter...")
@@ -197,9 +247,28 @@ class Autocompleter:
         if pruned:
             logger.info(f"Pruned {pruned} old context entries")
 
+        # Wire up click-outside-to-dismiss (reuses existing dismiss logic)
+        def _click_dismiss():
+            self._on_nav_dismiss()
+        self.overlay.set_dismiss_callback(_click_dismiss)
+
+        # Dismiss overlay when user starts typing (any non-hotkey keydown),
+        # and poke the auto-trigger debouncer.
+        def _on_typing():
+            if self.overlay.is_visible:
+                self._on_nav_dismiss()
+            if self._auto_trigger_enabled:
+                cooldown_ok = (time.time() - self._last_dismiss_time) * 1000 >= self.config.auto_trigger_cooldown_ms
+                if cooldown_ok:
+                    self._auto_trigger_debouncer.poke()
+        self.hotkey_listener.set_unhandled_key_callback(_on_typing)
+
         # Register hotkeys — callbacks return True to suppress, False to pass through
         self.hotkey_listener.register(
             self.config.hotkey, self._on_trigger
+        )
+        self.hotkey_listener.register(
+            f"shift+{self.config.hotkey}", self._on_toggle_auto_trigger
         )
         self.hotkey_listener.register("up", self._on_nav_up)
         self.hotkey_listener.register("down", self._on_nav_down)
@@ -218,11 +287,14 @@ class Autocompleter:
         )
         self._observer_thread.start()
 
+        auto_state = "ON" if self._auto_trigger_enabled else "OFF"
         logger.info(
             f"Autocompleter running. Trigger: {self.config.hotkey} | "
+            f"Auto-trigger: {auto_state} | "
             f"Provider: {self.config.llm_provider} | Model: {self.config.llm_model}"
         )
         print(f"Autocompleter running. Press {self.config.hotkey} to get suggestions.")
+        print(f"Press Shift+{self.config.hotkey} to toggle auto-trigger (currently {auto_state}).")
         print("Press Ctrl+C to exit.")
 
         # Run the main application loop
@@ -235,6 +307,7 @@ class Autocompleter:
         """Stop the autocompleter."""
         logger.info("Stopping autocompleter...")
         self._running = False
+        self._auto_trigger_debouncer.stop()
         self.hotkey_listener.stop()
         self.overlay.hide()
         self.context_store.close()
@@ -251,13 +324,22 @@ class Autocompleter:
 
         signal.signal(signal.SIGINT, signal_handler)
 
-        # Run the loop in short intervals, draining the main queue each tick
+        # Pump NSApplication events properly so that global event monitors
+        # (e.g. the click-outside-to-dismiss monitor on the overlay) receive
+        # their callbacks.  NSRunLoop.runUntilDate_ alone does not dispatch
+        # NSApplication-level events like global mouse monitors.
+        mask = getattr(AppKit, "NSEventMaskAny", AppKit.NSAnyEventMask)
         try:
             while self._running:
                 self._drain_main_queue()
-                AppKit.NSRunLoop.currentRunLoop().runUntilDate_(
-                    AppKit.NSDate.dateWithTimeIntervalSinceNow_(0.05)
+                event = app.nextEventMatchingMask_untilDate_inMode_dequeue_(
+                    mask,
+                    AppKit.NSDate.dateWithTimeIntervalSinceNow_(0.05),
+                    AppKit.NSDefaultRunLoopMode,
+                    True,
                 )
+                if event is not None:
+                    app.sendEvent_(event)
         except KeyboardInterrupt:
             self.stop()
 
@@ -415,11 +497,14 @@ class Autocompleter:
         immediately — macOS will disable the tap if it blocks for >1s.
         The actual LLM call is dispatched to a worker thread.
         """
+        self._auto_trigger_debouncer.cancel()
         logger.info("--- TRIGGER ---")
         self._trigger_time = time.time()
 
         if self.overlay.is_visible:
             logger.debug("Overlay visible, hiding it")
+            # Bump generation_id so any in-flight LLM stream is discarded
+            self._generation_id += 1
             self._run_on_main(self.overlay.hide)
             return True
 
@@ -427,6 +512,19 @@ class Autocompleter:
         focused = self.observer.get_focused_element()
         if focused is None:
             logger.info("No focused text element found")
+            return True
+
+        # Skip non-editable elements. AXWebArea and AXGroup can be either
+        # contenteditable inputs or read-only content areas. If the value is
+        # empty and no placeholder was detected, it's almost certainly a
+        # read-only area (e.g. conversation view) — not a text input.
+        _AMBIGUOUS_ROLES = {"AXWebArea", "AXGroup"}
+        if (focused.role in _AMBIGUOUS_ROLES
+                and not focused.value.strip()
+                and not focused.placeholder_detected):
+            logger.info(
+                f"Focused element role={focused.role!r} has no editable content, skipping"
+            )
             return True
 
         # Remember whether the field has a baked-in placeholder so the
@@ -493,7 +591,9 @@ class Autocompleter:
         # The observer loop polls dynamically, so if the cache is younger
         # than the current poll interval, an AX tree re-traversal is redundant.
         cache_age = time.time() - self._last_visible_content_time
-        if self._last_visible_content is not None and cache_age < self._current_poll_interval:
+        if (self._last_visible_content is not None
+                and cache_age < self._current_poll_interval
+                and self._last_visible_content.app_name == focused.app_name):
             visible = self._last_visible_content
             logger.debug(f"Using cached visible content ({cache_age:.1f}s old)")
         else:
@@ -810,6 +910,139 @@ class Autocompleter:
 
         self._current_suggestions = suggestions
 
+    def _fire_auto_trigger(self) -> None:
+        """Fire an auto-trigger suggestion (runs on main thread)."""
+        if not self._auto_trigger_enabled:
+            return
+        if self.overlay.is_visible:
+            return
+        # Recheck cooldown (dismiss may have happened while timer was sleeping)
+        cooldown_ms = (time.time() - self._last_dismiss_time) * 1000
+        if cooldown_ms < self.config.auto_trigger_cooldown_ms:
+            return
+
+        logger.info("--- AUTO-TRIGGER ---")
+        focused = self.observer.get_focused_element()
+        if focused is None:
+            logger.debug("Auto-trigger: no focused element")
+            return
+
+        _AMBIGUOUS_ROLES = {"AXWebArea", "AXGroup"}
+        if (focused.role in _AMBIGUOUS_ROLES
+                and not focused.value.strip()
+                and not focused.placeholder_detected):
+            logger.debug("Auto-trigger: non-editable element, skipping")
+            return
+
+        # Need some text to complete
+        if not focused.before_cursor.strip():
+            logger.debug("Auto-trigger: empty input, skipping")
+            return
+
+        self._replace_on_inject = focused.placeholder_detected
+        self._trigger_time = time.time()
+
+        mode = detect_mode(before_cursor=focused.before_cursor)
+        self._trigger_mode = mode.value
+        self._trigger_app = focused.app_name
+
+        caret_pos = _get_caret_screen_position()
+        caret_height = 20.0
+        if caret_pos:
+            x, y, caret_height = caret_pos
+            if focused.position and focused.size:
+                elem_bottom = focused.position[1] + focused.size[1]
+                if y < elem_bottom:
+                    y = elem_bottom
+        elif focused.position:
+            x, y = focused.position
+            if focused.size:
+                y += focused.size[1]
+        else:
+            x, y = 100.0, 100.0
+
+        # Show loading indicator
+        self.overlay.show(
+            [Suggestion(text="Generating...", index=0)], x, y,
+            caret_height=caret_height,
+        )
+
+        # Reuse cached visible content if fresh enough
+        cache_age = time.time() - self._last_visible_content_time
+        if (self._last_visible_content is not None
+                and cache_age < self._current_poll_interval
+                and self._last_visible_content.app_name == focused.app_name):
+            visible = self._last_visible_content
+        else:
+            visible = self.observer.get_visible_content()
+        window_title = visible.window_title if visible else ""
+        source_url = visible.url if visible else ""
+        visible_text_elements: list[str] = visible.text_elements if visible else []
+        conversation_turns = None
+        if visible and visible.conversation_turns:
+            conversation_turns = [
+                {"speaker": t.speaker, "text": t.text}
+                for t in visible.conversation_turns
+            ]
+
+        cross_app_snapshots = self.context_trail.get_recent_cross_app_context(
+            current_app=focused.app_name,
+            max_age_seconds=60.0,
+            max_entries=3,
+        )
+        cross_app_context = ContextTrail.format_cross_app_context(cross_app_snapshots)
+
+        self._generation_id += 1
+        gen_id = self._generation_id
+
+        threading.Thread(
+            target=self._generate_and_show_streaming,
+            args=(
+                focused, x, y, caret_height, mode,
+                window_title, source_url, conversation_turns,
+                visible_text_elements, gen_id, cross_app_context,
+            ),
+            daemon=True,
+        ).start()
+
+    def _on_toggle_auto_trigger(self) -> bool:
+        """Toggle auto-trigger mode on/off."""
+        self._auto_trigger_enabled = not self._auto_trigger_enabled
+        if not self._auto_trigger_enabled:
+            self._auto_trigger_debouncer.cancel()
+        state = "ON" if self._auto_trigger_enabled else "OFF"
+        logger.info(f"Auto-trigger toggled: {state}")
+        self._run_on_main(lambda: self._show_auto_toggle_feedback(state))
+        return True
+
+    def _show_auto_toggle_feedback(self, state: str) -> None:
+        """Briefly show auto-trigger toggle status near the caret."""
+        self.overlay.set_auto_trigger_active(self._auto_trigger_enabled)
+        feedback = Suggestion(text=f"Auto-trigger: {state}", index=0)
+        # Position near the caret
+        caret_pos = _get_caret_screen_position()
+        caret_height = 20.0
+        if caret_pos:
+            x, y, caret_height = caret_pos
+        else:
+            focused = self.observer.get_focused_element()
+            if focused and focused.position:
+                x, y = focused.position
+                if focused.size:
+                    y += focused.size[1]
+            else:
+                x, y = 200.0, 200.0
+        # Bump generation so the feedback won't be overwritten by stale LLM results
+        self._generation_id += 1
+        feedback_gen = self._generation_id
+        self.overlay.show([feedback], x, y, caret_height=caret_height)
+        # Schedule hide after 1 second, but only if nothing else has shown since
+        import Foundation
+        Foundation.NSTimer.scheduledTimerWithTimeInterval_repeats_block_(
+            1.0, False,
+            lambda timer: self.overlay.hide() if self._generation_id == feedback_gen else None,
+        )
+
     def _on_nav_up(self) -> bool:
         """Handle up arrow — only intercept when overlay is visible."""
         if not self.overlay.is_visible:
@@ -830,17 +1063,16 @@ class Autocompleter:
             return False
 
         def _accept():
-            # Capture the focused element BEFORE injection so we know the
-            # current cursor position. After injection the caret will have
-            # moved, so reading it afterward would give a stale value.
+            # Capture the focused element once BEFORE injection so we know
+            # the current cursor position, app name, and PID. Reading it
+            # twice risks the user switching apps between reads.
             focused = self.observer.get_focused_element()
             cursor_pos = focused.insertion_point if focused else None
+            app_name = focused.app_name if focused else "Unknown"
+            app_pid = focused.app_pid if focused else 0
 
             suggestion = self.overlay.accept_selection()
             if suggestion:
-                focused = self.observer.get_focused_element()
-                app_name = focused.app_name if focused else "Unknown"
-                app_pid = focused.app_pid if focused else 0
                 success = self.injector.inject(
                     suggestion.text,
                     replace=self._replace_on_inject,
@@ -925,9 +1157,18 @@ class Autocompleter:
         return True
 
     def _on_nav_dismiss(self) -> bool:
-        """Handle escape — only intercept when overlay is visible."""
+        """Handle escape / click-outside / typing — only intercept when overlay is visible."""
         if not self.overlay.is_visible:
             return False
+
+        # Cancel any pending auto-trigger
+        self._auto_trigger_debouncer.cancel()
+
+        # Record dismiss time for auto-trigger cooldown
+        self._last_dismiss_time = time.time()
+
+        # Bump generation_id so any in-flight LLM stream is discarded
+        self._generation_id += 1
 
         # Record dismissed feedback for all currently shown suggestions
         def _dismiss():
