@@ -418,14 +418,19 @@ class ContextStore:
         if memory_context:
             parts.append(memory_context)
 
-        # Tier 1: subtree context (primary — includes AXDescription with
-        # speaker labels and timestamps baked in by the OS accessibility layer).
+        # Tier 1: speaker-labeled conversation turns (primary).
+        # Conversation extractors identify who said what (User vs Claude /
+        # ChatGPT / Gemini, etc.) via app-specific heuristics (feedback
+        # buttons, action groups, heading text).  This speaker attribution
+        # is *critical* for reply mode — without it the LLM mimics the
+        # dominant voice (usually the AI assistant) instead of the user.
+        #
+        # Subtree context (XML from walking near the focused element) is
+        # rich in visual detail but strips all speaker signals (buttons
+        # are in CHROME_ROLES).  It serves as fallback when extractors
+        # fail or the app has no conversation structure.
         turns = conversation_turns[-max_turns:]
-        if subtree_context:
-            parts.append(f"Nearby content:\n{subtree_context}")
-        elif turns:
-            # Fallback: per-app conversation extractors (when subtree walker
-            # couldn't find a focused element or returned nothing).
+        if turns:
             turn_lines = []
             for turn in turns:
                 speaker = turn.get("speaker", "Unknown")
@@ -436,6 +441,10 @@ class ContextStore:
                 else:
                     turn_lines.append(f"- {speaker}: {text}")
             parts.append("Conversation:\n" + "\n".join(turn_lines))
+        elif subtree_context:
+            # Fallback: subtree context (when conversation extractors
+            # couldn't identify structured turns — e.g. unknown app).
+            parts.append(f"Nearby content:\n{subtree_context}")
         else:
             # Fallback 1: live visible text from the current window
             fallback_parts: list[str] = []

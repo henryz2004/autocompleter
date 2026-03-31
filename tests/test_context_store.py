@@ -252,6 +252,42 @@ class TestContextStore:
         )
         assert "Visible page content (no conversation detected):" not in context
 
+    def test_reply_context_prioritizes_turns_over_subtree(self, store):
+        """When both conversation_turns and subtree_context are provided,
+        conversation_turns (with speaker labels) should take priority.
+
+        Subtree context strips buttons (CHROME_ROLES) which are the only
+        signal distinguishing user from assistant messages, so speaker-labeled
+        turns must win to prevent the LLM from mimicking the wrong voice.
+        """
+        turns = [
+            {"speaker": "Claude", "text": "What would you like help with?"},
+            {"speaker": "User", "text": "I need to debug my code"},
+        ]
+        subtree_xml = "<StaticText>What would you like help with?</StaticText>"
+        context = store.get_reply_context(
+            conversation_turns=turns,
+            source_app="Claude",
+            subtree_context=subtree_xml,
+        )
+        assert "Conversation:" in context
+        assert "- Claude: What would you like help with?" in context
+        assert "- User: I need to debug my code" in context
+        assert "Nearby content:" not in context
+        assert subtree_xml not in context
+
+    def test_reply_context_falls_back_to_subtree_without_turns(self, store):
+        """When conversation_turns is empty, subtree_context should be used."""
+        subtree_xml = "<StaticText>Welcome to the app</StaticText>"
+        context = store.get_reply_context(
+            conversation_turns=[],
+            source_app="UnknownApp",
+            subtree_context=subtree_xml,
+        )
+        assert "Nearby content:" in context
+        assert subtree_xml in context
+        assert "Conversation:" not in context
+
     def test_reply_context_limits_turns(self, store):
         turns = [
             {"speaker": f"User{i}", "text": f"Message {i}"}
