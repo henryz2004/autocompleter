@@ -418,9 +418,14 @@ class ContextStore:
         if memory_context:
             parts.append(memory_context)
 
-        # Tier 1: conversation turns
+        # Tier 1: subtree context (primary — includes AXDescription with
+        # speaker labels and timestamps baked in by the OS accessibility layer).
         turns = conversation_turns[-max_turns:]
-        if turns:
+        if subtree_context:
+            parts.append(f"Nearby content:\n{subtree_context}")
+        elif turns:
+            # Fallback: per-app conversation extractors (when subtree walker
+            # couldn't find a focused element or returned nothing).
             turn_lines = []
             for turn in turns:
                 speaker = turn.get("speaker", "Unknown")
@@ -431,9 +436,6 @@ class ContextStore:
                 else:
                     turn_lines.append(f"- {speaker}: {text}")
             parts.append("Conversation:\n" + "\n".join(turn_lines))
-        elif subtree_context:
-            # Subtree walker captured structured content near the input
-            parts.append(f"Nearby content:\n{subtree_context}")
         else:
             # Fallback 1: live visible text from the current window
             fallback_parts: list[str] = []
@@ -506,7 +508,7 @@ class ContextStore:
         # Diagnostic: warn if visible_text was provided but didn't make it
         # into the context (helps catch flow bugs where text is found but lost)
         if visible_text and any(v.strip() for v in visible_text):
-            if "Visible page content" not in context and "Conversation:" not in context:
+            if "Visible page content" not in context and "Conversation:" not in context and "Nearby content:" not in context:
                 logger.warning(
                     "[CTX] visible_text had %d elements but none appeared in "
                     "reply context (%d chars). conversation_turns=%d",

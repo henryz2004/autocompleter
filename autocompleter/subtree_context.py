@@ -203,6 +203,11 @@ def subtree_to_xml(
         attrs: list[str] = []
         if has_title and title.strip() != text:
             attrs.append(f'title="{_esc(title.strip()[:100])}"')
+        # AXDescription often carries speaker/timestamp metadata in chat apps
+        # (e.g. "Your iMessage, Hello, 3:15 PM" or "Daniel, Hi there, 3:04 PM").
+        desc = node.get("description", "")
+        if isinstance(desc, str) and desc.strip() and desc.strip() != text:
+            attrs.append(f'desc="{_esc(desc.strip()[:200])}"')
         if is_focused:
             attrs.append('focused="true"')
         attr_str = (" " + " ".join(attrs)) if attrs else ""
@@ -212,6 +217,9 @@ def subtree_to_xml(
     attrs = []
     if has_title:
         attrs.append(f'title="{_esc(title.strip()[:100])}"')
+    desc = node.get("description", "")
+    if isinstance(desc, str) and desc.strip():
+        attrs.append(f'desc="{_esc(desc.strip()[:200])}"')
     attr_str = (" " + " ".join(attrs)) if attrs else ""
 
     if not child_xmls:
