@@ -26,7 +26,7 @@ except ImportError:
 
 from .config import Config, load_config
 from .context_store import ContextStore
-from .context_trail import ContextTrail
+from .context_trail import ContextTrail, _filter_ui_chrome
 from .embeddings import (
     AnthropicEmbeddingProvider,
     OpenAIEmbeddingProvider,
@@ -34,9 +34,18 @@ from .embeddings import (
 )
 from .hotkey import HotkeyListener
 from .input_observer import InputObserver, VisibleContent
+from .latency_tracker import LatencyStore, LatencyTracker
 from .overlay import OverlayConfig, SuggestionOverlay
-from .suggestion_engine import AutocompleteMode, Suggestion, SuggestionEngine, detect_mode
+from .shell_parser import parse_terminal_buffer, parse_tui_buffer
+from .suggestion_engine import AutocompleteMode, Suggestion, SuggestionEngine, detect_mode, is_shell_app
+from .memory import MemoryStore
 from .text_injector import TextInjector
+from .trigger_dump import TriggerDumper, TriggerSnapshot
+
+# Max chars of terminal buffer to send as context for TUI (non-shell) apps.
+# Shell parser uses 1500 for structured history; 3000 gives ~50-60 lines of
+# unstructured conversation context without the 145K+ noise from full buffers.
+_TUI_CONTEXT_TAIL_CHARS = 3000
 
 
 class _Debouncer:
@@ -131,11 +140,14 @@ def _get_caret_screen_position() -> tuple[float, float, float] | None:
                 f"Caret rect: x={rect.origin.x:.0f} y={rect.origin.y:.0f} "
                 f"w={rect.size.width:.0f} h={rect.size.height:.0f}"
             )
-            # Validate: reject degenerate rects (zero size or negative coords)
-            if rect.size.height > 0 and rect.origin.x > 0 and rect.origin.y >= 0:
-                return (rect.origin.x, rect.origin.y + rect.size.height, rect.size.height)
+            # Validate: reject rects with invalid coordinates, but accept
+            # zero-height rects (Chromium sometimes reports h=0 with valid x,y).
+            _DEFAULT_CARET_HEIGHT = 20.0
+            if rect.origin.x > 0 and rect.origin.y >= 0:
+                height = rect.size.height if rect.size.height > 0 else _DEFAULT_CARET_HEIGHT
+                return (rect.origin.x, rect.origin.y + height, height)
             else:
-                logger.debug("Caret rect is degenerate, ignoring")
+                logger.debug("Caret rect has invalid coordinates, ignoring")
         else:
             logger.debug("Caret: AXValueGetValue failed")
     except Exception:
@@ -147,8 +159,9 @@ def _get_caret_screen_position() -> tuple[float, float, float] | None:
 class Autocompleter:
     """Main application class that orchestrates all components."""
 
-    def __init__(self, config: Config | None = None):
+    def __init__(self, config: Config | None = None, dump_dir: str | None = None):
         self.config = config or load_config()
+        self._dumper: TriggerDumper | None = TriggerDumper(dump_dir) if dump_dir else None
 
         self.context_store = ContextStore(self.config.db_path)
         self.observer = InputObserver()
@@ -164,6 +177,7 @@ class Autocompleter:
         self.injector = TextInjector()
         self.hotkey_listener = HotkeyListener()
         self.context_trail = ContextTrail()
+        self.memory = MemoryStore(self.config)
 
         # Initialize embedding provider for semantic context
         self._embedding_provider = None
@@ -194,6 +208,9 @@ class Autocompleter:
         self._trigger_time: float | None = None  # Timestamp of last trigger for latency tracking
         self._trigger_mode: str = "continuation"  # Mode used for the current suggestions
         self._trigger_app: str = "Unknown"  # App name for the current suggestions
+        self._latency_tracker = LatencyTracker()
+        self._latency_store = LatencyStore(self.config.data_dir / "context.db")
+        self._trigger_before_cursor: str = ""  # before_cursor at trigger time (for leading-space stripping)
 
         # Observer loop state
         self._observe_iteration: int = 0  # Counter for periodic pruning
@@ -256,11 +273,9 @@ class Autocompleter:
         # and poke the auto-trigger debouncer.
         def _on_typing():
             if self.overlay.is_visible:
-                self._on_nav_dismiss()
+                self._on_nav_dismiss(set_cooldown=False)
             if self._auto_trigger_enabled:
-                cooldown_ok = (time.time() - self._last_dismiss_time) * 1000 >= self.config.auto_trigger_cooldown_ms
-                if cooldown_ok:
-                    self._auto_trigger_debouncer.poke()
+                self._auto_trigger_debouncer.poke()
         self.hotkey_listener.set_unhandled_key_callback(_on_typing)
 
         # Register hotkeys — callbacks return True to suppress, False to pass through
@@ -500,6 +515,8 @@ class Autocompleter:
         self._auto_trigger_debouncer.cancel()
         logger.info("--- TRIGGER ---")
         self._trigger_time = time.time()
+        self._latency_tracker.start(generation_id=self._generation_id + 1)
+        self._latency_tracker.mark("trigger")
 
         if self.overlay.is_visible:
             logger.debug("Overlay visible, hiding it")
@@ -527,10 +544,18 @@ class Autocompleter:
             )
             return True
 
+        # Remember before_cursor at trigger time for leading-space stripping on accept
+        self._trigger_before_cursor = focused.before_cursor
+
         # Remember whether the field has a baked-in placeholder so the
         # injector can skip AXValue setting (which bypasses the web app's
         # placeholder-clearing JS) and use clipboard/keystrokes instead.
         self._replace_on_inject = focused.placeholder_detected
+
+        # Force clipboard/keystroke injection for terminals — AX value
+        # setting would replace the entire terminal buffer.
+        if is_shell_app(focused.app_name):
+            self._replace_on_inject = True
 
         logger.info(
             f"Focused: app={focused.app_name!r} role={focused.role} "
@@ -587,6 +612,15 @@ class Autocompleter:
             caret_height=caret_height,
         ))
 
+        # Fetch subtree context (XML from walking up from focused element).
+        # Done before visible content because it's fast and more reliable.
+        subtree_context = self.observer.get_subtree_context(token_budget=500)
+        if subtree_context:
+            logger.info(
+                f"[CTX] Subtree context: {len(subtree_context)} chars "
+                f"(~{len(subtree_context) // 4} tokens)"
+            )
+
         # Reuse cached visible content if fresh enough, otherwise re-fetch.
         # The observer loop polls dynamically, so if the cache is younger
         # than the current poll interval, an AX tree re-traversal is redundant.
@@ -604,6 +638,13 @@ class Autocompleter:
         conversation_turns = None
         if visible:
             visible_text_elements = visible.text_elements or []
+            # Filter UI chrome (buttons, sidebar labels, status indicators) from
+            # visible text before it reaches the LLM context.
+            if visible_text_elements:
+                filtered = _filter_ui_chrome("\n".join(visible_text_elements))
+                visible_text_elements = [
+                    line for line in filtered.split("\n") if line.strip()
+                ]
             logger.info(
                 f"[CTX] Window: {visible.window_title!r} | URL: {visible.url!r} | "
                 f"text_elements: {len(visible_text_elements)} | "
@@ -611,11 +652,12 @@ class Autocompleter:
             )
             if visible.conversation_turns:
                 conversation_turns = [
-                    {"speaker": t.speaker, "text": t.text}
+                    {"speaker": t.speaker, "text": t.text, "timestamp": t.timestamp}
                     for t in visible.conversation_turns
                 ]
                 for i, t in enumerate(visible.conversation_turns):
-                    logger.debug(f"[CTX]   Turn [{i}]: {t.speaker}: {t.text[:100]!r}")
+                    ts_info = f" [{t.timestamp}]" if t.timestamp else ""
+                    logger.debug(f"[CTX]   Turn [{i}]: {t.speaker}{ts_info}: {t.text[:100]!r}")
             # Log a sample of visible text elements
             for i, elem in enumerate(visible_text_elements[:10]):
                 logger.debug(f"[CTX]   Visible text [{i}]: {elem[:120]!r}")
@@ -659,6 +701,27 @@ class Autocompleter:
         self._generation_id += 1
         gen_id = self._generation_id
 
+        # Build trigger dump snapshot if dumping is enabled
+        snapshot: TriggerSnapshot | None = None
+        if self._dumper:
+            snapshot = self._dumper.new_snapshot(gen_id)
+            snapshot.app_name = focused.app_name
+            snapshot.window_title = window_title
+            snapshot.source_url = source_url
+            snapshot.role = focused.role
+            snapshot.before_cursor = focused.before_cursor
+            snapshot.after_cursor = focused.after_cursor
+            snapshot.insertion_point = focused.insertion_point
+            snapshot.value_length = len(focused.value)
+            snapshot.placeholder_detected = focused.placeholder_detected
+            snapshot.visible_text_elements = list(visible_text_elements or [])
+            if conversation_turns:
+                snapshot.conversation_turns = list(conversation_turns)
+                snapshot.has_conversation_turns = True
+                snapshot.conversation_turn_count = len(conversation_turns)
+            # Capture AX tree on a background thread to avoid blocking the tap
+            self._dumper.capture_ax_tree(snapshot)
+
         # Dispatch the LLM call to a worker thread so we don't block the tap.
         # Use the streaming path by default for faster perceived response.
         threading.Thread(
@@ -667,6 +730,7 @@ class Autocompleter:
                 focused, x, y, caret_height, mode,
                 window_title, source_url, conversation_turns,
                 visible_text_elements, gen_id, cross_app_context,
+                snapshot, subtree_context,
             ),
             daemon=True,
         ).start()
@@ -685,6 +749,7 @@ class Autocompleter:
         visible_text_elements: list[str] | None = None,
         generation_id: int = 0,
         cross_app_context: str = "",
+        subtree_context: str | None = None,
     ) -> None:
         """Run the LLM call on a worker thread and show the overlay."""
         app_name = focused.app_name
@@ -693,10 +758,74 @@ class Autocompleter:
         if mode is None:
             mode = detect_mode(before_cursor=focused.before_cursor)
 
-        # Assemble context based on mode
-        if mode == AutocompleteMode.CONTINUATION:
+        # Terminal context detection: TUI first, then shell.
+        # TUI detection must run before shell detection because in tmux
+        # split-pane layouts, _strip_tmux_split_panes may pick the wrong
+        # pane — if it picks the shell pane, parse_terminal_buffer sees a
+        # prompt and we'd never try TUI detection.
+        use_shell = False
+        use_tui = False
+        effective_before_cursor = focused.before_cursor
+        # Search long-term memory for relevant context (before shell/mode detection
+        # so memory is available for all paths including shell context).
+        memory_context = ""
+        if self.memory.enabled:
+            query = effective_before_cursor.strip()[-200:]
+            if query:
+                memories = self.memory.search(query, limit=3)
+                memory_context = self.memory.format_for_context(memories)
+                if memory_context:
+                    logger.info(
+                        f"[MEM] Retrieved {len(memories)} memories "
+                        f"({len(memory_context)} chars)"
+                    )
+
+        if is_shell_app(app_name):
+            # Try TUI detection first (e.g. Claude Code running inside terminal)
+            tui = parse_tui_buffer(focused.before_cursor, focused.after_cursor)
+            if tui.is_tui:
+                use_tui = True
+                logger.info(f"[CTX] TUI detected: {tui.tui_name} | user_input={len(tui.user_input)} chars | turns={len(tui.conversation_turns)}")
+                effective_before_cursor = tui.user_input
+                # Always use reply mode for TUI apps — the user is composing
+                # a message to an AI agent, not continuing prose.
+                mode = AutocompleteMode.REPLY
+                # Use conversation turns from the TUI
+                if not conversation_turns and tui.conversation_turns:
+                    conversation_turns = tui.conversation_turns
+            else:
+                # Fall back to shell detection
+                parsed = parse_terminal_buffer(focused.before_cursor)
+                if parsed.is_likely_shell_context:
+                    use_shell = True
+                    context = self.context_store.get_shell_context(
+                        parsed=parsed,
+                        source_app=app_name,
+                        window_title=window_title,
+                        cross_app_context=cross_app_context,
+                        memory_context=memory_context,
+                    )
+                    mode = AutocompleteMode.CONTINUATION if parsed.current_command.strip() else AutocompleteMode.REPLY
+                else:
+                    logger.info("[CTX] Terminal detected but not at shell prompt — using generic mode")
+                    # Trim to tail to avoid sending 145K+ chars of terminal buffer
+                    effective_before_cursor = focused.before_cursor[-_TUI_CONTEXT_TAIL_CHARS:]
+
+        # Messaging apps: force reply mode and suppress raw visible text when
+        # structured conversation turns were extracted.  The user is composing a
+        # message in a chat, not continuing prose.
+        if not use_shell and not use_tui and conversation_turns:
+            mode = AutocompleteMode.REPLY
+            visible_text_elements = []
+            logger.info(
+                f"[CTX] Messaging app detected with {len(conversation_turns)} turns — "
+                f"forcing reply mode, suppressing raw visible text"
+            )
+
+        # Standard context assembly based on mode
+        if not use_shell and mode == AutocompleteMode.CONTINUATION:
             context = self.context_store.get_continuation_context(
-                before_cursor=focused.before_cursor,
+                before_cursor=effective_before_cursor,
                 after_cursor=focused.after_cursor,
                 source_app=app_name,
                 window_title=window_title,
@@ -705,18 +834,25 @@ class Autocompleter:
                 embedding_provider=self._embedding_provider,
                 use_semantic_context=self.config.use_semantic_context,
                 cross_app_context=cross_app_context,
+                subtree_context=subtree_context,
+                memory_context=memory_context,
             )
-        else:
+        elif not use_shell:
+            # For TUI apps, suppress visible text and semantic context —
+            # the observer stores raw terminal buffer (including adjacent
+            # tmux panes) in the DB which pollutes semantic search results.
             context = self.context_store.get_reply_context(
                 conversation_turns=conversation_turns or [],
                 source_app=app_name,
                 window_title=window_title,
                 source_url=source_url,
-                draft_text=focused.before_cursor if focused.insertion_point is not None else "",
-                visible_text=visible_text_elements,
+                draft_text=effective_before_cursor if focused.insertion_point is not None else "",
+                visible_text=visible_text_elements if not use_tui else [],
                 embedding_provider=self._embedding_provider,
-                use_semantic_context=self.config.use_semantic_context,
+                use_semantic_context=self.config.use_semantic_context and not use_tui,
                 cross_app_context=cross_app_context,
+                subtree_context=subtree_context if not use_tui else None,
+                memory_context=memory_context,
             )
 
         logger.info(
@@ -741,6 +877,9 @@ class Autocompleter:
             feedback_stats = None
             negative_patterns = None
 
+        self._latency_tracker.mark("context_ready")
+        self._latency_tracker.mark("llm_start")
+
         t0 = time.time()
         suggestions = self.suggestion_engine.generate_suggestions(
             current_input=current_input,
@@ -749,8 +888,14 @@ class Autocompleter:
             mode=mode,
             feedback_stats=feedback_stats,
             negative_patterns=negative_patterns,
+            shell_mode=use_shell,
         )
         elapsed = time.time() - t0
+
+        # Blocking path: first_suggestion and llm_done are the same moment
+        if suggestions:
+            self._latency_tracker.mark("first_suggestion")
+        self._latency_tracker.mark("llm_done")
 
         # Check if a newer trigger has superseded this one
         if generation_id != self._generation_id:
@@ -779,6 +924,16 @@ class Autocompleter:
                 self.overlay.show(suggestions, x, y, caret_height=caret_height)
 
         self._run_on_main(_show)
+        self._latency_tracker.mark("displayed")
+
+        record = self._latency_tracker.finish(
+            app_name=app_name,
+            mode=mode.value,
+            provider=self.config.llm_provider,
+            model=self.config.llm_model,
+            suggestion_count=len(suggestions),
+        )
+        self._latency_store.save(record)
 
     def _generate_and_show_streaming(
         self,
@@ -792,6 +947,8 @@ class Autocompleter:
         visible_text_elements: list[str] | None = None,
         generation_id: int = 0,
         cross_app_context: str = "",
+        snapshot: TriggerSnapshot | None = None,
+        subtree_context: str | None = None,
     ) -> None:
         """Run the streaming LLM call on a worker thread, updating the overlay incrementally."""
         app_name = focused.app_name
@@ -800,10 +957,75 @@ class Autocompleter:
         if mode is None:
             mode = detect_mode(before_cursor=focused.before_cursor)
 
-        # Assemble context based on mode
-        if mode == AutocompleteMode.CONTINUATION:
+        # Terminal context detection: TUI first, then shell.
+        # TUI detection must run before shell detection because in tmux
+        # split-pane layouts, _strip_tmux_split_panes may pick the wrong
+        # pane — if it picks the shell pane, parse_terminal_buffer sees a
+        # prompt and we'd never try TUI detection.
+        use_shell = False
+        use_tui = False
+        effective_before_cursor = focused.before_cursor
+
+        # Search long-term memory for relevant context (before shell/mode detection
+        # so memory is available for all paths including shell context).
+        memory_context = ""
+        if self.memory.enabled:
+            query = effective_before_cursor.strip()[-200:]
+            if query:
+                memories = self.memory.search(query, limit=3)
+                memory_context = self.memory.format_for_context(memories)
+                if memory_context:
+                    logger.info(
+                        f"[MEM] Retrieved {len(memories)} memories "
+                        f"({len(memory_context)} chars)"
+                    )
+
+        if is_shell_app(app_name):
+            # Try TUI detection first (e.g. Claude Code running inside terminal)
+            tui = parse_tui_buffer(focused.before_cursor, focused.after_cursor)
+            if tui.is_tui:
+                use_tui = True
+                logger.info(f"[CTX] TUI detected: {tui.tui_name} | user_input={len(tui.user_input)} chars | turns={len(tui.conversation_turns)}")
+                effective_before_cursor = tui.user_input
+                # Always use reply mode for TUI apps — the user is composing
+                # a message to an AI agent, not continuing prose.
+                mode = AutocompleteMode.REPLY
+                # Use conversation turns from the TUI
+                if not conversation_turns and tui.conversation_turns:
+                    conversation_turns = tui.conversation_turns
+            else:
+                # Fall back to shell detection
+                parsed = parse_terminal_buffer(focused.before_cursor)
+                if parsed.is_likely_shell_context:
+                    use_shell = True
+                    context = self.context_store.get_shell_context(
+                        parsed=parsed,
+                        source_app=app_name,
+                        window_title=window_title,
+                        cross_app_context=cross_app_context,
+                        memory_context=memory_context,
+                    )
+                    mode = AutocompleteMode.CONTINUATION if parsed.current_command.strip() else AutocompleteMode.REPLY
+                else:
+                    logger.info("[CTX] Terminal detected but not at shell prompt — using generic mode")
+                    # Trim to tail to avoid sending 145K+ chars of terminal buffer
+                    effective_before_cursor = focused.before_cursor[-_TUI_CONTEXT_TAIL_CHARS:]
+
+        # Messaging apps: force reply mode and suppress raw visible text when
+        # structured conversation turns were extracted.  The user is composing a
+        # message in a chat, not continuing prose.
+        if not use_shell and not use_tui and conversation_turns:
+            mode = AutocompleteMode.REPLY
+            visible_text_elements = []
+            logger.info(
+                f"[CTX] Messaging app detected with {len(conversation_turns)} turns — "
+                f"forcing reply mode, suppressing raw visible text"
+            )
+
+        # Standard context assembly based on mode
+        if not use_shell and mode == AutocompleteMode.CONTINUATION:
             context = self.context_store.get_continuation_context(
-                before_cursor=focused.before_cursor,
+                before_cursor=effective_before_cursor,
                 after_cursor=focused.after_cursor,
                 source_app=app_name,
                 window_title=window_title,
@@ -812,18 +1034,25 @@ class Autocompleter:
                 embedding_provider=self._embedding_provider,
                 use_semantic_context=self.config.use_semantic_context,
                 cross_app_context=cross_app_context,
+                subtree_context=subtree_context,
+                memory_context=memory_context,
             )
-        else:
+        elif not use_shell:
+            # For TUI apps, suppress visible text and semantic context —
+            # the observer stores raw terminal buffer (including adjacent
+            # tmux panes) in the DB which pollutes semantic search results.
             context = self.context_store.get_reply_context(
                 conversation_turns=conversation_turns or [],
                 source_app=app_name,
                 window_title=window_title,
                 source_url=source_url,
-                draft_text=focused.before_cursor if focused.insertion_point is not None else "",
-                visible_text=visible_text_elements,
+                draft_text=effective_before_cursor if focused.insertion_point is not None else "",
+                visible_text=visible_text_elements if not use_tui else [],
                 embedding_provider=self._embedding_provider,
-                use_semantic_context=self.config.use_semantic_context,
+                use_semantic_context=self.config.use_semantic_context and not use_tui,
                 cross_app_context=cross_app_context,
+                subtree_context=subtree_context if not use_tui else None,
+                memory_context=memory_context,
             )
 
         logger.info(
@@ -833,6 +1062,20 @@ class Autocompleter:
         for line in context.splitlines():
             logger.info(f"[CTX]   | {line}")
         logger.info("[CTX] --- END CONTEXT ---")
+
+        # Populate snapshot with detection results and context
+        if snapshot:
+            snapshot.mode = mode.value
+            snapshot.use_shell = use_shell
+            snapshot.use_tui = use_tui
+            if use_tui:
+                snapshot.tui_name = tui.tui_name
+                snapshot.tui_user_input = tui.user_input
+            snapshot.context = context
+            if conversation_turns:
+                snapshot.conversation_turns = list(conversation_turns)
+                snapshot.has_conversation_turns = True
+                snapshot.conversation_turn_count = len(conversation_turns)
 
         # Fetch feedback stats and dismissed patterns for suggestion tuning
         try:
@@ -847,6 +1090,9 @@ class Autocompleter:
             feedback_stats = None
             negative_patterns = None
 
+        self._latency_tracker.mark("context_ready")
+        self._latency_tracker.mark("llm_start")
+
         t0 = time.time()
         suggestions: list[Suggestion] = []
 
@@ -858,6 +1104,7 @@ class Autocompleter:
                 mode=mode,
                 feedback_stats=feedback_stats,
                 negative_patterns=negative_patterns,
+                shell_mode=use_shell,
             ):
                 # Check if a newer trigger has superseded this one
                 if generation_id != self._generation_id:
@@ -869,15 +1116,20 @@ class Autocompleter:
                     return
 
                 suggestions.append(suggestion)
+
+                # Mark first suggestion arrival (TTFT)
+                if len(suggestions) == 1:
+                    self._latency_tracker.mark("first_suggestion")
+
                 logger.info(
                     f"Stream [{generation_id}]: suggestion {suggestion.index} arrived "
                     f"({time.time() - t0:.2f}s): {suggestion.text[:80]!r}"
                 )
 
                 # Capture a snapshot of suggestions for the closure
-                snapshot = list(suggestions)
+                suggestions_snapshot = list(suggestions)
 
-                def _update(snp=snapshot):
+                def _update(snp=suggestions_snapshot):
                     if generation_id == self._generation_id:
                         self.overlay.show(snp, x, y, caret_height=caret_height)
 
@@ -887,6 +1139,7 @@ class Autocompleter:
             logger.exception(f"Error during streaming generation {generation_id}")
 
         elapsed = time.time() - t0
+        self._latency_tracker.mark("llm_done")
 
         # Final check: if superseded, discard
         if generation_id != self._generation_id:
@@ -899,7 +1152,13 @@ class Autocompleter:
         if not suggestions:
             logger.info(f"No suggestions from stream (took {elapsed:.2f}s)")
             self._run_on_main(self.overlay.hide)
+            # Save snapshot even with no suggestions (useful for debugging)
+            if snapshot and self._dumper:
+                snapshot.suggestion_latency_ms = elapsed * 1000
+                self._dumper.save(snapshot)
             return
+
+        self._latency_tracker.mark("displayed")
 
         logger.info(
             f"--- STREAM COMPLETE (gen={generation_id}, {elapsed:.2f}s, "
@@ -909,6 +1168,22 @@ class Autocompleter:
             logger.info(f"  [{i}]: {s.text[:120]}")
 
         self._current_suggestions = suggestions
+
+        # Save trigger dump with suggestions
+        if snapshot and self._dumper:
+            snapshot.suggestions = [s.text for s in suggestions]
+            snapshot.suggestion_latency_ms = elapsed * 1000
+            self._dumper.save(snapshot)
+
+        # Record latency metrics
+        record = self._latency_tracker.finish(
+            app_name=app_name,
+            mode=mode.value,
+            provider=self.config.llm_provider,
+            model=self.config.llm_model,
+            suggestion_count=len(suggestions),
+        )
+        self._latency_store.save(record)
 
     def _fire_auto_trigger(self) -> None:
         """Fire an auto-trigger suggestion (runs on main thread)."""
@@ -940,6 +1215,7 @@ class Autocompleter:
             return
 
         self._replace_on_inject = focused.placeholder_detected
+        self._trigger_before_cursor = focused.before_cursor
         self._trigger_time = time.time()
 
         mode = detect_mode(before_cursor=focused.before_cursor)
@@ -981,7 +1257,7 @@ class Autocompleter:
         conversation_turns = None
         if visible and visible.conversation_turns:
             conversation_turns = [
-                {"speaker": t.speaker, "text": t.text}
+                {"speaker": t.speaker, "text": t.text, "timestamp": t.timestamp}
                 for t in visible.conversation_turns
             ]
 
@@ -992,6 +1268,9 @@ class Autocompleter:
         )
         cross_app_context = ContextTrail.format_cross_app_context(cross_app_snapshots)
 
+        # Fetch subtree context (XML from walking up from focused element)
+        subtree_context = self.observer.get_subtree_context(token_budget=500)
+
         self._generation_id += 1
         gen_id = self._generation_id
 
@@ -1001,6 +1280,7 @@ class Autocompleter:
                 focused, x, y, caret_height, mode,
                 window_title, source_url, conversation_turns,
                 visible_text_elements, gen_id, cross_app_context,
+                None, subtree_context,
             ),
             daemon=True,
         ).start()
@@ -1073,20 +1353,43 @@ class Autocompleter:
 
             suggestion = self.overlay.accept_selection()
             if suggestion:
+                text = suggestion.text
+                # Strip leading space if user already typed a trailing space
+                if self._trigger_before_cursor.endswith(" ") and text.startswith(" "):
+                    text = text.lstrip(" ")
                 success = self.injector.inject(
-                    suggestion.text,
+                    text,
                     replace=self._replace_on_inject,
                     insertion_point=cursor_pos,
                     app_name=app_name,
                     app_pid=app_pid,
                 )
                 if success:
-                    logger.info(f"Injected: {suggestion.text[:60]}")
+                    logger.info(f"Injected: {text[:60]}")
                     self.context_store.add_entry(
                         source_app=app_name,
                         content=suggestion.text,
                         entry_type="accepted_suggestion",
                     )
+                    # Store in long-term memory (async, non-blocking).
+                    # Use fresh before_cursor from the focused element captured
+                    # at accept time (line 1339) — not the stale _trigger_before_cursor
+                    # which was set at trigger time and may be outdated.
+                    if self.memory.enabled:
+                        before_text = (
+                            focused.before_cursor if focused
+                            else self._trigger_before_cursor
+                        )
+                        logger.debug(
+                            f"[MEM] Storing accepted suggestion: {suggestion.text[:60]}"
+                        )
+                        self.memory.add_async(
+                            [
+                                {"role": "user", "content": before_text[-300:]},
+                                {"role": "assistant", "content": suggestion.text},
+                            ],
+                            metadata={"app": app_name, "mode": self._trigger_mode},
+                        )
                     # Record accepted feedback
                     latency_ms = None
                     if self._trigger_time is not None:
@@ -1156,16 +1459,23 @@ class Autocompleter:
         self._run_on_main(_accept_partial)
         return True
 
-    def _on_nav_dismiss(self) -> bool:
-        """Handle escape / click-outside / typing — only intercept when overlay is visible."""
+    def _on_nav_dismiss(self, *, set_cooldown: bool = True) -> bool:
+        """Handle escape / click-outside / typing — only intercept when overlay is visible.
+
+        Args:
+            set_cooldown: When True (default), record dismiss time so auto-trigger
+                respects the cooldown period. Pass False for "typing through"
+                dismissals where the user didn't intentionally reject suggestions.
+        """
         if not self.overlay.is_visible:
             return False
 
         # Cancel any pending auto-trigger
         self._auto_trigger_debouncer.cancel()
 
-        # Record dismiss time for auto-trigger cooldown
-        self._last_dismiss_time = time.time()
+        # Record dismiss time for auto-trigger cooldown (skip for typing-through)
+        if set_cooldown:
+            self._last_dismiss_time = time.time()
 
         # Bump generation_id so any in-flight LLM stream is discarded
         self._generation_id += 1
@@ -1212,17 +1522,37 @@ def main():
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Console logging level (default: INFO). Log file always gets DEBUG.",
     )
+    parser.add_argument(
+        "--quiet", "-q",
+        action="store_true",
+        help="Suppress all console output (logs still written to --log-file).",
+    )
+    parser.add_argument(
+        "--dump-dir",
+        type=str,
+        default=None,
+        help="Dump AX tree, context, and suggestions for each trigger to this directory.",
+    )
+    parser.add_argument(
+        "--stats",
+        nargs="?",
+        const=50,
+        type=int,
+        metavar="N",
+        help="Print latency stats for the last N triggers (default: 50) and exit.",
+    )
     args = parser.parse_args()
 
     log_fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)  # Allow everything through; handlers filter
 
-    # Stderr: show INFO+ by default (clean output)
-    console = logging.StreamHandler()
-    console.setLevel(getattr(logging, args.log_level))
-    console.setFormatter(logging.Formatter(log_fmt))
-    root.addHandler(console)
+    # Stderr: show INFO+ by default (clean output), or nothing if --quiet
+    if not args.quiet:
+        console = logging.StreamHandler()
+        console.setLevel(getattr(logging, args.log_level))
+        console.setFormatter(logging.Formatter(log_fmt))
+        root.addHandler(console)
 
     # File: always DEBUG (full diagnostics)
     if args.log_file:
@@ -1236,11 +1566,18 @@ def main():
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("anthropic").setLevel(logging.WARNING)
 
-    if args.log_file:
+    if args.log_file and not args.quiet:
         print(f"Logging to {args.log_file} (file=DEBUG, console={args.log_level})")
 
     config = load_config()
-    app = Autocompleter(config)
+
+    # --stats: print latency report and exit
+    if args.stats is not None:
+        from .latency_tracker import print_stats
+        print_stats(config.data_dir / "context.db", last_n=args.stats)
+        return
+
+    app = Autocompleter(config, dump_dir=args.dump_dir)
 
     try:
         app.start()

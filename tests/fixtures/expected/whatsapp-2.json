@@ -1,0 +1,19 @@
+{
+  "extractor": "WhatsAppExtractor",
+  "app": "\u200eWhatsApp",
+  "notes": "Self-chat (You) - all messages sent by user",
+  "turns": [
+    {
+      "speaker": "Me",
+      "text": "[openclaw] The *Aloft Cancun*"
+    },
+    {
+      "speaker": "Me",
+      "text": "this is my chatgpt system prompt"
+    },
+    {
+      "speaker": "Me",
+      "text": "[openclaw] i\u2019m following"
+    }
+  ]
+}

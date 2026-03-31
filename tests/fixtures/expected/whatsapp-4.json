@@ -1,0 +1,47 @@
+{
+  "extractor": "WhatsAppExtractor",
+  "app": "\u200eWhatsApp",
+  "notes": "Group chat (Wework survivors) - mix of senders and one sent message",
+  "turns": [
+    {
+      "speaker": "Jerry Wu",
+      "text": "Tanmay\u2019s co founder told me. Idk where he heard about it."
+    },
+    {
+      "speaker": "Richard Song",
+      "text": "oh i see lol"
+    },
+    {
+      "speaker": "Richard Song",
+      "text": "here\u2019s our clawhub skill"
+    },
+    {
+      "speaker": "Richard Song",
+      "text": "same one you helped us with"
+    },
+    {
+      "speaker": "Jerry Wu",
+      "text": "Looking good!"
+    },
+    {
+      "speaker": "Jerry Wu",
+      "text": "Finally taken off, nice nice"
+    },
+    {
+      "speaker": "Jerry Wu",
+      "text": "More stars than notion lmao"
+    },
+    {
+      "speaker": "Richard Song",
+      "text": "lol our youtube skill has 95 stars on its own"
+    },
+    {
+      "speaker": "Jerry Wu",
+      "text": "Damn"
+    },
+    {
+      "speaker": "Me",
+      "text": "Samnnnn 30k stars congrats"
+    }
+  ]
+}

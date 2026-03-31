@@ -1,0 +1,81 @@
+{
+  "extractor": "DiscordExtractor",
+  "app": "Discord",
+  "turns": [
+    {
+      "speaker": "Bankim",
+      "text": "hi..",
+      "timestamp": "12/14/25, 11:22 AM"
+    },
+    {
+      "speaker": "You",
+      "text": "@Bankim",
+      "timestamp": "10:05 PM"
+    },
+    {
+      "speaker": "You",
+      "text": "hey! i saw your issue regarding billing",
+      "timestamp": "10:05 PM"
+    },
+    {
+      "speaker": "You",
+      "text": "i really appreciate your patience. things were a little hectic recently so as haven't been on top of messages as i want",
+      "timestamp": "10:05 PM"
+    },
+    {
+      "speaker": "You",
+      "text": "i looked at your case, and the situation was that we didn't align usage reset date with the subscription billing date, which can get confusing",
+      "timestamp": "10:07 PM"
+    },
+    {
+      "speaker": "You",
+      "text": "we shipped out a change to this yesterday so that your quota always renews with each invoice payment",
+      "timestamp": "10:09 PM"
+    },
+    {
+      "speaker": "You",
+      "text": "thanks for your patience with this, i know it can get a little confusing. i've reset your usage limits as a courtesy. let me know if the usage limits look good on your end! 🙂",
+      "timestamp": "10:12 PM"
+    },
+    {
+      "speaker": "Bankim",
+      "text": "thank you for the solution. 🙂",
+      "timestamp": "12/15/25, 10:54 PM"
+    },
+    {
+      "speaker": "Bankim",
+      "text": "@Henry looks like again I am seeing the same issue. After payment token is not getting reset. Can you please see the issue and update me ASAP. Thank you.",
+      "timestamp": "1/12/26, 3:45 AM"
+    },
+    {
+      "speaker": "Bankim",
+      "text": "hi..",
+      "timestamp": "1/13/26, 8:59 PM"
+    },
+    {
+      "speaker": "Bankim",
+      "text": "Can you please confirm, untill you fix the issue can I move my pro plan to free plan and continue my work. Once the issue is fix you can help me to move it back my previous pro plan.",
+      "timestamp": "1/14/26, 5:50 AM"
+    },
+    {
+      "speaker": "Bankim",
+      "text": "https://discord.gg/EE2GmxZJ?event=1416586082052739194 You received an invite, but... Invalid Invite Ask Bankim for a new invite! Mention",
+      "timestamp": "2/8/26, 5:12 PM"
+    },
+    {
+      "speaker": "You",
+      "text": "hi bankim, saw your persistent issue with tokens",
+      "timestamp": "8:47 PM"
+    },
+    {
+      "speaker": "You",
+      "text": "sorry this is happening",
+      "timestamp": "8:48 PM"
+    },
+    {
+      "speaker": "You",
+      "text": "i reset your monthly token usage",
+      "timestamp": "8:48 PM"
+    }
+  ]
+}

@@ -12,6 +12,7 @@ from autocompleter.conversation_extractors import (
     ClaudeDesktopExtractor,
     ConversationExtractor,
     ConversationTurn,
+    DiscordExtractor,
     GeminiExtractor,
     GenericExtractor,
     IMessageExtractor,
@@ -133,6 +134,10 @@ class TestGetExtractor:
     def test_returns_imessage_extractor(self):
         ext = get_extractor("Messages")
         assert isinstance(ext, IMessageExtractor)
+
+    def test_returns_discord_extractor(self):
+        ext = get_extractor("Discord")
+        assert isinstance(ext, DiscordExtractor)
 
     def test_returns_action_delimited_for_unknown_app(self):
         ext = get_extractor("SomeRandomApp")
@@ -1589,3 +1594,859 @@ class TestClaudeDesktopDisclaimerFiltering:
         # Disclaimer should not appear
         for turn in turns:
             assert "can make mistakes" not in turn.text
+
+
+# ===========================================================================
+# Tests for DiscordExtractor
+# ===========================================================================
+
+class TestDiscordExtractor:
+    """Unit tests for DiscordExtractor.
+
+    Discord's AX tree:
+      AXWindow
+        ├─ ... > AXList(subrole=AXContentList, desc="Messages in <name>")
+        │   └─ AXGroup (header with AXImage desc=contact_name)
+        │   └─ AXGroup > AXGroup(subrole=AXDocumentArticle, rdesc="message",
+        │                         title="Speaker , text , timestamp")
+        │   └─ AXSplitter (date separator, desc="December 14, 2025")
+        └─ AXGroup(subrole=AXLandmarkRegion, desc="User status and settings")
+            └─ ... > AXStaticText(value="<current_username>")
+    """
+
+    def _build_discord_message(
+        self, speaker: str, text: str, timestamp: str = "10:05 PM",
+    ) -> MagicMock:
+        """Build a mock Discord message element.
+
+        Returns an AXGroup wrapping the article element.
+        """
+        title = f"{speaker} , {text} , {timestamp}"
+        article = make_ax_element(
+            role="AXGroup",
+            subrole="AXDocumentArticle",
+            role_description="message",
+            title=title,
+            children=[
+                make_ax_element(
+                    role="AXHeading",
+                    children=[
+                        make_ax_element(role="AXStaticText", value=speaker),
+                        make_ax_element(role="AXStaticText", value=timestamp),
+                    ],
+                ),
+                make_ax_element(
+                    role="AXGroup",
+                    children=[
+                        make_ax_element(role="AXStaticText", value=text),
+                    ],
+                ),
+            ],
+        )
+        # Outer wrapper group (as seen in real AX tree)
+        return make_ax_element(role="AXGroup", children=[article])
+
+    def _build_discord_header(self, contact_name: str) -> MagicMock:
+        """Build the DM header element with an AXImage bearing the contact name."""
+        return make_ax_element(
+            role="AXGroup",
+            children=[
+                make_ax_element(
+                    role="AXImage",
+                    description=contact_name,
+                ),
+                make_ax_element(
+                    role="AXStaticText",
+                    value=f"This is the beginning of your direct message history with {contact_name}.",
+                ),
+            ],
+        )
+
+    def _build_status_bar(self, username: str) -> MagicMock:
+        """Build the 'User status and settings' landmark region."""
+        return make_ax_element(
+            role="AXGroup",
+            subrole="AXLandmarkRegion",
+            description="User status and settings",
+            children=[
+                make_ax_element(
+                    role="AXGroup",
+                    children=[
+                        make_ax_element(role="AXStaticText", value=username),
+                    ],
+                ),
+                make_ax_element(
+                    role="AXButton",
+                    description="Manage profile and status",
+                ),
+            ],
+        )
+
+    def _build_date_separator(self, date_text: str = "December 14, 2025") -> MagicMock:
+        """Build a date separator (AXSplitter)."""
+        return make_ax_element(
+            role="AXSplitter",
+            description=date_text,
+        )
+
+    def _build_discord_tree(
+        self,
+        messages: list,
+        contact_name: str = "Bankim",
+        *,
+        current_username: str = "henryz2004",
+        include_header: bool = True,
+        include_separator: bool = False,
+        include_status_bar: bool = True,
+    ) -> MagicMock:
+        """Build a full mock Discord AX tree.
+
+        ``messages`` is a list of (speaker, text) or (speaker, text, timestamp) tuples.
+        """
+        msg_list_children = []
+
+        if include_header:
+            msg_list_children.append(self._build_discord_header(contact_name))
+
+        if include_separator:
+            msg_list_children.append(self._build_date_separator())
+
+        for msg in messages:
+            if len(msg) == 3:
+                speaker, text, ts = msg
+                msg_list_children.append(self._build_discord_message(speaker, text, ts))
+            else:
+                speaker, text = msg
+                msg_list_children.append(self._build_discord_message(speaker, text))
+
+        msg_list = make_ax_element(
+            role="AXList",
+            subrole="AXContentList",
+            description=f"Messages in {contact_name}",
+            children=msg_list_children,
+        )
+
+        window_children = [msg_list]
+        if include_status_bar:
+            window_children.append(self._build_status_bar(current_username))
+
+        window = make_ax_element(role="AXWindow", children=window_children)
+        return window
+
+    # -- Basic extraction --
+
+    def test_extracts_basic_conversation(self):
+        """Basic Discord DM extraction with speaker attribution via status bar."""
+        extractor = DiscordExtractor()
+        window = self._build_discord_tree([
+            ("Bankim", "hi.."),
+            ("henryz2004", "hey! i saw your issue regarding billing"),
+            ("Bankim", "thank you for the solution."),
+        ])
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert len(turns) == 3
+        assert turns[0].speaker == "Bankim"
+        assert turns[0].text == "hi.."
+        assert turns[1].speaker == "You"
+        assert "billing" in turns[1].text
+        assert turns[2].speaker == "Bankim"
+        assert "solution" in turns[2].text
+
+    def test_you_attribution_via_status_bar(self):
+        """Status bar username detection labels current user's messages as 'You'."""
+        extractor = DiscordExtractor()
+        window = self._build_discord_tree(
+            [
+                ("henryz2004", "Message one"),
+                ("Bankim", "Message two"),
+                ("henryz2004", "Message three"),
+            ],
+            contact_name="Bankim",
+            current_username="henryz2004",
+        )
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        speakers = [t.speaker for t in turns]
+        assert speakers == ["You", "Bankim", "You"]
+
+    def test_dm_target_fallback_without_status_bar(self):
+        """Without status bar, falls back to DM header image for attribution."""
+        extractor = DiscordExtractor()
+        window = self._build_discord_tree(
+            [
+                ("henryz2004", "Message one"),
+                ("Bankim", "Message two"),
+                ("henryz2004", "Message three"),
+            ],
+            contact_name="Bankim",
+            include_status_bar=False,
+        )
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        speakers = [t.speaker for t in turns]
+        # DM target fallback: non-Bankim → "You"
+        assert speakers == ["You", "Bankim", "You"]
+
+    def test_no_header_no_status_bar_raw_names(self):
+        """Without header or status bar, raw speaker names are used."""
+        extractor = DiscordExtractor()
+        window = self._build_discord_tree(
+            [
+                ("Alice", "Hello"),
+                ("Bob", "Hi there"),
+            ],
+            contact_name="Alice",
+            include_header=False,
+            include_status_bar=False,
+        )
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert len(turns) == 2
+        assert turns[0].speaker == "Alice"
+        assert turns[1].speaker == "Bob"
+
+    def test_group_channel_with_status_bar(self):
+        """In group channels, status bar detects current user among many."""
+        extractor = DiscordExtractor()
+        window = self._build_discord_tree(
+            [
+                ("Alice", "Hey everyone"),
+                ("myuser", "Hi Alice!"),
+                ("Bob", "What's up"),
+                ("myuser", "Not much"),
+            ],
+            contact_name="general",
+            current_username="myuser",
+            include_header=False,  # no DM header in group channels
+        )
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        speakers = [t.speaker for t in turns]
+        assert speakers == ["Alice", "You", "Bob", "You"]
+
+    # -- Timestamp parsing --
+
+    def test_strips_short_timestamp(self):
+        """Short timestamps like '10:05 PM' are stripped from text."""
+        extractor = DiscordExtractor()
+
+        msg_list = make_ax_element(
+            role="AXList",
+            subrole="AXContentList",
+            description="Messages in Test",
+            children=[
+                self._build_discord_header("Test"),
+                self._build_discord_message("Alice", "hello", "3:45 PM"),
+            ],
+        )
+        window = make_ax_element(role="AXWindow", children=[msg_list])
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert turns[0].text == "hello"
+        assert "PM" not in turns[0].text
+
+    def test_strips_full_timestamp(self):
+        """Full timestamps like '12/14/25, 11:22 AM' are stripped."""
+        extractor = DiscordExtractor()
+
+        # Build a message with full timestamp in title
+        title = "Alice , hey there , 12/14/25, 11:22 AM"
+        article = make_ax_element(
+            role="AXGroup",
+            subrole="AXDocumentArticle",
+            role_description="message",
+            title=title,
+            children=[],
+        )
+        wrapper = make_ax_element(role="AXGroup", children=[article])
+
+        msg_list = make_ax_element(
+            role="AXList",
+            subrole="AXContentList",
+            description="Messages in Alice",
+            children=[
+                self._build_discord_header("Alice"),
+                wrapper,
+            ],
+        )
+        window = make_ax_element(role="AXWindow", children=[msg_list])
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert turns[0].text == "hey there"
+
+    # -- Edited messages --
+
+    def test_strips_edited_suffix(self):
+        """'(edited)' suffix should be removed from message body."""
+        extractor = DiscordExtractor()
+
+        title = "Alice , some edited message (edited) , 10:05 PM"
+        article = make_ax_element(
+            role="AXGroup",
+            subrole="AXDocumentArticle",
+            role_description="message",
+            title=title,
+            children=[],
+        )
+        wrapper = make_ax_element(role="AXGroup", children=[article])
+
+        msg_list = make_ax_element(
+            role="AXList",
+            subrole="AXContentList",
+            description="Messages in Alice",
+            children=[
+                self._build_discord_header("Alice"),
+                wrapper,
+            ],
+        )
+        window = make_ax_element(role="AXWindow", children=[msg_list])
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert "(edited)" not in turns[0].text
+        assert turns[0].text == "some edited message"
+
+    def test_strips_edited_with_expanded_timestamp(self):
+        """'(edited) Monday, December 15, 2025 at 10:08 PM' suffix should be removed."""
+        extractor = DiscordExtractor()
+
+        title = "Alice , updated text (edited) Monday, December 15, 2025 at 10:08 PM , 10:05 PM"
+        article = make_ax_element(
+            role="AXGroup",
+            subrole="AXDocumentArticle",
+            role_description="message",
+            title=title,
+            children=[],
+        )
+        wrapper = make_ax_element(role="AXGroup", children=[article])
+
+        msg_list = make_ax_element(
+            role="AXList",
+            subrole="AXContentList",
+            description="Messages in Alice",
+            children=[
+                self._build_discord_header("Alice"),
+                wrapper,
+            ],
+        )
+        window = make_ax_element(role="AXWindow", children=[msg_list])
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert "(edited)" not in turns[0].text
+        assert "Monday" not in turns[0].text
+        assert turns[0].text == "updated text"
+
+    # -- Sticker / media skipping --
+
+    def test_skips_sticker_messages(self):
+        """Messages starting with 'Sticker,' should be skipped."""
+        extractor = DiscordExtractor()
+
+        title_sticker = "Alice , Sticker, pepe , 10:05 PM"
+        article_sticker = make_ax_element(
+            role="AXGroup",
+            subrole="AXDocumentArticle",
+            role_description="message",
+            title=title_sticker,
+            children=[],
+        )
+        sticker_wrapper = make_ax_element(role="AXGroup", children=[article_sticker])
+
+        title_normal = "Alice , hello , 10:06 PM"
+        article_normal = make_ax_element(
+            role="AXGroup",
+            subrole="AXDocumentArticle",
+            role_description="message",
+            title=title_normal,
+            children=[],
+        )
+        normal_wrapper = make_ax_element(role="AXGroup", children=[article_normal])
+
+        msg_list = make_ax_element(
+            role="AXList",
+            subrole="AXContentList",
+            description="Messages in Alice",
+            children=[
+                self._build_discord_header("Alice"),
+                sticker_wrapper,
+                normal_wrapper,
+            ],
+        )
+        window = make_ax_element(role="AXWindow", children=[msg_list])
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert len(turns) == 1
+        assert turns[0].text == "hello"
+
+    def test_skips_image_messages(self):
+        """Messages starting with 'Image' should be skipped."""
+        extractor = DiscordExtractor()
+
+        title = "Bob , Image , 10:05 PM"
+        article = make_ax_element(
+            role="AXGroup",
+            subrole="AXDocumentArticle",
+            role_description="message",
+            title=title,
+            children=[],
+        )
+        wrapper = make_ax_element(role="AXGroup", children=[article])
+
+        msg_list = make_ax_element(
+            role="AXList",
+            subrole="AXContentList",
+            description="Messages in Bob",
+            children=[
+                self._build_discord_header("Bob"),
+                wrapper,
+            ],
+        )
+        window = make_ax_element(role="AXWindow", children=[msg_list])
+
+        turns = extractor.extract(window)
+        # Only media message → no turns → falls back to ActionDelimited
+        # which also finds nothing → returns None
+        assert turns is None
+
+    # -- Date separators --
+
+    def test_skips_date_separators(self):
+        """AXSplitter date separators should not produce turns."""
+        extractor = DiscordExtractor()
+        window = self._build_discord_tree(
+            [
+                ("Alice", "first message"),
+                ("Bob", "second message"),
+            ],
+            contact_name="Alice",
+            include_separator=True,
+        )
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        # Separators are not AXGroup with roleDescription="message", so skipped
+        assert len(turns) == 2
+
+    # -- Empty / edge cases --
+
+    def test_no_message_list_falls_back(self):
+        """Without a message list, should fall back to ActionDelimited."""
+        extractor = DiscordExtractor()
+        window = make_ax_element(
+            role="AXWindow",
+            children=[
+                make_ax_element(role="AXGroup", children=[]),
+            ],
+        )
+
+        turns = extractor.extract(window)
+        # ActionDelimited also finds nothing → None
+        assert turns is None
+
+    def test_empty_message_list_falls_back(self):
+        """Message list with no messages falls back."""
+        extractor = DiscordExtractor()
+
+        msg_list = make_ax_element(
+            role="AXList",
+            subrole="AXContentList",
+            description="Messages in Empty",
+            children=[],
+        )
+        window = make_ax_element(role="AXWindow", children=[msg_list])
+
+        turns = extractor.extract(window)
+        assert turns is None
+
+    def test_message_without_title_skipped(self):
+        """Message article without a title attribute should be skipped."""
+        extractor = DiscordExtractor()
+
+        article = make_ax_element(
+            role="AXGroup",
+            subrole="AXDocumentArticle",
+            role_description="message",
+            title="",  # empty title
+            children=[],
+        )
+        wrapper = make_ax_element(role="AXGroup", children=[article])
+
+        msg_list = make_ax_element(
+            role="AXList",
+            subrole="AXContentList",
+            description="Messages in Test",
+            children=[
+                self._build_discord_header("Test"),
+                wrapper,
+            ],
+        )
+        window = make_ax_element(role="AXWindow", children=[msg_list])
+
+        turns = extractor.extract(window)
+        assert turns is None
+
+    # -- max_turns --
+
+    def test_max_turns_limiting(self):
+        """Extraction should respect max_turns parameter."""
+        extractor = DiscordExtractor()
+        messages = [(f"User{i}", f"Message number {i}") for i in range(10)]
+        window = self._build_discord_tree(messages, contact_name="User0")
+
+        turns = extractor.extract(window, max_turns=4)
+        assert turns is not None
+        assert len(turns) == 4
+
+    # -- Fallback body extraction --
+
+    def test_fallback_body_from_children(self):
+        """When title has no text body, fall back to child-tree extraction."""
+        extractor = DiscordExtractor()
+
+        # Title with speaker but empty body after split
+        title = "Alice ,  , 10:05 PM"
+        article = make_ax_element(
+            role="AXGroup",
+            subrole="AXDocumentArticle",
+            role_description="message",
+            title=title,
+            children=[
+                make_ax_element(role="AXHeading", children=[]),
+                make_ax_element(
+                    role="AXGroup",
+                    children=[
+                        make_ax_element(role="AXStaticText", value="fallback body text"),
+                    ],
+                ),
+            ],
+        )
+        wrapper = make_ax_element(role="AXGroup", children=[article])
+
+        msg_list = make_ax_element(
+            role="AXList",
+            subrole="AXContentList",
+            description="Messages in Alice",
+            children=[
+                self._build_discord_header("Alice"),
+                wrapper,
+            ],
+        )
+        window = make_ax_element(role="AXWindow", children=[msg_list])
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert turns[0].text == "fallback body text"
+
+    # -- Timestamp preservation --
+
+    def test_timestamp_short_format(self):
+        """Short timestamp (e.g. '10:05 PM') is preserved in ConversationTurn."""
+        extractor = DiscordExtractor()
+        tree = self._build_discord_tree(
+            messages=[("Alice", "hello", "10:05 PM")],
+            current_username="Bob",
+        )
+        turns = extractor.extract(tree)
+        assert turns is not None
+        assert turns[0].timestamp == "10:05 PM"
+
+    def test_timestamp_full_format(self):
+        """Full timestamp (e.g. '12/14/25, 11:22 AM') is preserved."""
+        extractor = DiscordExtractor()
+        tree = self._build_discord_tree(
+            messages=[("Alice", "hello", "12/14/25, 11:22 AM")],
+            current_username="Bob",
+        )
+        turns = extractor.extract(tree)
+        assert turns is not None
+        assert turns[0].timestamp == "12/14/25, 11:22 AM"
+
+    def test_timestamp_relative_yesterday(self):
+        """Relative timestamp ('Yesterday at 8:47 PM') is preserved."""
+        extractor = DiscordExtractor()
+        tree = self._build_discord_tree(
+            messages=[("Alice", "hello", "Yesterday at 8:47 PM")],
+            current_username="Bob",
+        )
+        turns = extractor.extract(tree)
+        assert turns is not None
+        assert turns[0].timestamp == "Yesterday at 8:47 PM"
+        # Message body should NOT contain the timestamp
+        assert "Yesterday" not in turns[0].text
+
+    def test_timestamp_relative_today(self):
+        """Relative timestamp ('Today at 3:22 PM') is preserved."""
+        extractor = DiscordExtractor()
+        tree = self._build_discord_tree(
+            messages=[("Alice", "hello", "Today at 3:22 PM")],
+            current_username="Bob",
+        )
+        turns = extractor.extract(tree)
+        assert turns is not None
+        assert turns[0].timestamp == "Today at 3:22 PM"
+        assert "Today" not in turns[0].text
+
+    def test_timestamp_preserved_after_you_relabeling(self):
+        """Timestamp survives 'You' relabeling via status bar."""
+        extractor = DiscordExtractor()
+        tree = self._build_discord_tree(
+            messages=[("Bob", "my message", "10:05 PM")],
+            current_username="Bob",
+        )
+        turns = extractor.extract(tree)
+        assert turns is not None
+        assert turns[0].speaker == "You"
+        assert turns[0].timestamp == "10:05 PM"
+
+    # -- Speaker badge cleanup --
+
+    def test_strips_op_original_poster_badge(self):
+        """'Bankim OP Original Poster' should become 'Bankim'."""
+        extractor = DiscordExtractor()
+        window = self._build_discord_tree(
+            messages=[("Bankim OP Original Poster", "some text")],
+            contact_name="Account Issue",
+            include_header=False,
+            include_status_bar=False,
+        )
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert turns[0].speaker == "Bankim"
+
+    def test_strips_op_only_badge(self):
+        """'Alice OP' should become 'Alice'."""
+        extractor = DiscordExtractor()
+        window = self._build_discord_tree(
+            messages=[("Alice OP", "thread starter message")],
+            contact_name="Thread",
+            include_header=False,
+            include_status_bar=False,
+        )
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert turns[0].speaker == "Alice"
+
+    def test_strips_original_poster_badge(self):
+        """'Bob Original Poster' should become 'Bob'."""
+        extractor = DiscordExtractor()
+        window = self._build_discord_tree(
+            messages=[("Bob Original Poster", "message")],
+            contact_name="Thread",
+            include_header=False,
+            include_status_bar=False,
+        )
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert turns[0].speaker == "Bob"
+
+    def test_no_badge_unchanged(self):
+        """Normal speaker names without badges should be left unchanged."""
+        extractor = DiscordExtractor()
+        window = self._build_discord_tree(
+            messages=[("Charlie", "hello")],
+            contact_name="Thread",
+            include_header=False,
+            include_status_bar=False,
+        )
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert turns[0].speaker == "Charlie"
+
+    def test_badge_stripped_before_you_relabeling(self):
+        """Badge should be stripped before 'You' relabeling in threads."""
+        extractor = DiscordExtractor()
+        # Status bar says username is "henryz2004"
+        # Message has "henryz2004 OP Original Poster" as speaker
+        window = self._build_discord_tree(
+            messages=[
+                ("henryz2004 OP Original Poster", "my thread message"),
+                ("Alice", "reply to thread"),
+            ],
+            contact_name="Account Issue",
+            current_username="henryz2004",
+            include_header=False,
+        )
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert turns[0].speaker == "You"  # Badge stripped, then relabeled
+        assert turns[1].speaker == "Alice"
+
+    # -- Server tag stripping --
+
+    def test_strips_server_tag(self):
+        """'MGpai Server Tag: PALM' should become 'MGpai'."""
+        extractor = DiscordExtractor()
+        window = self._build_discord_tree(
+            messages=[("MGpai Server Tag: PALM", "Hi Henry")],
+            contact_name="Thread",
+            include_header=False,
+            include_status_bar=False,
+        )
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert turns[0].speaker == "MGpai"
+
+    def test_strips_server_tag_single_word(self):
+        """Server tags with single-word tags should be stripped."""
+        extractor = DiscordExtractor()
+        window = self._build_discord_tree(
+            messages=[("Alice Server Tag: VIP", "hello")],
+            contact_name="Thread",
+            include_header=False,
+            include_status_bar=False,
+        )
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert turns[0].speaker == "Alice"
+
+    def test_no_server_tag_unchanged(self):
+        """Normal names without 'Server Tag:' should be left unchanged."""
+        extractor = DiscordExtractor()
+        window = self._build_discord_tree(
+            messages=[("Charlie", "hello")],
+            contact_name="Thread",
+            include_header=False,
+            include_status_bar=False,
+        )
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert turns[0].speaker == "Charlie"
+
+    def test_server_tag_stripped_before_you_relabeling(self):
+        """Server tag should be stripped before 'You' relabeling."""
+        extractor = DiscordExtractor()
+        window = self._build_discord_tree(
+            messages=[
+                ("henryz2004 Server Tag: DEV", "my message"),
+                ("Alice", "reply"),
+            ],
+            contact_name="Server Channel",
+            current_username="henryz2004",
+            include_header=False,
+        )
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert turns[0].speaker == "You"
+        assert turns[1].speaker == "Alice"
+
+    # -- Display name matching --
+
+    def _build_status_bar_with_display_name(
+        self, username: str, display_name: str,
+    ) -> MagicMock:
+        """Build a status bar with both username and display name."""
+        return make_ax_element(
+            role="AXGroup",
+            subrole="AXLandmarkRegion",
+            description="User status and settings",
+            children=[
+                make_ax_element(
+                    role="AXGroup",
+                    children=[
+                        make_ax_element(role="AXStaticText", value=username),
+                        make_ax_element(role="AXStaticText", value=display_name),
+                    ],
+                ),
+                make_ax_element(
+                    role="AXButton",
+                    description="Manage profile and status",
+                ),
+            ],
+        )
+
+    def test_display_name_attribution_in_server_channel(self):
+        """Display name should be matched for 'You' attribution in server channels."""
+        extractor = DiscordExtractor()
+        msg_list = make_ax_element(
+            role="AXList",
+            subrole="AXContentList",
+            description="Messages in Account Issue",
+            children=[
+                self._build_discord_message("Henry", "my message"),
+                self._build_discord_message("Alice", "their message"),
+            ],
+        )
+        status_bar = self._build_status_bar_with_display_name("henryz2004", "Henry")
+        window = make_ax_element(role="AXWindow", children=[msg_list, status_bar])
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert len(turns) == 2
+        assert turns[0].speaker == "You"  # "Henry" matches display name
+        assert turns[1].speaker == "Alice"
+
+    def test_display_name_same_as_username_no_duplicate_match(self):
+        """When display name equals username, attribution should still work."""
+        extractor = DiscordExtractor()
+        msg_list = make_ax_element(
+            role="AXList",
+            subrole="AXContentList",
+            description="Messages in general",
+            children=[
+                self._build_discord_message("alice123", "my message"),
+                self._build_discord_message("Bob", "their message"),
+            ],
+        )
+        # Same name for both — display_name will be empty (dedup in code)
+        status_bar = self._build_status_bar_with_display_name("alice123", "alice123")
+        window = make_ax_element(role="AXWindow", children=[msg_list, status_bar])
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert turns[0].speaker == "You"
+        assert turns[1].speaker == "Bob"
+
+    def test_no_display_name_username_only(self):
+        """When no display name is available, username matching still works."""
+        extractor = DiscordExtractor()
+        window = self._build_discord_tree(
+            messages=[
+                ("henryz2004", "my message"),
+                ("Alice", "their message"),
+            ],
+            contact_name="general",
+            current_username="henryz2004",
+            include_header=False,
+        )
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert turns[0].speaker == "You"
+        assert turns[1].speaker == "Alice"
+
+    # -- Graceful failure --
+
+    def test_graceful_failure_returns_none(self):
+        """Exception during extraction should not crash — falls back."""
+        extractor = DiscordExtractor()
+
+        bad = MagicMock()
+        bad._ax_attrs = {"AXRole": "AXWindow"}
+
+        def raise_on_children(el, attr):
+            if attr == "AXChildren":
+                raise RuntimeError("AX failure")
+            return getattr(el, "_ax_attrs", {}).get(attr)
+
+        with patch(
+            "autocompleter.conversation_extractors.ax_get_attribute",
+            side_effect=raise_on_children,
+        ):
+            turns = extractor.extract(bad)
+            assert turns is None
+
+    # -- get_extractor registry --
+
+    def test_get_extractor_returns_discord(self):
+        """get_extractor('Discord') should return a DiscordExtractor."""
+        ext = get_extractor("Discord")
+        assert isinstance(ext, DiscordExtractor)

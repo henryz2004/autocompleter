@@ -1,0 +1,424 @@
+{
+  "app": "Claude",
+  "windowTitle": "Claude",
+  "capturedAt": "2026-02-28T17:00:18",
+  "macosVersion": "26.2",
+  "notes": "",
+  "tree": {
+    "role": "AXWindow",
+    "subrole": "AXStandardWindow",
+    "roleDescription": "standard window",
+    "value": null,
+    "title": "Claude",
+    "description": "",
+    "placeholderValue": null,
+    "numberOfCharacters": null,
+    "children": [
+      {
+        "role": "AXGroup",
+        "subrole": "",
+        "roleDescription": "group",
+        "value": "",
+        "title": "Claude",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": 0,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "",
+            "roleDescription": "group",
+            "value": "",
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": 0,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": "",
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": [
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "group",
+                    "value": "",
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "group",
+                        "value": "",
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": "",
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXWebArea",
+                                "subrole": "",
+                                "roleDescription": "HTML content",
+                                "value": "",
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "",
+                                    "roleDescription": "group",
+                                    "value": "",
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 0,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": "",
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": "",
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXWebArea",
+                                    "subrole": "",
+                                    "roleDescription": "HTML content",
+                                    "value": "",
+                                    "title": "Government bonds vs corporate bonds risk and return - Claude",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 0,
+                                    "children": [
+                                      {
+                                        "role": "AXGroup",
+                                        "subrole": "",
+                                        "roleDescription": "group",
+                                        "value": "",
+                                        "title": "",
+                                        "description": "",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": 0,
+                                        "children": [
+                                          {
+                                            "role": "AXCheckBox",
+                                            "subrole": "AXToggleButton",
+                                            "roleDescription": "toggle button",
+                                            "value": "",
+                                            "title": "",
+                                            "description": "Close sidebar",
+                                            "placeholderValue": null,
+                                            "numberOfCharacters": 0,
+                                            "children": [
+                                              {
+                                                "role": "AXGroup",
+                                                "subrole": "",
+                                                "roleDescription": "group",
+                                                "value": "",
+                                                "title": "",
+                                                "description": "",
+                                                "placeholderValue": null,
+                                                "numberOfCharacters": 0,
+                                                "children": []
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "role": "AXButton",
+                                            "subrole": "",
+                                            "roleDescription": "button",
+                                            "value": "",
+                                            "title": "",
+                                            "description": "Back",
+                                            "placeholderValue": null,
+                                            "numberOfCharacters": 0,
+                                            "children": []
+                                          },
+                                          {
+                                            "role": "AXButton",
+                                            "subrole": "",
+                                            "roleDescription": "button",
+                                            "value": "",
+                                            "title": "",
+                                            "description": "Forward",
+                                            "placeholderValue": null,
+                                            "numberOfCharacters": 0,
+                                            "children": []
+                                          },
+                                          {
+                                            "role": "AXGroup",
+                                            "subrole": "AXApplicationGroup",
+                                            "roleDescription": "group",
+                                            "value": "",
+                                            "title": "",
+                                            "description": "",
+                                            "placeholderValue": null,
+                                            "numberOfCharacters": 0,
+                                            "children": [
+                                              {
+                                                "role": "AXRadioButton",
+                                                "subrole": "",
+                                                "roleDescription": "radio button",
+                                                "value": "",
+                                                "title": "",
+                                                "description": "Chat",
+                                                "placeholderValue": null,
+                                                "numberOfCharacters": 0,
+                                                "children": []
+                                              },
+                                              {
+                                                "role": "AXRadioButton",
+                                                "subrole": "",
+                                                "roleDescription": "radio button",
+                                                "value": "",
+                                                "title": "",
+                                                "description": "Cowork",
+                                                "placeholderValue": null,
+                                                "numberOfCharacters": 0,
+                                                "children": []
+                                              },
+                                              {
+                                                "role": "AXRadioButton",
+                                                "subrole": "",
+                                                "roleDescription": "radio button",
+                                                "value": "",
+                                                "title": "",
+                                                "description": "Code",
+                                                "placeholderValue": null,
+                                                "numberOfCharacters": 0,
+                                                "children": []
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "role": "AXGroup",
+                                            "subrole": "",
+                                            "roleDescription": "group",
+                                            "value": "",
+                                            "title": "",
+                                            "description": "",
+                                            "placeholderValue": null,
+                                            "numberOfCharacters": 0,
+                                            "children": [
+                                              {
+                                                "role": "AXGroup",
+                                                "subrole": "",
+                                                "roleDescription": "group",
+                                                "value": "",
+                                                "title": "",
+                                                "description": "",
+                                                "placeholderValue": null,
+                                                "numberOfCharacters": 0,
+                                                "children": [
+                                                  {
+                                                    "role": "AXGroup",
+                                                    "subrole": "AXLandmarkNavigation",
+                                                    "roleDescription": "navigation",
+                                                    "value": "",
+                                                    "title": "",
+                                                    "description": "Sidebar",
+                                                    "placeholderValue": null,
+                                                    "numberOfCharacters": 0,
+                                                    "children": []
+                                                  }
+                                                ]
+                                              },
+                                              {
+                                                "role": "AXGroup",
+                                                "subrole": "",
+                                                "roleDescription": "group",
+                                                "value": "",
+                                                "title": "",
+                                                "description": "",
+                                                "placeholderValue": null,
+                                                "numberOfCharacters": 0,
+                                                "children": [
+                                                  {
+                                                    "role": "AXGroup",
+                                                    "subrole": "",
+                                                    "roleDescription": "group",
+                                                    "value": "",
+                                                    "title": "",
+                                                    "description": "",
+                                                    "placeholderValue": null,
+                                                    "numberOfCharacters": 0,
+                                                    "children": []
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "role": "AXGroup",
+                                            "subrole": "AXLandmarkRegion",
+                                            "roleDescription": "region",
+                                            "value": "",
+                                            "title": "",
+                                            "description": "Notifications (F8)",
+                                            "placeholderValue": null,
+                                            "numberOfCharacters": 0,
+                                            "children": [
+                                              {
+                                                "role": "AXGroup",
+                                                "subrole": "AXApplicationStatus",
+                                                "roleDescription": "status",
+                                                "value": "",
+                                                "title": "",
+                                                "description": "",
+                                                "placeholderValue": null,
+                                                "numberOfCharacters": 0,
+                                                "children": []
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "role": "AXGroup",
+                                            "subrole": "",
+                                            "roleDescription": "group",
+                                            "value": "",
+                                            "title": "",
+                                            "description": "",
+                                            "placeholderValue": null,
+                                            "numberOfCharacters": 0,
+                                            "children": [
+                                              {
+                                                "role": "AXGroup",
+                                                "subrole": "AXApplicationAlert",
+                                                "roleDescription": "alert",
+                                                "value": "",
+                                                "title": "",
+                                                "description": "",
+                                                "placeholderValue": null,
+                                                "numberOfCharacters": 0,
+                                                "children": []
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "role": "AXGroup",
+                                            "subrole": "",
+                                            "roleDescription": "group",
+                                            "value": "",
+                                            "title": "",
+                                            "description": "",
+                                            "placeholderValue": null,
+                                            "numberOfCharacters": 0,
+                                            "children": []
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXCloseButton",
+        "roleDescription": "close button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXFullScreenButton",
+        "roleDescription": "full screen button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "",
+            "roleDescription": "group",
+            "value": null,
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXMinimizeButton",
+        "roleDescription": "minimize button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      }
+    ]
+  }
+}

@@ -162,3 +162,90 @@ def dump_ax_tree(
             out.write(
                 f"{indent}  ... +{len(children) - max_children} more children\n"
             )
+
+
+def serialize_ax_tree(
+    element,
+    max_depth: int = 12,
+    max_children: int = 50,
+    depth: int = 0,
+    focused_element=None,
+) -> dict | None:
+    """Recursively serialize the AX tree to a JSON-compatible dict.
+
+    Mirrors ``dump_ax_tree`` but returns structured data instead of text.
+    Returns ``None`` if *max_depth* is exceeded.
+
+    If *focused_element* is provided (an AXUIElement), the node matching
+    that element is marked with ``"focused": true`` along with cursor
+    metadata (``cursorPosition``, ``selectionLength``).  Every ancestor
+    of the focused node is marked with ``"ancestorOfFocused": true`` so
+    the path from root to the input field is easy to trace.
+    """
+    if depth > max_depth:
+        return None
+
+    role = ax_get_attribute(element, "AXRole") or ""
+    subrole = ax_get_attribute(element, "AXSubrole") or ""
+    role_desc = ax_get_attribute(element, "AXRoleDescription") or ""
+    value = ax_get_attribute(element, "AXValue")
+    title = ax_get_attribute(element, "AXTitle") or ""
+    desc = ax_get_attribute(element, "AXDescription") or ""
+    placeholder = ax_get_attribute(element, "AXPlaceholderValue")
+    num_chars = ax_get_attribute(element, "AXNumberOfCharacters")
+    children = ax_get_attribute(element, "AXChildren") or []
+
+    node: dict = {
+        "role": role,
+        "subrole": subrole,
+        "roleDescription": role_desc,
+        "value": value if isinstance(value, str) else None,
+        "title": title,
+        "description": desc,
+        "placeholderValue": placeholder if isinstance(placeholder, str) else None,
+        "numberOfCharacters": num_chars if isinstance(num_chars, (int, float)) else None,
+        "children": [],
+    }
+
+    # Check if this element is the focused (keyboard-active) element.
+    is_focused = False
+    if focused_element is not None:
+        try:
+            is_focused = element == focused_element
+        except Exception:
+            pass
+
+    if is_focused:
+        node["focused"] = True
+        # Capture cursor / selection range for the focused element.
+        try:
+            if HAS_ACCESSIBILITY:
+                from ApplicationServices import AXValueGetValue
+
+                sel_range = ax_get_attribute(element, "AXSelectedTextRange")
+                if sel_range is not None:
+                    ok, cf_range = AXValueGetValue(
+                        sel_range, 4, None  # 4 = kAXValueTypeCFRange
+                    )
+                    if ok:
+                        node["cursorPosition"] = cf_range.location
+                        node["selectionLength"] = cf_range.length
+        except Exception:
+            pass
+
+    # Recurse into children, tracking whether any descendant is focused.
+    child_has_focus = False
+    if children:
+        for child in children[:max_children]:
+            child_node = serialize_ax_tree(
+                child, max_depth, max_children, depth + 1, focused_element
+            )
+            if child_node is not None:
+                node["children"].append(child_node)
+                if child_node.get("focused") or child_node.get("ancestorOfFocused"):
+                    child_has_focus = True
+
+    if child_has_focus:
+        node["ancestorOfFocused"] = True
+
+    return node

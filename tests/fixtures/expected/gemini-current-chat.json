@@ -1,0 +1,14 @@
+{
+  "extractor": "GeminiExtractor",
+  "app": "Google Gemini",
+  "turns": [
+    {
+      "speaker": "User",
+      "text": "Does customized cash back give me 2% on groceries"
+    },
+    {
+      "speaker": "User",
+      "text": "What about versus venture x"
+    }
+  ]
+}

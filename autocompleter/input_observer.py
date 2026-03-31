@@ -28,6 +28,7 @@ from .conversation_extractors import (
     _collect_child_text,
     get_extractor,
 )
+from .suggestion_engine import is_shell_app
 
 logger = logging.getLogger(__name__)
 
@@ -47,19 +48,23 @@ class FocusedElement:
     selection_length: int = 0  # Length of selected text range (0 = no selection)
     placeholder_detected: bool = False  # True when value was cleared due to placeholder detection
 
+    # Zero-width characters injected by some apps (e.g. Discord \ufeff BOM)
+    # that should be stripped from text sent to the LLM.
+    _ZERO_WIDTH_CHARS = "\ufeff\u200b\u200c\u200d\u2060\ufffe"
+
     @property
     def before_cursor(self) -> str:
-        """Text before the cursor/selection."""
+        """Text before the cursor/selection (zero-width chars stripped)."""
         if self.insertion_point is None:
-            return self.value
-        return self.value[:self.insertion_point]
+            return self.value.strip(self._ZERO_WIDTH_CHARS)
+        return self.value[:self.insertion_point].strip(self._ZERO_WIDTH_CHARS)
 
     @property
     def after_cursor(self) -> str:
-        """Text after the cursor/selection."""
+        """Text after the cursor/selection (zero-width chars stripped)."""
         if self.insertion_point is None:
             return ""
-        return self.value[self.insertion_point + self.selection_length:]
+        return self.value[self.insertion_point + self.selection_length:].strip(self._ZERO_WIDTH_CHARS)
 
 
 @dataclass
@@ -190,7 +195,7 @@ class InputObserver:
             logger.debug(f"[CTX] Value matches AXPlaceholderValue: {placeholder!r}, treating as empty")
             value = ""
             placeholder_detected = True
-        elif num_chars is not None and num_chars == 0 and value.strip():
+        elif num_chars is not None and num_chars == 0 and value.strip() and not is_shell_app(app_name):
             logger.debug(
                 f"[CTX] AXNumberOfCharacters=0 but AXValue={value.strip()!r}, treating as placeholder"
             )
@@ -369,7 +374,9 @@ class InputObserver:
         url = self._get_browser_url(app_element, app_name)
 
         # Try structured conversation extraction for chat-like apps
-        conversation_turns = self._extract_conversation_turns(window, app_name=app_name)
+        conversation_turns = self._extract_conversation_turns(
+            window, app_name=app_name, window_title=window_title,
+        )
 
         return VisibleContent(
             app_name=app_name,
@@ -379,6 +386,53 @@ class InputObserver:
             url=url,
             conversation_turns=conversation_turns,
         )
+
+    def get_subtree_context(self, token_budget: int = 500) -> str | None:
+        """Extract context XML by walking up from the focused element.
+
+        Uses the subtree walker to produce minimal XML context from the
+        focused element's nearby content — no per-app extractor needed.
+
+        Returns XML string or None if unavailable.
+        """
+        if not HAS_ACCESSIBILITY:
+            return None
+
+        workspace = AppKit.NSWorkspace.sharedWorkspace()
+        front_app = workspace.frontmostApplication()
+        if front_app is None:
+            return None
+
+        pid = front_app.processIdentifier()
+        app_element = AXUIElementCreateApplication(pid)
+
+        window = ax_get_attribute(app_element, "AXFocusedWindow")
+        if window is None:
+            windows = ax_get_attribute(app_element, "AXWindows")
+            if windows and len(windows) > 0:
+                window = windows[0]
+            else:
+                return None
+
+        focused_el = ax_get_attribute(app_element, "AXFocusedUIElement")
+        if focused_el is None:
+            return None
+
+        try:
+            from .subtree_context import extract_context_live
+
+            xml = extract_context_live(
+                window, focused_el, max_depth=40, token_budget=token_budget,
+            )
+            if xml:
+                logger.debug(
+                    "[CTX] Subtree context: %d chars (~%d tokens)",
+                    len(xml), len(xml) // 4,
+                )
+            return xml
+        except Exception:
+            logger.debug("Subtree context extraction failed", exc_info=True)
+            return None
 
     # Roles that are UI chrome — skip their entire subtree
     _SKIP_ROLES = frozenset({
@@ -574,15 +628,17 @@ class InputObserver:
                 )
 
     def _extract_conversation_turns(
-        self, window, max_turns: int = 15, app_name: str = ""
+        self, window, max_turns: int = 15, app_name: str = "",
+        window_title: str = "",
     ) -> list[ConversationTurn] | None:
         """Try to extract structured conversation turns from a chat window.
 
         Uses app-specific extractors when available (Gemini, Slack, ChatGPT,
         Claude Desktop, iMessage). Falls back to a generic heuristic for
-        unknown apps.
+        unknown apps. For browsers, *window_title* is used to pick the
+        right extractor.
         """
-        extractor = get_extractor(app_name)
+        extractor = get_extractor(app_name, window_title=window_title)
         logger.debug(
             "[CTX] Using %s for app %r",
             type(extractor).__name__, app_name,

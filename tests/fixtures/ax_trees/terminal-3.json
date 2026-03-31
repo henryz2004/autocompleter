@@ -1,0 +1,144 @@
+{
+  "app": "Terminal",
+  "windowTitle": "henryz2004 — -zsh — 80×24",
+  "capturedAt": "2026-02-28T23:06:18",
+  "macosVersion": "26.2",
+  "notes": "",
+  "tree": {
+    "role": "AXWindow",
+    "subrole": "AXStandardWindow",
+    "roleDescription": "standard window",
+    "value": null,
+    "title": "henryz2004 — -zsh — 80×24",
+    "description": "",
+    "placeholderValue": null,
+    "numberOfCharacters": null,
+    "children": [
+      {
+        "role": "AXSplitGroup",
+        "subrole": "",
+        "roleDescription": "split group",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXScrollArea",
+            "subrole": "",
+            "roleDescription": "scroll area",
+            "value": null,
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXTextArea",
+                "subrole": "",
+                "roleDescription": "text entry area",
+                "value": "Last login: Sat Feb 28 22:14:59 on console\nhenryz2004@Henrys-MacBook-Pro ~ % \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+                "title": "",
+                "description": "shell",
+                "placeholderValue": null,
+                "numberOfCharacters": 100,
+                "children": []
+              },
+              {
+                "role": "AXScrollBar",
+                "subrole": "",
+                "roleDescription": "scroll bar",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXCloseButton",
+        "roleDescription": "close button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXFullScreenButton",
+        "roleDescription": "full screen button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "",
+            "roleDescription": "group",
+            "value": null,
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXMinimizeButton",
+        "roleDescription": "minimize button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      },
+      {
+        "role": "AXImage",
+        "subrole": "",
+        "roleDescription": "image",
+        "value": null,
+        "title": "henryz2004",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      },
+      {
+        "role": "AXStaticText",
+        "subrole": "",
+        "roleDescription": "text",
+        "value": "henryz2004 — -zsh — 80×24",
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": 25,
+        "children": []
+      }
+    ]
+  }
+}

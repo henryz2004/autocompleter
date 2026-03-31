@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from .embeddings import EmbeddingProvider
+    from .shell_parser import ParsedTerminalBuffer
 
 logger = logging.getLogger(__name__)
 
@@ -262,6 +263,8 @@ class ContextStore:
         embedding_provider: Optional[EmbeddingProvider] = None,
         use_semantic_context: bool = False,
         cross_app_context: str = "",
+        subtree_context: str | None = None,
+        memory_context: str = "",
     ) -> str:
         """Build lean context for continuation mode.
 
@@ -286,14 +289,21 @@ class ContextStore:
             meta_parts.append(f"URL: {source_url}")
         parts.append(" | ".join(meta_parts))
 
-        # Tier 2.5: cross-app context (between metadata and visible text)
+        # Tier 2.5a: cross-app context (between metadata and visible text)
         if cross_app_context:
             parts.append(cross_app_context)
 
-        # Tier 2: live visible text (preferred) or recent DB entries (fallback)
+        # Tier 2.5b: long-term memory
+        if memory_context:
+            parts.append(memory_context)
+
+        # Tier 2: structured subtree context (best), live visible text, or DB fallback
         local_chars = 0
         local_parts: list[str] = []
-        if visible_text:
+        if subtree_context:
+            parts.append(f"Nearby content:\n{subtree_context}")
+            local_chars = len(subtree_context)
+        elif visible_text:
             for element in visible_text:
                 snippet = element.strip()
                 if not snippet:
@@ -323,7 +333,9 @@ class ContextStore:
         if local_parts:
             parts.append("Visible context:\n" + "\n".join(local_parts))
 
-        # Tier 2.5: semantic context (optional)
+        # Tier 2.5: semantic context (optional, secondary)
+        # Only used to supplement the visible context — kept short and recent
+        # so it doesn't override what the user is currently looking at.
         if use_semantic_context and embedding_provider is not None:
             query = before_cursor.strip()
             if query:
@@ -331,8 +343,8 @@ class ContextStore:
                     semantic_entries = self.get_semantically_relevant(
                         query=query,
                         provider=embedding_provider,
-                        top_k=3,
-                        max_age_hours=24,
+                        top_k=2,
+                        max_age_hours=2,
                     )
                     # Deduplicate against already-included visible context
                     existing = set(local_parts)
@@ -340,8 +352,12 @@ class ContextStore:
                         s for s in semantic_entries if s not in existing
                     ]
                     if semantic_parts:
+                        # Cap each entry to prevent stale DB entries from
+                        # overwhelming the current visible context
+                        capped = [s[:300] for s in semantic_parts[:2]]
                         parts.append(
-                            "Related context:\n" + "\n".join(semantic_parts[:3])
+                            "Background context (lower priority):\n"
+                            + "\n".join(capped)
                         )
                 except Exception:
                     logger.debug(
@@ -369,6 +385,8 @@ class ContextStore:
         embedding_provider: Optional[EmbeddingProvider] = None,
         use_semantic_context: bool = False,
         cross_app_context: str = "",
+        subtree_context: str | None = None,
+        memory_context: str = "",
     ) -> str:
         """Build context for reply mode.
 
@@ -392,9 +410,13 @@ class ContextStore:
             meta_parts.append(f"URL: {source_url}")
         parts.append(" | ".join(meta_parts))
 
-        # Tier 2.5: cross-app context
+        # Tier 2.5a: cross-app context
         if cross_app_context:
             parts.append(cross_app_context)
+
+        # Tier 2.5b: long-term memory
+        if memory_context:
+            parts.append(memory_context)
 
         # Tier 1: conversation turns
         turns = conversation_turns[-max_turns:]
@@ -403,8 +425,15 @@ class ContextStore:
             for turn in turns:
                 speaker = turn.get("speaker", "Unknown")
                 text = turn.get("text", "")
-                turn_lines.append(f"- {speaker}: {text}")
+                timestamp = turn.get("timestamp", "")
+                if timestamp:
+                    turn_lines.append(f"- {speaker} [{timestamp}]: {text}")
+                else:
+                    turn_lines.append(f"- {speaker}: {text}")
             parts.append("Conversation:\n" + "\n".join(turn_lines))
+        elif subtree_context:
+            # Subtree walker captured structured content near the input
+            parts.append(f"Nearby content:\n{subtree_context}")
         else:
             # Fallback 1: live visible text from the current window
             fallback_parts: list[str] = []
@@ -435,7 +464,9 @@ class ContextStore:
                     + "\n".join(fallback_parts)
                 )
 
-        # Tier 1.5: semantic context (optional)
+        # Tier 1.5: semantic context (optional, secondary)
+        # Only supplements the conversation / visible context — kept short
+        # and recent so it doesn't pull in stale topics.
         if use_semantic_context and embedding_provider is not None:
             # Build query from last conversation turn or draft
             query = ""
@@ -449,12 +480,16 @@ class ContextStore:
                     semantic_entries = self.get_semantically_relevant(
                         query=query,
                         provider=embedding_provider,
-                        top_k=3,
-                        max_age_hours=24,
+                        top_k=2,
+                        max_age_hours=2,
                     )
                     if semantic_entries:
+                        # Cap each entry to avoid old massive DB entries
+                        # drowning out the actual conversation
+                        capped = [s[:300] for s in semantic_entries[:2]]
                         parts.append(
-                            "Related context:\n" + "\n".join(semantic_entries[:3])
+                            "Background context (lower priority):\n"
+                            + "\n".join(capped)
                         )
                 except Exception:
                     logger.debug(
@@ -465,6 +500,80 @@ class ContextStore:
         # Tier 2: draft state
         if draft_text.strip():
             parts.append(f"Draft so far:\n{draft_text}")
+
+        context = "\n\n".join(parts)
+
+        # Diagnostic: warn if visible_text was provided but didn't make it
+        # into the context (helps catch flow bugs where text is found but lost)
+        if visible_text and any(v.strip() for v in visible_text):
+            if "Visible page content" not in context and "Conversation:" not in context:
+                logger.warning(
+                    "[CTX] visible_text had %d elements but none appeared in "
+                    "reply context (%d chars). conversation_turns=%d",
+                    len(visible_text), len(context),
+                    len(conversation_turns),
+                )
+
+        return context
+
+    def get_shell_context(
+        self,
+        parsed: ParsedTerminalBuffer,
+        source_app: str,
+        window_title: str = "",
+        cross_app_context: str = "",
+        memory_context: str = "",
+    ) -> str:
+        """Build context for shell/terminal apps.
+
+        Uses the parsed terminal buffer to assemble structured context
+        instead of sending the raw buffer as "Text before cursor."
+
+        Args:
+            parsed: ParsedTerminalBuffer from shell_parser.
+            source_app: Terminal app name (e.g. "Terminal", "iTerm2").
+            window_title: Window/tab title (often shows current dir or process).
+            cross_app_context: Cross-app context from recently visited apps.
+            memory_context: Long-term memory context (formatted string).
+
+        Returns:
+            Assembled context string for the LLM.
+        """
+        parts: list[str] = []
+
+        # Metadata
+        meta_parts = [f"App: {source_app}"]
+        if window_title:
+            meta_parts.append(f"Window: {window_title}")
+        parts.append(" | ".join(meta_parts))
+
+        # Cross-app context
+        if cross_app_context:
+            parts.append(cross_app_context)
+
+        # Long-term memory
+        if memory_context:
+            parts.append(memory_context)
+
+        # Recent commands (structured list)
+        if parsed.recent_commands:
+            cmd_list = "\n".join(f"  {cmd}" for cmd in parsed.recent_commands[-10:])
+            parts.append(f"Recent commands:\n{cmd_list}")
+
+        # Recent command output (commands + their output)
+        if parsed.recent_output.strip():
+            parts.append(
+                "Recent terminal session:\n" + parsed.recent_output.strip()
+            )
+
+        # Current command state
+        if parsed.current_command.strip():
+            parts.append(f"Command being typed:\n{parsed.current_command}")
+        else:
+            parts.append("Command line is empty (at prompt).")
+
+        if parsed.prompt_string:
+            parts.append(f"Prompt: {parsed.prompt_string.strip()}")
 
         return "\n\n".join(parts)
 
@@ -595,14 +704,21 @@ class ContextStore:
 
         cursor = conn.execute(
             f"""
-            SELECT suggestion_text FROM suggestion_feedback
+            SELECT DISTINCT suggestion_text FROM suggestion_feedback
             WHERE {where}
             ORDER BY timestamp DESC
             LIMIT ?
             """,
             params,
         )
-        return [row[0] for row in cursor.fetchall()]
+        # Deduplicate while preserving recency order
+        seen: set[str] = set()
+        results: list[str] = []
+        for (text,) in cursor.fetchall():
+            if text not in seen:
+                seen.add(text)
+                results.append(text)
+        return results
 
     # ---- Semantic context ----
 
@@ -718,7 +834,31 @@ class ContextStore:
             scored.append((content, score))
 
         scored.sort(key=lambda x: x[1], reverse=True)
-        return [content for content, _ in scored[:top_k]]
+
+        # Filter out entries that are just keystroke fragments of the query.
+        # The observer stores incremental snapshots as the user types, so
+        # "hello wor", "hello wo", "hello w" all end up as entries.  These
+        # score highly but add no value — they're just shorter echoes of
+        # what the user already typed.
+        #
+        # Heuristic: a keystroke echo is one where the shorter string makes
+        # up >80% of the longer string's length (near-total overlap).
+        query_norm = query.strip().lower()
+        filtered: list[str] = []
+        for content, _score in scored:
+            content_norm = content.strip().lower()
+            if content_norm and query_norm:
+                shorter = min(len(content_norm), len(query_norm))
+                longer = max(len(content_norm), len(query_norm))
+                # High overlap ratio + substring → keystroke echo
+                if shorter / longer > 0.5:
+                    if content_norm in query_norm or query_norm in content_norm:
+                        continue
+            filtered.append(content)
+            if len(filtered) >= top_k:
+                break
+
+        return filtered
 
     def prune(self, max_age_hours: int = 72, max_entries: int = 5000) -> int:
         """Remove old entries to keep the store bounded. Returns count removed."""

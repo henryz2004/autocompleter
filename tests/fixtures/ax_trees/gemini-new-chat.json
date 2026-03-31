@@ -1,0 +1,389 @@
+{
+  "app": "Google Gemini",
+  "windowTitle": "",
+  "capturedAt": "2026-02-28T16:50:49",
+  "macosVersion": "26.2",
+  "notes": "",
+  "tree": {
+    "role": "AXWindow",
+    "subrole": "AXStandardWindow",
+    "roleDescription": "standard window",
+    "value": null,
+    "title": "",
+    "description": "",
+    "placeholderValue": null,
+    "numberOfCharacters": null,
+    "children": [
+      {
+        "role": "AXGroup",
+        "subrole": "",
+        "roleDescription": "group",
+        "value": "",
+        "title": "Google Gemini - Personal",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": 0,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "",
+            "roleDescription": "group",
+            "value": "",
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": 0,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": "",
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": [
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "group",
+                    "value": "",
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "group",
+                        "value": "",
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "Google Gemini",
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 13,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "group",
+                        "value": "",
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": "",
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": "",
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "",
+                                    "roleDescription": "group",
+                                    "value": "",
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 0,
+                                    "children": [
+                                      {
+                                        "role": "AXGroup",
+                                        "subrole": "",
+                                        "roleDescription": "group",
+                                        "value": "",
+                                        "title": "",
+                                        "description": "",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": 0,
+                                        "children": [
+                                          {
+                                            "role": "AXGroup",
+                                            "subrole": "",
+                                            "roleDescription": "group",
+                                            "value": "",
+                                            "title": "",
+                                            "description": "",
+                                            "placeholderValue": null,
+                                            "numberOfCharacters": 0,
+                                            "children": [
+                                              {
+                                                "role": "AXWebArea",
+                                                "subrole": "",
+                                                "roleDescription": "HTML content",
+                                                "value": "",
+                                                "title": "Google Gemini",
+                                                "description": "",
+                                                "placeholderValue": null,
+                                                "numberOfCharacters": 0,
+                                                "children": [
+                                                  {
+                                                    "role": "AXGroup",
+                                                    "subrole": "",
+                                                    "roleDescription": "group",
+                                                    "value": "",
+                                                    "title": "",
+                                                    "description": "",
+                                                    "placeholderValue": null,
+                                                    "numberOfCharacters": 0,
+                                                    "children": []
+                                                  },
+                                                  {
+                                                    "role": "AXGroup",
+                                                    "subrole": "",
+                                                    "roleDescription": "group",
+                                                    "value": "",
+                                                    "title": "",
+                                                    "description": "",
+                                                    "placeholderValue": null,
+                                                    "numberOfCharacters": 0,
+                                                    "children": []
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "group",
+                        "value": "",
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": "",
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXButton",
+                                "subrole": "",
+                                "roleDescription": "button",
+                                "value": "",
+                                "title": "",
+                                "description": "Back",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": []
+                              },
+                              {
+                                "role": "AXButton",
+                                "subrole": "",
+                                "roleDescription": "button",
+                                "value": "",
+                                "title": "",
+                                "description": "Refresh",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": "",
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": "",
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXButton",
+                                "subrole": "",
+                                "roleDescription": "button",
+                                "value": "",
+                                "title": "",
+                                "description": "Zoom: 90%",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": []
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": "",
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXButton",
+                                    "subrole": "",
+                                    "roleDescription": "button",
+                                    "value": "",
+                                    "title": "",
+                                    "description": "Open sidebar search (⇧⌘E)",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 0,
+                                    "children": []
+                                  },
+                                  {
+                                    "role": "AXPopUpButton",
+                                    "subrole": "",
+                                    "roleDescription": "pop up button",
+                                    "value": "",
+                                    "title": "",
+                                    "description": "Settings and more (⌘⌃,)",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 0,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "",
+                        "roleDescription": "text",
+                        "value": "Google Gemini",
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 13,
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": "",
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXCloseButton",
+        "roleDescription": "close button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXFullScreenButton",
+        "roleDescription": "full screen button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "",
+            "roleDescription": "group",
+            "value": null,
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXMinimizeButton",
+        "roleDescription": "minimize button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      }
+    ]
+  }
+}

@@ -79,7 +79,7 @@ class TestSuggestionEngine:
         # Should use reply-mode params
         _, kwargs = mock_call.call_args
         assert kwargs.get("temperature") == engine.config.reply_temperature
-        assert kwargs.get("max_tokens") == engine.config.reply_max_tokens
+        assert kwargs.get("max_tokens") == engine.config.max_tokens
 
     @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
     def test_generate_continuation_mode_params(self, mock_call, engine):
@@ -93,7 +93,7 @@ class TestSuggestionEngine:
         assert len(result) == 1
         _, kwargs = mock_call.call_args
         assert kwargs.get("temperature") == engine.config.continuation_temperature
-        assert kwargs.get("max_tokens") == engine.config.continuation_max_tokens
+        assert kwargs.get("max_tokens") == engine.config.max_tokens
 
     @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
     def test_generate_reply_mode_params(self, mock_call, engine):
@@ -106,7 +106,7 @@ class TestSuggestionEngine:
         assert len(result) == 1
         _, kwargs = mock_call.call_args
         assert kwargs.get("temperature") == engine.config.reply_temperature
-        assert kwargs.get("max_tokens") == engine.config.reply_max_tokens
+        assert kwargs.get("max_tokens") == engine.config.max_tokens
 
     @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
     def test_mode_auto_detected_when_not_specified(self, mock_call, engine):
@@ -127,13 +127,14 @@ class TestSuggestionEngine:
         assert result[0].text == "suggestion 1"
         mock_call.assert_called_once()
 
-    def test_unknown_provider_raises_at_client_creation(self, config):
-        """Unknown provider raises when _get_client() is called."""
+    def test_unknown_provider_returns_error_suggestion(self, config):
+        """Unknown provider returns an error suggestion."""
         config.llm_provider = "unknown"
         engine = SuggestionEngine(config)
-        # generate_suggestions catches exceptions and returns []
+        # generate_suggestions catches exceptions and returns error suggestion
         result = engine.generate_suggestions("Hello world test", "context")
-        assert result == []
+        assert len(result) == 1
+        assert "error" in result[0].text.lower() or "try again" in result[0].text.lower()
 
     def test_unicode_suggestions_via_instructor(self):
         """Unicode text passes through the Instructor-based pipeline."""

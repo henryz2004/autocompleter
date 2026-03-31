@@ -1,0 +1,1676 @@
+{
+  "app": "Google Gemini",
+  "windowTitle": "",
+  "capturedAt": "2026-03-30T17:22:01",
+  "macosVersion": "26.2",
+  "notes": "",
+  "tree": {
+    "role": "AXWindow",
+    "subrole": "AXStandardWindow",
+    "roleDescription": "standard window",
+    "value": null,
+    "title": "",
+    "description": "",
+    "placeholderValue": null,
+    "numberOfCharacters": null,
+    "children": [
+      {
+        "role": "AXGroup",
+        "subrole": "",
+        "roleDescription": "group",
+        "value": "",
+        "title": "Google Gemini - Personal",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": 0,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "",
+            "roleDescription": "group",
+            "value": "",
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": 0,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": "",
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": [
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "group",
+                    "value": "",
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "group",
+                        "value": "",
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "Google Gemini",
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 13,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "group",
+                        "value": "",
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": "",
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": "",
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "",
+                                    "roleDescription": "group",
+                                    "value": "",
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 0,
+                                    "children": [
+                                      {
+                                        "role": "AXGroup",
+                                        "subrole": "",
+                                        "roleDescription": "group",
+                                        "value": "",
+                                        "title": "",
+                                        "description": "",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": 0,
+                                        "children": [
+                                          {
+                                            "role": "AXGroup",
+                                            "subrole": "",
+                                            "roleDescription": "group",
+                                            "value": "",
+                                            "title": "",
+                                            "description": "",
+                                            "placeholderValue": null,
+                                            "numberOfCharacters": 0,
+                                            "children": [
+                                              {
+                                                "role": "AXWebArea",
+                                                "subrole": "",
+                                                "roleDescription": "HTML content",
+                                                "value": "",
+                                                "title": "Google Gemini",
+                                                "description": "",
+                                                "placeholderValue": null,
+                                                "numberOfCharacters": 0,
+                                                "children": [
+                                                  {
+                                                    "role": "AXGroup",
+                                                    "subrole": "",
+                                                    "roleDescription": "group",
+                                                    "value": "",
+                                                    "title": "",
+                                                    "description": "",
+                                                    "placeholderValue": null,
+                                                    "numberOfCharacters": 0,
+                                                    "children": [
+                                                      {
+                                                        "role": "AXGroup",
+                                                        "subrole": "",
+                                                        "roleDescription": "group",
+                                                        "value": "",
+                                                        "title": "",
+                                                        "description": "",
+                                                        "placeholderValue": null,
+                                                        "numberOfCharacters": 0,
+                                                        "children": [
+                                                          {
+                                                            "role": "AXGroup",
+                                                            "subrole": "",
+                                                            "roleDescription": "group",
+                                                            "value": "",
+                                                            "title": "",
+                                                            "description": "",
+                                                            "placeholderValue": null,
+                                                            "numberOfCharacters": 0,
+                                                            "children": [
+                                                              {
+                                                                "role": "AXGroup",
+                                                                "subrole": "",
+                                                                "roleDescription": "group",
+                                                                "value": "",
+                                                                "title": "",
+                                                                "description": "",
+                                                                "placeholderValue": null,
+                                                                "numberOfCharacters": 0,
+                                                                "children": [
+                                                                  {
+                                                                    "role": "AXGroup",
+                                                                    "subrole": "",
+                                                                    "roleDescription": "group",
+                                                                    "value": "",
+                                                                    "title": "",
+                                                                    "description": "",
+                                                                    "placeholderValue": null,
+                                                                    "numberOfCharacters": 0,
+                                                                    "children": [
+                                                                      {
+                                                                        "role": "AXGroup",
+                                                                        "subrole": "",
+                                                                        "roleDescription": "group",
+                                                                        "value": "",
+                                                                        "title": "",
+                                                                        "description": "",
+                                                                        "placeholderValue": null,
+                                                                        "numberOfCharacters": 0,
+                                                                        "children": [
+                                                                          {
+                                                                            "role": "AXButton",
+                                                                            "subrole": "",
+                                                                            "roleDescription": "button",
+                                                                            "value": "",
+                                                                            "title": "",
+                                                                            "description": "Google Account: Henry Zhang (henryz2004@gmail.com)",
+                                                                            "placeholderValue": null,
+                                                                            "numberOfCharacters": 0,
+                                                                            "children": [
+                                                                              {
+                                                                                "role": "AXGroup",
+                                                                                "subrole": "",
+                                                                                "roleDescription": "group",
+                                                                                "value": "",
+                                                                                "title": "",
+                                                                                "description": "",
+                                                                                "placeholderValue": null,
+                                                                                "numberOfCharacters": 0,
+                                                                                "children": [
+                                                                                  {
+                                                                                    "role": "AXStaticText",
+                                                                                    "subrole": "",
+                                                                                    "roleDescription": "text",
+                                                                                    "value": "  ",
+                                                                                    "title": "",
+                                                                                    "description": "",
+                                                                                    "placeholderValue": null,
+                                                                                    "numberOfCharacters": 0,
+                                                                                    "children": []
+                                                                                  }
+                                                                                ]
+                                                                              },
+                                                                              {
+                                                                                "role": "AXGroup",
+                                                                                "subrole": "",
+                                                                                "roleDescription": "group",
+                                                                                "value": "",
+                                                                                "title": "",
+                                                                                "description": "",
+                                                                                "placeholderValue": null,
+                                                                                "numberOfCharacters": 0,
+                                                                                "children": [
+                                                                                  {
+                                                                                    "role": "AXImage",
+                                                                                    "subrole": "",
+                                                                                    "roleDescription": "image",
+                                                                                    "value": "",
+                                                                                    "title": "",
+                                                                                    "description": "",
+                                                                                    "placeholderValue": null,
+                                                                                    "numberOfCharacters": 0,
+                                                                                    "children": []
+                                                                                  }
+                                                                                ]
+                                                                              },
+                                                                              {
+                                                                                "role": "AXGroup",
+                                                                                "subrole": "",
+                                                                                "roleDescription": "group",
+                                                                                "value": "",
+                                                                                "title": "",
+                                                                                "description": "",
+                                                                                "placeholderValue": null,
+                                                                                "numberOfCharacters": 0,
+                                                                                "children": []
+                                                                              },
+                                                                              {
+                                                                                "role": "AXGroup",
+                                                                                "subrole": "",
+                                                                                "roleDescription": "group",
+                                                                                "value": "",
+                                                                                "title": "",
+                                                                                "description": "",
+                                                                                "placeholderValue": null,
+                                                                                "numberOfCharacters": 0,
+                                                                                "children": []
+                                                                              }
+                                                                            ]
+                                                                          }
+                                                                        ]
+                                                                      }
+                                                                    ]
+                                                                  }
+                                                                ]
+                                                              }
+                                                            ]
+                                                          }
+                                                        ]
+                                                      },
+                                                      {
+                                                        "role": "AXGroup",
+                                                        "subrole": "",
+                                                        "roleDescription": "group",
+                                                        "value": "",
+                                                        "title": "",
+                                                        "description": "",
+                                                        "placeholderValue": null,
+                                                        "numberOfCharacters": 0,
+                                                        "children": [
+                                                          {
+                                                            "role": "AXGroup",
+                                                            "subrole": "AXLandmarkMain",
+                                                            "roleDescription": "main",
+                                                            "value": "",
+                                                            "title": "",
+                                                            "description": "",
+                                                            "placeholderValue": null,
+                                                            "numberOfCharacters": 0,
+                                                            "children": [
+                                                              {
+                                                                "role": "AXGroup",
+                                                                "subrole": "",
+                                                                "roleDescription": "group",
+                                                                "value": "",
+                                                                "title": "",
+                                                                "description": "",
+                                                                "placeholderValue": null,
+                                                                "numberOfCharacters": 0,
+                                                                "children": [
+                                                                  {
+                                                                    "role": "AXGroup",
+                                                                    "subrole": "",
+                                                                    "roleDescription": "group",
+                                                                    "value": "",
+                                                                    "title": "",
+                                                                    "description": "",
+                                                                    "placeholderValue": null,
+                                                                    "numberOfCharacters": 0,
+                                                                    "children": [
+                                                                      {
+                                                                        "role": "AXButton",
+                                                                        "subrole": "",
+                                                                        "roleDescription": "button",
+                                                                        "value": "",
+                                                                        "title": "",
+                                                                        "description": "Main menu",
+                                                                        "placeholderValue": null,
+                                                                        "numberOfCharacters": 0,
+                                                                        "children": []
+                                                                      }
+                                                                    ]
+                                                                  },
+                                                                  {
+                                                                    "role": "AXButton",
+                                                                    "subrole": "",
+                                                                    "roleDescription": "button",
+                                                                    "value": "",
+                                                                    "title": "",
+                                                                    "description": "New chat",
+                                                                    "placeholderValue": null,
+                                                                    "numberOfCharacters": 0,
+                                                                    "children": [
+                                                                      {
+                                                                        "role": "AXGroup",
+                                                                        "subrole": "",
+                                                                        "roleDescription": "group",
+                                                                        "value": "",
+                                                                        "title": "",
+                                                                        "description": "",
+                                                                        "placeholderValue": null,
+                                                                        "numberOfCharacters": 0,
+                                                                        "children": [
+                                                                          {
+                                                                            "role": "AXStaticText",
+                                                                            "subrole": "",
+                                                                            "roleDescription": "text",
+                                                                            "value": "Gemini",
+                                                                            "title": "",
+                                                                            "description": "",
+                                                                            "placeholderValue": null,
+                                                                            "numberOfCharacters": 0,
+                                                                            "children": []
+                                                                          }
+                                                                        ]
+                                                                      }
+                                                                    ]
+                                                                  }
+                                                                ]
+                                                              },
+                                                              {
+                                                                "role": "AXGroup",
+                                                                "subrole": "",
+                                                                "roleDescription": "group",
+                                                                "value": "",
+                                                                "title": "",
+                                                                "description": "",
+                                                                "placeholderValue": null,
+                                                                "numberOfCharacters": 0,
+                                                                "children": [
+                                                                  {
+                                                                    "role": "AXGroup",
+                                                                    "subrole": "",
+                                                                    "roleDescription": "group",
+                                                                    "value": "",
+                                                                    "title": "",
+                                                                    "description": "",
+                                                                    "placeholderValue": null,
+                                                                    "numberOfCharacters": 0,
+                                                                    "children": []
+                                                                  },
+                                                                  {
+                                                                    "role": "AXButton",
+                                                                    "subrole": "",
+                                                                    "roleDescription": "button",
+                                                                    "value": "",
+                                                                    "title": "PRO",
+                                                                    "description": "",
+                                                                    "placeholderValue": null,
+                                                                    "numberOfCharacters": 0,
+                                                                    "children": []
+                                                                  }
+                                                                ]
+                                                              },
+                                                              {
+                                                                "role": "AXGroup",
+                                                                "subrole": "AXLandmarkNavigation",
+                                                                "roleDescription": "navigation",
+                                                                "value": "",
+                                                                "title": "",
+                                                                "description": "",
+                                                                "placeholderValue": null,
+                                                                "numberOfCharacters": 0,
+                                                                "children": [
+                                                                  {
+                                                                    "role": "AXGroup",
+                                                                    "subrole": "",
+                                                                    "roleDescription": "group",
+                                                                    "value": "",
+                                                                    "title": "",
+                                                                    "description": "",
+                                                                    "placeholderValue": null,
+                                                                    "numberOfCharacters": 0,
+                                                                    "children": [
+                                                                      {
+                                                                        "role": "AXGroup",
+                                                                        "subrole": "",
+                                                                        "roleDescription": "group",
+                                                                        "value": "",
+                                                                        "title": "",
+                                                                        "description": "",
+                                                                        "placeholderValue": null,
+                                                                        "numberOfCharacters": 0,
+                                                                        "children": []
+                                                                      },
+                                                                      {
+                                                                        "role": "AXGroup",
+                                                                        "subrole": "AXApplicationGroup",
+                                                                        "roleDescription": "group",
+                                                                        "value": "",
+                                                                        "title": "",
+                                                                        "description": "",
+                                                                        "placeholderValue": null,
+                                                                        "numberOfCharacters": 0,
+                                                                        "children": [
+                                                                          {
+                                                                            "role": "AXLink",
+                                                                            "subrole": "",
+                                                                            "roleDescription": "link",
+                                                                            "value": "",
+                                                                            "title": "",
+                                                                            "description": "New chat",
+                                                                            "placeholderValue": null,
+                                                                            "numberOfCharacters": 0,
+                                                                            "children": [
+                                                                              {
+                                                                                "role": "AXGroup",
+                                                                                "subrole": "",
+                                                                                "roleDescription": "group",
+                                                                                "value": "",
+                                                                                "title": "",
+                                                                                "description": "",
+                                                                                "placeholderValue": null,
+                                                                                "numberOfCharacters": 0,
+                                                                                "children": [
+                                                                                  {
+                                                                                    "role": "AXGroup",
+                                                                                    "subrole": "",
+                                                                                    "roleDescription": "group",
+                                                                                    "value": "",
+                                                                                    "title": "",
+                                                                                    "description": "",
+                                                                                    "placeholderValue": null,
+                                                                                    "numberOfCharacters": 0,
+                                                                                    "children": []
+                                                                                  }
+                                                                                ]
+                                                                              }
+                                                                            ]
+                                                                          }
+                                                                        ]
+                                                                      },
+                                                                      {
+                                                                        "role": "AXGroup",
+                                                                        "subrole": "AXApplicationGroup",
+                                                                        "roleDescription": "group",
+                                                                        "value": "",
+                                                                        "title": "",
+                                                                        "description": "",
+                                                                        "placeholderValue": null,
+                                                                        "numberOfCharacters": 0,
+                                                                        "children": [
+                                                                          {
+                                                                            "role": "AXGroup",
+                                                                            "subrole": "",
+                                                                            "roleDescription": "group",
+                                                                            "value": "",
+                                                                            "title": "",
+                                                                            "description": "",
+                                                                            "placeholderValue": null,
+                                                                            "numberOfCharacters": 0,
+                                                                            "children": [
+                                                                              {
+                                                                                "role": "AXPopUpButton",
+                                                                                "subrole": "",
+                                                                                "roleDescription": "pop up button",
+                                                                                "value": "",
+                                                                                "title": "",
+                                                                                "description": "Settings & help",
+                                                                                "placeholderValue": null,
+                                                                                "numberOfCharacters": 0,
+                                                                                "children": [
+                                                                                  {
+                                                                                    "role": "AXGroup",
+                                                                                    "subrole": "",
+                                                                                    "roleDescription": "group",
+                                                                                    "value": "",
+                                                                                    "title": "",
+                                                                                    "description": "",
+                                                                                    "placeholderValue": null,
+                                                                                    "numberOfCharacters": 0,
+                                                                                    "children": [
+                                                                                      {
+                                                                                        "role": "AXGroup",
+                                                                                        "subrole": "",
+                                                                                        "roleDescription": "group",
+                                                                                        "value": "",
+                                                                                        "title": "",
+                                                                                        "description": "",
+                                                                                        "placeholderValue": null,
+                                                                                        "numberOfCharacters": 0,
+                                                                                        "children": []
+                                                                                      }
+                                                                                    ]
+                                                                                  }
+                                                                                ]
+                                                                              }
+                                                                            ]
+                                                                          }
+                                                                        ]
+                                                                      }
+                                                                    ]
+                                                                  }
+                                                                ]
+                                                              },
+                                                              {
+                                                                "role": "AXGroup",
+                                                                "subrole": "",
+                                                                "roleDescription": "group",
+                                                                "value": "",
+                                                                "title": "",
+                                                                "description": "",
+                                                                "placeholderValue": null,
+                                                                "numberOfCharacters": 0,
+                                                                "children": [
+                                                                  {
+                                                                    "role": "AXGroup",
+                                                                    "subrole": "",
+                                                                    "roleDescription": "group",
+                                                                    "value": "",
+                                                                    "title": "",
+                                                                    "description": "",
+                                                                    "placeholderValue": null,
+                                                                    "numberOfCharacters": 0,
+                                                                    "children": [
+                                                                      {
+                                                                        "role": "AXGroup",
+                                                                        "subrole": "",
+                                                                        "roleDescription": "group",
+                                                                        "value": "",
+                                                                        "title": "",
+                                                                        "description": "",
+                                                                        "placeholderValue": null,
+                                                                        "numberOfCharacters": 0,
+                                                                        "children": []
+                                                                      },
+                                                                      {
+                                                                        "role": "AXGroup",
+                                                                        "subrole": "",
+                                                                        "roleDescription": "group",
+                                                                        "value": "",
+                                                                        "title": "",
+                                                                        "description": "",
+                                                                        "placeholderValue": null,
+                                                                        "numberOfCharacters": 0,
+                                                                        "children": []
+                                                                      },
+                                                                      {
+                                                                        "role": "AXGroup",
+                                                                        "subrole": "",
+                                                                        "roleDescription": "group",
+                                                                        "value": "",
+                                                                        "title": "",
+                                                                        "description": "",
+                                                                        "placeholderValue": null,
+                                                                        "numberOfCharacters": 0,
+                                                                        "children": [
+                                                                          {
+                                                                            "role": "AXGroup",
+                                                                            "subrole": "",
+                                                                            "roleDescription": "group",
+                                                                            "value": "",
+                                                                            "title": "",
+                                                                            "description": "",
+                                                                            "placeholderValue": null,
+                                                                            "numberOfCharacters": 0,
+                                                                            "children": [
+                                                                              {
+                                                                                "role": "AXHeading",
+                                                                                "subrole": "",
+                                                                                "roleDescription": "heading",
+                                                                                "value": "",
+                                                                                "title": "Conversation with Gemini",
+                                                                                "description": "",
+                                                                                "placeholderValue": null,
+                                                                                "numberOfCharacters": 0,
+                                                                                "children": [
+                                                                                  {
+                                                                                    "role": "AXStaticText",
+                                                                                    "subrole": "",
+                                                                                    "roleDescription": "text",
+                                                                                    "value": "Conversation with Gemini",
+                                                                                    "title": "",
+                                                                                    "description": "",
+                                                                                    "placeholderValue": null,
+                                                                                    "numberOfCharacters": 0,
+                                                                                    "children": []
+                                                                                  }
+                                                                                ]
+                                                                              },
+                                                                              {
+                                                                                "role": "AXGroup",
+                                                                                "subrole": "",
+                                                                                "roleDescription": "group",
+                                                                                "value": "",
+                                                                                "title": "",
+                                                                                "description": "",
+                                                                                "placeholderValue": null,
+                                                                                "numberOfCharacters": 0,
+                                                                                "children": [
+                                                                                  {
+                                                                                    "role": "AXGroup",
+                                                                                    "subrole": "",
+                                                                                    "roleDescription": "group",
+                                                                                    "value": "",
+                                                                                    "title": "",
+                                                                                    "description": "",
+                                                                                    "placeholderValue": null,
+                                                                                    "numberOfCharacters": 0,
+                                                                                    "children": [
+                                                                                      {
+                                                                                        "role": "AXGroup",
+                                                                                        "subrole": "",
+                                                                                        "roleDescription": "group",
+                                                                                        "value": "",
+                                                                                        "title": "",
+                                                                                        "description": "",
+                                                                                        "placeholderValue": null,
+                                                                                        "numberOfCharacters": 0,
+                                                                                        "children": [
+                                                                                          {
+                                                                                            "role": "AXGroup",
+                                                                                            "subrole": "",
+                                                                                            "roleDescription": "group",
+                                                                                            "value": "",
+                                                                                            "title": "",
+                                                                                            "description": "",
+                                                                                            "placeholderValue": null,
+                                                                                            "numberOfCharacters": 0,
+                                                                                            "children": [
+                                                                                              {
+                                                                                                "role": "AXGroup",
+                                                                                                "subrole": "",
+                                                                                                "roleDescription": "group",
+                                                                                                "value": "",
+                                                                                                "title": "",
+                                                                                                "description": "",
+                                                                                                "placeholderValue": null,
+                                                                                                "numberOfCharacters": 0,
+                                                                                                "children": [
+                                                                                                  {
+                                                                                                    "role": "AXGroup",
+                                                                                                    "subrole": "",
+                                                                                                    "roleDescription": "group",
+                                                                                                    "value": "",
+                                                                                                    "title": "",
+                                                                                                    "description": "",
+                                                                                                    "placeholderValue": null,
+                                                                                                    "numberOfCharacters": 0,
+                                                                                                    "children": [
+                                                                                                      {
+                                                                                                        "role": "AXGroup",
+                                                                                                        "subrole": "",
+                                                                                                        "roleDescription": "group",
+                                                                                                        "value": "",
+                                                                                                        "title": "",
+                                                                                                        "description": "",
+                                                                                                        "placeholderValue": null,
+                                                                                                        "numberOfCharacters": 0,
+                                                                                                        "children": [
+                                                                                                          {
+                                                                                                            "role": "AXGroup",
+                                                                                                            "subrole": "",
+                                                                                                            "roleDescription": "group",
+                                                                                                            "value": "",
+                                                                                                            "title": "",
+                                                                                                            "description": "",
+                                                                                                            "placeholderValue": null,
+                                                                                                            "numberOfCharacters": 0,
+                                                                                                            "children": [
+                                                                                                              {
+                                                                                                                "role": "AXGroup",
+                                                                                                                "subrole": "",
+                                                                                                                "roleDescription": "group",
+                                                                                                                "value": "",
+                                                                                                                "title": "",
+                                                                                                                "description": "",
+                                                                                                                "placeholderValue": null,
+                                                                                                                "numberOfCharacters": 0,
+                                                                                                                "children": [
+                                                                                                                  {
+                                                                                                                    "role": "AXGroup",
+                                                                                                                    "subrole": "",
+                                                                                                                    "roleDescription": "group",
+                                                                                                                    "value": "",
+                                                                                                                    "title": "",
+                                                                                                                    "description": "",
+                                                                                                                    "placeholderValue": null,
+                                                                                                                    "numberOfCharacters": 0,
+                                                                                                                    "children": []
+                                                                                                                  }
+                                                                                                                ]
+                                                                                                              },
+                                                                                                              {
+                                                                                                                "role": "AXGroup",
+                                                                                                                "subrole": "",
+                                                                                                                "roleDescription": "group",
+                                                                                                                "value": "",
+                                                                                                                "title": "",
+                                                                                                                "description": "",
+                                                                                                                "placeholderValue": null,
+                                                                                                                "numberOfCharacters": 0,
+                                                                                                                "children": [
+                                                                                                                  {
+                                                                                                                    "role": "AXStaticText",
+                                                                                                                    "subrole": "",
+                                                                                                                    "roleDescription": "text",
+                                                                                                                    "value": "Hi Henry",
+                                                                                                                    "title": "",
+                                                                                                                    "description": "",
+                                                                                                                    "placeholderValue": null,
+                                                                                                                    "numberOfCharacters": 0,
+                                                                                                                    "children": []
+                                                                                                                  }
+                                                                                                                ]
+                                                                                                              }
+                                                                                                            ]
+                                                                                                          }
+                                                                                                        ]
+                                                                                                      },
+                                                                                                      {
+                                                                                                        "role": "AXGroup",
+                                                                                                        "subrole": "",
+                                                                                                        "roleDescription": "group",
+                                                                                                        "value": "",
+                                                                                                        "title": "",
+                                                                                                        "description": "",
+                                                                                                        "placeholderValue": null,
+                                                                                                        "numberOfCharacters": 0,
+                                                                                                        "children": [
+                                                                                                          {
+                                                                                                            "role": "AXGroup",
+                                                                                                            "subrole": "",
+                                                                                                            "roleDescription": "group",
+                                                                                                            "value": "",
+                                                                                                            "title": "",
+                                                                                                            "description": "",
+                                                                                                            "placeholderValue": null,
+                                                                                                            "numberOfCharacters": 0,
+                                                                                                            "children": [
+                                                                                                              {
+                                                                                                                "role": "AXGroup",
+                                                                                                                "subrole": "",
+                                                                                                                "roleDescription": "group",
+                                                                                                                "value": "",
+                                                                                                                "title": "",
+                                                                                                                "description": "",
+                                                                                                                "placeholderValue": null,
+                                                                                                                "numberOfCharacters": 0,
+                                                                                                                "children": [
+                                                                                                                  {
+                                                                                                                    "role": "AXHeading",
+                                                                                                                    "subrole": "",
+                                                                                                                    "roleDescription": "heading",
+                                                                                                                    "value": "",
+                                                                                                                    "title": "What can we get done?",
+                                                                                                                    "description": "",
+                                                                                                                    "placeholderValue": null,
+                                                                                                                    "numberOfCharacters": 0,
+                                                                                                                    "children": [
+                                                                                                                      {
+                                                                                                                        "role": "AXGroup",
+                                                                                                                        "subrole": "",
+                                                                                                                        "roleDescription": "group",
+                                                                                                                        "value": "",
+                                                                                                                        "title": "",
+                                                                                                                        "description": "",
+                                                                                                                        "placeholderValue": null,
+                                                                                                                        "numberOfCharacters": 0,
+                                                                                                                        "children": [
+                                                                                                                          {
+                                                                                                                            "role": "AXStaticText",
+                                                                                                                            "subrole": "",
+                                                                                                                            "roleDescription": "text",
+                                                                                                                            "value": "What can we get done?",
+                                                                                                                            "title": "",
+                                                                                                                            "description": "",
+                                                                                                                            "placeholderValue": null,
+                                                                                                                            "numberOfCharacters": 0,
+                                                                                                                            "children": []
+                                                                                                                          }
+                                                                                                                        ]
+                                                                                                                      }
+                                                                                                                    ]
+                                                                                                                  }
+                                                                                                                ]
+                                                                                                              }
+                                                                                                            ]
+                                                                                                          }
+                                                                                                        ]
+                                                                                                      }
+                                                                                                    ]
+                                                                                                  },
+                                                                                                  {
+                                                                                                    "role": "AXGroup",
+                                                                                                    "subrole": "",
+                                                                                                    "roleDescription": "group",
+                                                                                                    "value": "",
+                                                                                                    "title": "",
+                                                                                                    "description": "",
+                                                                                                    "placeholderValue": null,
+                                                                                                    "numberOfCharacters": 0,
+                                                                                                    "children": [
+                                                                                                      {
+                                                                                                        "role": "AXGroup",
+                                                                                                        "subrole": "",
+                                                                                                        "roleDescription": "group",
+                                                                                                        "value": "",
+                                                                                                        "title": "",
+                                                                                                        "description": "",
+                                                                                                        "placeholderValue": null,
+                                                                                                        "numberOfCharacters": 0,
+                                                                                                        "children": [
+                                                                                                          {
+                                                                                                            "role": "AXButton",
+                                                                                                            "subrole": "",
+                                                                                                            "roleDescription": "button",
+                                                                                                            "value": "",
+                                                                                                            "title": "",
+                                                                                                            "description": "For you, button, tap to use tool",
+                                                                                                            "placeholderValue": null,
+                                                                                                            "numberOfCharacters": 0,
+                                                                                                            "children": [
+                                                                                                              {
+                                                                                                                "role": "AXGroup",
+                                                                                                                "subrole": "",
+                                                                                                                "roleDescription": "group",
+                                                                                                                "value": "",
+                                                                                                                "title": "",
+                                                                                                                "description": "",
+                                                                                                                "placeholderValue": null,
+                                                                                                                "numberOfCharacters": 0,
+                                                                                                                "children": [
+                                                                                                                  {
+                                                                                                                    "role": "AXStaticText",
+                                                                                                                    "subrole": "",
+                                                                                                                    "roleDescription": "text",
+                                                                                                                    "value": "For you",
+                                                                                                                    "title": "",
+                                                                                                                    "description": "",
+                                                                                                                    "placeholderValue": null,
+                                                                                                                    "numberOfCharacters": 0,
+                                                                                                                    "children": []
+                                                                                                                  }
+                                                                                                                ]
+                                                                                                              }
+                                                                                                            ]
+                                                                                                          },
+                                                                                                          {
+                                                                                                            "role": "AXButton",
+                                                                                                            "subrole": "",
+                                                                                                            "roleDescription": "button",
+                                                                                                            "value": "",
+                                                                                                            "title": "",
+                                                                                                            "description": "🖼️ Create image, button, tap to use tool",
+                                                                                                            "placeholderValue": null,
+                                                                                                            "numberOfCharacters": 0,
+                                                                                                            "children": [
+                                                                                                              {
+                                                                                                                "role": "AXGroup",
+                                                                                                                "subrole": "",
+                                                                                                                "roleDescription": "group",
+                                                                                                                "value": "",
+                                                                                                                "title": "",
+                                                                                                                "description": "",
+                                                                                                                "placeholderValue": null,
+                                                                                                                "numberOfCharacters": 0,
+                                                                                                                "children": [
+                                                                                                                  {
+                                                                                                                    "role": "AXStaticText",
+                                                                                                                    "subrole": "",
+                                                                                                                    "roleDescription": "text",
+                                                                                                                    "value": "🖼️ Create image",
+                                                                                                                    "title": "",
+                                                                                                                    "description": "",
+                                                                                                                    "placeholderValue": null,
+                                                                                                                    "numberOfCharacters": 0,
+                                                                                                                    "children": []
+                                                                                                                  }
+                                                                                                                ]
+                                                                                                              }
+                                                                                                            ]
+                                                                                                          },
+                                                                                                          {
+                                                                                                            "role": "AXButton",
+                                                                                                            "subrole": "",
+                                                                                                            "roleDescription": "button",
+                                                                                                            "value": "",
+                                                                                                            "title": "",
+                                                                                                            "description": "🎸 Create music, button, tap to use tool",
+                                                                                                            "placeholderValue": null,
+                                                                                                            "numberOfCharacters": 0,
+                                                                                                            "children": [
+                                                                                                              {
+                                                                                                                "role": "AXGroup",
+                                                                                                                "subrole": "",
+                                                                                                                "roleDescription": "group",
+                                                                                                                "value": "",
+                                                                                                                "title": "",
+                                                                                                                "description": "",
+                                                                                                                "placeholderValue": null,
+                                                                                                                "numberOfCharacters": 0,
+                                                                                                                "children": [
+                                                                                                                  {
+                                                                                                                    "role": "AXStaticText",
+                                                                                                                    "subrole": "",
+                                                                                                                    "roleDescription": "text",
+                                                                                                                    "value": "🎸 Create music",
+                                                                                                                    "title": "",
+                                                                                                                    "description": "",
+                                                                                                                    "placeholderValue": null,
+                                                                                                                    "numberOfCharacters": 0,
+                                                                                                                    "children": []
+                                                                                                                  }
+                                                                                                                ]
+                                                                                                              }
+                                                                                                            ]
+                                                                                                          },
+                                                                                                          {
+                                                                                                            "role": "AXButton",
+                                                                                                            "subrole": "",
+                                                                                                            "roleDescription": "button",
+                                                                                                            "value": "",
+                                                                                                            "title": "",
+                                                                                                            "description": "Write anything, button, tap to use tool",
+                                                                                                            "placeholderValue": null,
+                                                                                                            "numberOfCharacters": 0,
+                                                                                                            "children": [
+                                                                                                              {
+                                                                                                                "role": "AXGroup",
+                                                                                                                "subrole": "",
+                                                                                                                "roleDescription": "group",
+                                                                                                                "value": "",
+                                                                                                                "title": "",
+                                                                                                                "description": "",
+                                                                                                                "placeholderValue": null,
+                                                                                                                "numberOfCharacters": 0,
+                                                                                                                "children": [
+                                                                                                                  {
+                                                                                                                    "role": "AXStaticText",
+                                                                                                                    "subrole": "",
+                                                                                                                    "roleDescription": "text",
+                                                                                                                    "value": "Write anything",
+                                                                                                                    "title": "",
+                                                                                                                    "description": "",
+                                                                                                                    "placeholderValue": null,
+                                                                                                                    "numberOfCharacters": 0,
+                                                                                                                    "children": []
+                                                                                                                  }
+                                                                                                                ]
+                                                                                                              }
+                                                                                                            ]
+                                                                                                          },
+                                                                                                          {
+                                                                                                            "role": "AXButton",
+                                                                                                            "subrole": "",
+                                                                                                            "roleDescription": "button",
+                                                                                                            "value": "",
+                                                                                                            "title": "",
+                                                                                                            "description": "Boost my day, button, tap to use tool",
+                                                                                                            "placeholderValue": null,
+                                                                                                            "numberOfCharacters": 0,
+                                                                                                            "children": [
+                                                                                                              {
+                                                                                                                "role": "AXGroup",
+                                                                                                                "subrole": "",
+                                                                                                                "roleDescription": "group",
+                                                                                                                "value": "",
+                                                                                                                "title": "",
+                                                                                                                "description": "",
+                                                                                                                "placeholderValue": null,
+                                                                                                                "numberOfCharacters": 0,
+                                                                                                                "children": [
+                                                                                                                  {
+                                                                                                                    "role": "AXStaticText",
+                                                                                                                    "subrole": "",
+                                                                                                                    "roleDescription": "text",
+                                                                                                                    "value": "Boost my day",
+                                                                                                                    "title": "",
+                                                                                                                    "description": "",
+                                                                                                                    "placeholderValue": null,
+                                                                                                                    "numberOfCharacters": 0,
+                                                                                                                    "children": []
+                                                                                                                  }
+                                                                                                                ]
+                                                                                                              }
+                                                                                                            ]
+                                                                                                          },
+                                                                                                          {
+                                                                                                            "role": "AXButton",
+                                                                                                            "subrole": "",
+                                                                                                            "roleDescription": "button",
+                                                                                                            "value": "",
+                                                                                                            "title": "",
+                                                                                                            "description": "Help me learn, button, tap to use tool",
+                                                                                                            "placeholderValue": null,
+                                                                                                            "numberOfCharacters": 0,
+                                                                                                            "children": [
+                                                                                                              {
+                                                                                                                "role": "AXGroup",
+                                                                                                                "subrole": "",
+                                                                                                                "roleDescription": "group",
+                                                                                                                "value": "",
+                                                                                                                "title": "",
+                                                                                                                "description": "",
+                                                                                                                "placeholderValue": null,
+                                                                                                                "numberOfCharacters": 0,
+                                                                                                                "children": [
+                                                                                                                  {
+                                                                                                                    "role": "AXStaticText",
+                                                                                                                    "subrole": "",
+                                                                                                                    "roleDescription": "text",
+                                                                                                                    "value": "Help me learn",
+                                                                                                                    "title": "",
+                                                                                                                    "description": "",
+                                                                                                                    "placeholderValue": null,
+                                                                                                                    "numberOfCharacters": 0,
+                                                                                                                    "children": []
+                                                                                                                  }
+                                                                                                                ]
+                                                                                                              }
+                                                                                                            ]
+                                                                                                          }
+                                                                                                        ]
+                                                                                                      }
+                                                                                                    ]
+                                                                                                  }
+                                                                                                ]
+                                                                                              }
+                                                                                            ]
+                                                                                          }
+                                                                                        ]
+                                                                                      },
+                                                                                      {
+                                                                                        "role": "AXGroup",
+                                                                                        "subrole": "",
+                                                                                        "roleDescription": "group",
+                                                                                        "value": "",
+                                                                                        "title": "",
+                                                                                        "description": "",
+                                                                                        "placeholderValue": null,
+                                                                                        "numberOfCharacters": 0,
+                                                                                        "children": []
+                                                                                      }
+                                                                                    ]
+                                                                                  }
+                                                                                ]
+                                                                              },
+                                                                              {
+                                                                                "role": "AXGroup",
+                                                                                "subrole": "",
+                                                                                "roleDescription": "group",
+                                                                                "value": "",
+                                                                                "title": "",
+                                                                                "description": "",
+                                                                                "placeholderValue": null,
+                                                                                "numberOfCharacters": 0,
+                                                                                "children": [
+                                                                                  {
+                                                                                    "role": "AXGroup",
+                                                                                    "subrole": "AXApplicationGroup",
+                                                                                    "roleDescription": "group",
+                                                                                    "value": "",
+                                                                                    "title": "",
+                                                                                    "description": "",
+                                                                                    "placeholderValue": null,
+                                                                                    "numberOfCharacters": 0,
+                                                                                    "children": [
+                                                                                      {
+                                                                                        "role": "AXGroup",
+                                                                                        "subrole": "",
+                                                                                        "roleDescription": "group",
+                                                                                        "value": "",
+                                                                                        "title": "",
+                                                                                        "description": "",
+                                                                                        "placeholderValue": null,
+                                                                                        "numberOfCharacters": 0,
+                                                                                        "children": []
+                                                                                      },
+                                                                                      {
+                                                                                        "role": "AXGroup",
+                                                                                        "subrole": "",
+                                                                                        "roleDescription": "group",
+                                                                                        "value": "",
+                                                                                        "title": "",
+                                                                                        "description": "",
+                                                                                        "placeholderValue": null,
+                                                                                        "numberOfCharacters": 0,
+                                                                                        "children": [
+                                                                                          {
+                                                                                            "role": "AXGroup",
+                                                                                            "subrole": "",
+                                                                                            "roleDescription": "group",
+                                                                                            "value": "",
+                                                                                            "title": "",
+                                                                                            "description": "",
+                                                                                            "placeholderValue": null,
+                                                                                            "numberOfCharacters": 0,
+                                                                                            "children": []
+                                                                                          },
+                                                                                          {
+                                                                                            "role": "AXGroup",
+                                                                                            "subrole": "",
+                                                                                            "roleDescription": "group",
+                                                                                            "value": "",
+                                                                                            "title": "",
+                                                                                            "description": "",
+                                                                                            "placeholderValue": null,
+                                                                                            "numberOfCharacters": 0,
+                                                                                            "children": [
+                                                                                              {
+                                                                                                "role": "AXGroup",
+                                                                                                "subrole": "",
+                                                                                                "roleDescription": "group",
+                                                                                                "value": "",
+                                                                                                "title": "",
+                                                                                                "description": "",
+                                                                                                "placeholderValue": null,
+                                                                                                "numberOfCharacters": 0,
+                                                                                                "children": [
+                                                                                                  {
+                                                                                                    "role": "AXGroup",
+                                                                                                    "subrole": "",
+                                                                                                    "roleDescription": "group",
+                                                                                                    "value": "",
+                                                                                                    "title": "",
+                                                                                                    "description": "",
+                                                                                                    "placeholderValue": null,
+                                                                                                    "numberOfCharacters": 0,
+                                                                                                    "children": [
+                                                                                                      {
+                                                                                                        "role": "AXGroup",
+                                                                                                        "subrole": "",
+                                                                                                        "roleDescription": "group",
+                                                                                                        "value": "",
+                                                                                                        "title": "",
+                                                                                                        "description": "",
+                                                                                                        "placeholderValue": null,
+                                                                                                        "numberOfCharacters": 0,
+                                                                                                        "children": [
+                                                                                                          {
+                                                                                                            "role": "AXGroup",
+                                                                                                            "subrole": "",
+                                                                                                            "roleDescription": "group",
+                                                                                                            "value": "",
+                                                                                                            "title": "",
+                                                                                                            "description": "",
+                                                                                                            "placeholderValue": null,
+                                                                                                            "numberOfCharacters": 0,
+                                                                                                            "children": [
+                                                                                                              {
+                                                                                                                "role": "AXTextArea",
+                                                                                                                "subrole": "",
+                                                                                                                "roleDescription": "text entry area",
+                                                                                                                "value": "I need help with ",
+                                                                                                                "title": "",
+                                                                                                                "description": "Enter a prompt for Gemini",
+                                                                                                                "placeholderValue": null,
+                                                                                                                "numberOfCharacters": 17,
+                                                                                                                "children": [
+                                                                                                                  {
+                                                                                                                    "role": "AXGroup",
+                                                                                                                    "subrole": "",
+                                                                                                                    "roleDescription": "group",
+                                                                                                                    "value": "",
+                                                                                                                    "title": "",
+                                                                                                                    "description": "",
+                                                                                                                    "placeholderValue": null,
+                                                                                                                    "numberOfCharacters": 0,
+                                                                                                                    "children": [
+                                                                                                                      {
+                                                                                                                        "role": "AXStaticText",
+                                                                                                                        "subrole": "",
+                                                                                                                        "roleDescription": "text",
+                                                                                                                        "value": "I need help with ",
+                                                                                                                        "title": "",
+                                                                                                                        "description": "",
+                                                                                                                        "placeholderValue": null,
+                                                                                                                        "numberOfCharacters": 0,
+                                                                                                                        "children": []
+                                                                                                                      }
+                                                                                                                    ]
+                                                                                                                  }
+                                                                                                                ]
+                                                                                                              },
+                                                                                                              {
+                                                                                                                "role": "AXTextArea",
+                                                                                                                "subrole": "",
+                                                                                                                "roleDescription": "text entry area",
+                                                                                                                "value": "",
+                                                                                                                "title": "",
+                                                                                                                "description": "",
+                                                                                                                "placeholderValue": null,
+                                                                                                                "numberOfCharacters": 0,
+                                                                                                                "children": []
+                                                                                                              }
+                                                                                                            ]
+                                                                                                          }
+                                                                                                        ]
+                                                                                                      }
+                                                                                                    ]
+                                                                                                  }
+                                                                                                ]
+                                                                                              },
+                                                                                              {
+                                                                                                "role": "AXGroup",
+                                                                                                "subrole": "",
+                                                                                                "roleDescription": "group",
+                                                                                                "value": "",
+                                                                                                "title": "",
+                                                                                                "description": "",
+                                                                                                "placeholderValue": null,
+                                                                                                "numberOfCharacters": 0,
+                                                                                                "children": [
+                                                                                                  {
+                                                                                                    "role": "AXGroup",
+                                                                                                    "subrole": "",
+                                                                                                    "roleDescription": "group",
+                                                                                                    "value": "",
+                                                                                                    "title": "",
+                                                                                                    "description": "",
+                                                                                                    "placeholderValue": null,
+                                                                                                    "numberOfCharacters": 0,
+                                                                                                    "children": [
+                                                                                                      {
+                                                                                                        "role": "AXPopUpButton",
+                                                                                                        "subrole": "",
+                                                                                                        "roleDescription": "pop up button",
+                                                                                                        "value": "",
+                                                                                                        "title": "",
+                                                                                                        "description": "Open upload file menu",
+                                                                                                        "placeholderValue": null,
+                                                                                                        "numberOfCharacters": 0,
+                                                                                                        "children": []
+                                                                                                      }
+                                                                                                    ]
+                                                                                                  }
+                                                                                                ]
+                                                                                              },
+                                                                                              {
+                                                                                                "role": "AXGroup",
+                                                                                                "subrole": "",
+                                                                                                "roleDescription": "group",
+                                                                                                "value": "",
+                                                                                                "title": "",
+                                                                                                "description": "",
+                                                                                                "placeholderValue": null,
+                                                                                                "numberOfCharacters": 0,
+                                                                                                "children": [
+                                                                                                  {
+                                                                                                    "role": "AXPopUpButton",
+                                                                                                    "subrole": "",
+                                                                                                    "roleDescription": "pop up button",
+                                                                                                    "value": "",
+                                                                                                    "title": "Tools",
+                                                                                                    "description": "",
+                                                                                                    "placeholderValue": null,
+                                                                                                    "numberOfCharacters": 0,
+                                                                                                    "children": []
+                                                                                                  }
+                                                                                                ]
+                                                                                              },
+                                                                                              {
+                                                                                                "role": "AXGroup",
+                                                                                                "subrole": "",
+                                                                                                "roleDescription": "group",
+                                                                                                "value": "",
+                                                                                                "title": "",
+                                                                                                "description": "",
+                                                                                                "placeholderValue": null,
+                                                                                                "numberOfCharacters": 0,
+                                                                                                "children": [
+                                                                                                  {
+                                                                                                    "role": "AXGroup",
+                                                                                                    "subrole": "",
+                                                                                                    "roleDescription": "group",
+                                                                                                    "value": "",
+                                                                                                    "title": "",
+                                                                                                    "description": "",
+                                                                                                    "placeholderValue": null,
+                                                                                                    "numberOfCharacters": 0,
+                                                                                                    "children": [
+                                                                                                      {
+                                                                                                        "role": "AXPopUpButton",
+                                                                                                        "subrole": "",
+                                                                                                        "roleDescription": "pop up button",
+                                                                                                        "value": "",
+                                                                                                        "title": "",
+                                                                                                        "description": "Open mode picker",
+                                                                                                        "placeholderValue": null,
+                                                                                                        "numberOfCharacters": 0,
+                                                                                                        "children": []
+                                                                                                      }
+                                                                                                    ]
+                                                                                                  },
+                                                                                                  {
+                                                                                                    "role": "AXGroup",
+                                                                                                    "subrole": "",
+                                                                                                    "roleDescription": "group",
+                                                                                                    "value": "",
+                                                                                                    "title": "",
+                                                                                                    "description": "",
+                                                                                                    "placeholderValue": null,
+                                                                                                    "numberOfCharacters": 0,
+                                                                                                    "children": [
+                                                                                                      {
+                                                                                                        "role": "AXGroup",
+                                                                                                        "subrole": "",
+                                                                                                        "roleDescription": "group",
+                                                                                                        "value": "",
+                                                                                                        "title": "",
+                                                                                                        "description": "",
+                                                                                                        "placeholderValue": null,
+                                                                                                        "numberOfCharacters": 0,
+                                                                                                        "children": [
+                                                                                                          {
+                                                                                                            "role": "AXButton",
+                                                                                                            "subrole": "",
+                                                                                                            "roleDescription": "button",
+                                                                                                            "value": "",
+                                                                                                            "title": "",
+                                                                                                            "description": "Send message",
+                                                                                                            "placeholderValue": null,
+                                                                                                            "numberOfCharacters": 0,
+                                                                                                            "children": []
+                                                                                                          }
+                                                                                                        ]
+                                                                                                      }
+                                                                                                    ]
+                                                                                                  }
+                                                                                                ]
+                                                                                              }
+                                                                                            ]
+                                                                                          }
+                                                                                        ]
+                                                                                      }
+                                                                                    ]
+                                                                                  },
+                                                                                  {
+                                                                                    "role": "AXGroup",
+                                                                                    "subrole": "",
+                                                                                    "roleDescription": "group",
+                                                                                    "value": "",
+                                                                                    "title": "",
+                                                                                    "description": "",
+                                                                                    "placeholderValue": null,
+                                                                                    "numberOfCharacters": 0,
+                                                                                    "children": [
+                                                                                      {
+                                                                                        "role": "AXGroup",
+                                                                                        "subrole": "",
+                                                                                        "roleDescription": "group",
+                                                                                        "value": "",
+                                                                                        "title": "\n",
+                                                                                        "description": "",
+                                                                                        "placeholderValue": null,
+                                                                                        "numberOfCharacters": 0,
+                                                                                        "children": []
+                                                                                      }
+                                                                                    ]
+                                                                                  }
+                                                                                ]
+                                                                              }
+                                                                            ]
+                                                                          }
+                                                                        ]
+                                                                      }
+                                                                    ]
+                                                                  }
+                                                                ]
+                                                              }
+                                                            ]
+                                                          }
+                                                        ]
+                                                      },
+                                                      {
+                                                        "role": "AXGroup",
+                                                        "subrole": "",
+                                                        "roleDescription": "group",
+                                                        "value": "",
+                                                        "title": "",
+                                                        "description": "",
+                                                        "placeholderValue": null,
+                                                        "numberOfCharacters": 0,
+                                                        "children": []
+                                                      }
+                                                    ]
+                                                  },
+                                                  {
+                                                    "role": "AXGroup",
+                                                    "subrole": "",
+                                                    "roleDescription": "group",
+                                                    "value": "",
+                                                    "title": "",
+                                                    "description": "",
+                                                    "placeholderValue": null,
+                                                    "numberOfCharacters": 0,
+                                                    "children": [
+                                                      {
+                                                        "role": "AXGroup",
+                                                        "subrole": "",
+                                                        "roleDescription": "group",
+                                                        "value": "",
+                                                        "title": "",
+                                                        "description": "",
+                                                        "placeholderValue": null,
+                                                        "numberOfCharacters": 0,
+                                                        "children": []
+                                                      }
+                                                    ]
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "group",
+                        "value": "",
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": "",
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXButton",
+                                "subrole": "",
+                                "roleDescription": "button",
+                                "value": "",
+                                "title": "",
+                                "description": "Back",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": []
+                              },
+                              {
+                                "role": "AXButton",
+                                "subrole": "",
+                                "roleDescription": "button",
+                                "value": "",
+                                "title": "",
+                                "description": "Refresh",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": "",
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": "",
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXButton",
+                                "subrole": "",
+                                "roleDescription": "button",
+                                "value": "",
+                                "title": "",
+                                "description": "Zoom: 90%",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": []
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": "",
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXButton",
+                                    "subrole": "",
+                                    "roleDescription": "button",
+                                    "value": "",
+                                    "title": "",
+                                    "description": "Open sidebar search (⇧⌘E)",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 0,
+                                    "children": []
+                                  },
+                                  {
+                                    "role": "AXPopUpButton",
+                                    "subrole": "",
+                                    "roleDescription": "pop up button",
+                                    "value": "",
+                                    "title": "",
+                                    "description": "Settings and more (⌘⌃,)",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 0,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "",
+                        "roleDescription": "text",
+                        "value": "Google Gemini",
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 13,
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": "",
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXCloseButton",
+        "roleDescription": "close button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXFullScreenButton",
+        "roleDescription": "full screen button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "",
+            "roleDescription": "group",
+            "value": null,
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": []
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXMinimizeButton",
+        "roleDescription": "minimize button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      }
+    ]
+  }
+}

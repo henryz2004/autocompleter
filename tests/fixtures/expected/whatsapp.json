@@ -1,0 +1,27 @@
+{
+  "extractor": "WhatsAppExtractor",
+  "app": "\u200eWhatsApp",
+  "notes": "Group chat (Marina Plunge Club) - announcement group with received messages only",
+  "turns": [
+    {
+      "speaker": "Maybe Nathan Davenport",
+      "text": "Good morning everyone!"
+    },
+    {
+      "speaker": "+ 1,8 4 0,2 1 8,1 9 0 0",
+      "text": "hey people! please sign up for tomorrows plunge through the pie link!"
+    },
+    {
+      "speaker": "+ 1,8 4 0,2 1 8,1 9 0 0",
+      "text": "https://getpie.at/uPvoruA7"
+    },
+    {
+      "speaker": "+ 1,8 4 0,2 1 8,1 9 0 0",
+      "text": "hey people! please sign up for tomorrows plunge through the pie link!"
+    },
+    {
+      "speaker": "+ 1,8 4 0,2 1 8,1 9 0 0",
+      "text": "https://getpie.at/uC7UShH3"
+    }
+  ]
+}

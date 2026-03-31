@@ -13,6 +13,7 @@ Also defines ``ConversationTurn`` (the shared data class) and the
 from __future__ import annotations
 
 import logging
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional
@@ -31,6 +32,7 @@ class ConversationTurn:
     """A single message in a conversation."""
     speaker: str
     text: str
+    timestamp: str = ""  # e.g. "10:05 PM", "12/14/25, 11:22 AM", "Yesterday at 8:47 PM"
 
 
 # ---------------------------------------------------------------------------
@@ -53,6 +55,24 @@ _CHILD_TEXT_SKIP_SUBROLES = frozenset({
     "AXApplicationStatus",   # Status/loading indicators
     "AXApplicationAlert",    # Alert banners
 })
+
+# Common AI disclaimer patterns to filter from extracted conversation text.
+# These appear as footer text in chat apps but sometimes lack proper AX subroles.
+_AI_DISCLAIMER_PATTERNS = (
+    "can make mistakes",
+    "can be inaccurate",
+    "may produce inaccurate",
+    "double-check responses",
+    "verify important information",
+)
+
+
+def _is_ai_disclaimer(text: str) -> bool:
+    """Return True if text looks like an AI disclaimer footer."""
+    lower = text.strip().lower()
+    if len(lower) > 200:
+        return False
+    return any(pat in lower for pat in _AI_DISCLAIMER_PATTERNS)
 
 
 def _collect_child_text(
@@ -218,6 +238,12 @@ class GenericExtractor(ConversationExtractor):
                 val = ax_get_attribute(child, "AXValue")
                 if isinstance(val, str) and val.strip():
                     texts.append((child_role, val.strip()))
+                else:
+                    # Fallback: Electron/native apps (ChatGPT 5.x, Slack)
+                    # often put text in AXDescription instead of AXValue
+                    desc = ax_get_attribute(child, "AXDescription")
+                    if isinstance(desc, str) and desc.strip():
+                        texts.append((child_role, desc.strip()))
             elif child_role in {"AXGroup", "AXTextArea"}:
                 # Nested group might contain the message text
                 nested_text = _collect_child_text(child, max_depth=3, max_chars=500)
@@ -251,14 +277,14 @@ class GeminiExtractor(ConversationExtractor):
     - User messages and model responses alternate as AXGroup containers
     """
 
-    app_names: tuple[str, ...] = ("Google Gemini", "Gemini", "Google Chrome", "Chrome")
+    app_names: tuple[str, ...] = ("Google Gemini", "Gemini")
 
     def extract(
         self, window_element, max_turns: int = 15
     ) -> Optional[list[ConversationTurn]]:
         try:
             # Find the main landmark area
-            main_area = self._find_landmark_main(window_element, max_depth=10)
+            main_area = self._find_landmark_main(window_element, max_depth=20)
             if main_area is None:
                 return None
 
@@ -273,7 +299,9 @@ class GeminiExtractor(ConversationExtractor):
                 return turns
         except Exception:
             logger.debug("Gemini conversation extraction failed", exc_info=True)
-        return None
+
+        # Fall back to generic extraction for resilience
+        return ActionDelimitedExtractor().extract(window_element, max_turns)
 
     def _find_landmark_main(
         self, element, max_depth: int, depth: int = 0
@@ -316,7 +344,11 @@ class GeminiExtractor(ConversationExtractor):
         for child in children[:50]:
             role = ax_get_attribute(child, "AXRole") or ""
             if role == "AXHeading":
-                heading_text = ax_get_attribute(child, "AXValue") or ""
+                heading_text = (
+                    ax_get_attribute(child, "AXValue")
+                    or ax_get_attribute(child, "AXTitle")
+                    or ""
+                )
                 if not heading_text:
                     heading_text = _collect_child_text(child, max_depth=2, max_chars=200)
                 if "Conversation with Gemini" in heading_text:
@@ -332,16 +364,23 @@ class GeminiExtractor(ConversationExtractor):
     def _extract_messages_from_container(
         self, container, max_turns: int
     ) -> list[ConversationTurn]:
-        """Extract alternating user/model messages from the conversation container.
+        """Extract user/model messages using 'You said'/'Gemini said' headings.
 
-        After the heading, message groups alternate: user, model, user, model...
-        We find the sibling group with the most children (the actual message list).
+        Gemini's AX tree groups messages into pair containers.  Each pair
+        contains an AXHeading with title starting with ``You said`` (user
+        message) and another with ``Gemini said`` (model response).  We
+        recursively find these headings and extract text from the appropriate
+        sibling/child elements.
+
+        Falls back to index-based alternation if no speaker headings are found.
         """
         children = ax_get_attribute(container, "AXChildren")
         if not children:
             return []
 
-        # Find the child group with the most sub-children (the message list)
+        # Find the child group with the most sub-children (the message list).
+        # Unwrap single-child wrappers: if a group has exactly one child that
+        # is also a group, use the inner group's child count instead.
         best_group = None
         best_count = 0
         for child in children[:50]:
@@ -349,31 +388,171 @@ class GeminiExtractor(ConversationExtractor):
             if role in {"AXGroup", "AXList"}:
                 grandchildren = ax_get_attribute(child, "AXChildren")
                 count = len(grandchildren) if grandchildren else 0
+                candidate = child
+                # Unwrap single-child wrapper
+                if count == 1 and grandchildren:
+                    inner = grandchildren[0]
+                    inner_role = ax_get_attribute(inner, "AXRole") or ""
+                    if inner_role in {"AXGroup", "AXList"}:
+                        inner_children = ax_get_attribute(inner, "AXChildren")
+                        inner_count = len(inner_children) if inner_children else 0
+                        if inner_count > count:
+                            candidate = inner
+                            count = inner_count
                 if count > best_count:
                     best_count = count
-                    best_group = child
+                    best_group = candidate
 
         if best_group is None or best_count == 0:
-            # No message list group found — conversation is empty
             return []
 
         msg_children = ax_get_attribute(best_group, "AXChildren")
         if not msg_children:
             return []
 
+        # Heading-based extraction: find "You said" / "Gemini said" headings
         turns: list[ConversationTurn] = []
-        # Gemini alternates: user (even index), model (odd index)
-        for i, msg_child in enumerate(msg_children):
+        for msg_child in msg_children:
             if len(turns) >= max_turns:
                 break
-            text = _collect_child_text(msg_child, max_depth=5, max_chars=1000)
-            text = text.strip()
-            if not text:
-                continue
-            speaker = "User" if i % 2 == 0 else "Gemini"
-            turns.append(ConversationTurn(speaker=speaker, text=text))
+            self._extract_turns_from_pair(msg_child, turns, max_turns)
+
+        # Fallback: if no headings were found, use index-based alternation
+        # with marker stripping as a safety net.
+        if not turns:
+            for i, msg_child in enumerate(msg_children):
+                if len(turns) >= max_turns:
+                    break
+                text = _collect_child_text(msg_child, max_depth=5, max_chars=1000)
+                text = self._strip_speaker_markers(text)
+                if not text or _is_ai_disclaimer(text):
+                    continue
+                speaker = "User" if i % 2 == 0 else "Gemini"
+                turns.append(ConversationTurn(speaker=speaker, text=text))
 
         return turns
+
+    def _extract_turns_from_pair(
+        self, element, turns: list[ConversationTurn], max_turns: int,
+    ) -> None:
+        """Extract User and Gemini turns from a message pair element.
+
+        Recursively searches for AXHeading elements whose title starts with
+        ``You said`` or ``Gemini said``, then extracts the appropriate text.
+        """
+        headings: list[tuple] = []  # (heading, title, parent)
+        self._find_speaker_headings(element, headings, max_depth=12)
+
+        for heading, title, parent in headings:
+            if len(turns) >= max_turns:
+                break
+
+            if title.startswith("You said"):
+                text = self._extract_user_text_from_heading(heading, title)
+                if text and not _is_ai_disclaimer(text):
+                    turns.append(ConversationTurn(speaker="User", text=text))
+
+            elif title.startswith("Gemini said"):
+                text = self._extract_response_after_heading(heading, parent)
+                if text and not _is_ai_disclaimer(text):
+                    turns.append(ConversationTurn(speaker="Gemini", text=text))
+
+    def _find_speaker_headings(
+        self,
+        element,
+        results: list[tuple],
+        max_depth: int,
+        depth: int = 0,
+        _visits: Optional[list] = None,
+    ) -> None:
+        """Recursively find AXHeading elements with 'You said' or 'Gemini said' titles."""
+        if _visits is None:
+            _visits = [0]
+        _visits[0] += 1
+        if _visits[0] > 200 or depth > max_depth:
+            return
+
+        children = ax_get_attribute(element, "AXChildren")
+        if not children:
+            return
+
+        for child in children[:50]:
+            role = ax_get_attribute(child, "AXRole") or ""
+            if role == "AXHeading":
+                title = (
+                    ax_get_attribute(child, "AXTitle")
+                    or ax_get_attribute(child, "AXValue")
+                    or ""
+                ).strip()
+                if title.startswith("You said") or title.startswith("Gemini said"):
+                    results.append((child, title, element))
+            else:
+                self._find_speaker_headings(
+                    child, results, max_depth, depth + 1, _visits,
+                )
+
+    @staticmethod
+    def _extract_user_text_from_heading(heading, title: str) -> str:
+        """Extract user message text from a 'You said' heading.
+
+        Prefers the AXGroup child of the heading (which has multi-line content)
+        over the title-derived text (which may be single-line).
+        """
+        # Try to get text from the AXGroup child (skipping the "You said" AXStaticText)
+        children = ax_get_attribute(heading, "AXChildren") or []
+        for child in children:
+            child_role = ax_get_attribute(child, "AXRole") or ""
+            if child_role == "AXGroup":
+                child_text = _collect_child_text(child, max_depth=3, max_chars=1000)
+                if child_text and child_text.strip():
+                    return child_text.strip()
+
+        # Fallback: strip "You said " prefix from the heading title
+        prefix = "You said "
+        if title.startswith(prefix):
+            return title[len(prefix):].strip()
+        if title == "You said":
+            return ""
+        return ""
+
+    @staticmethod
+    def _extract_response_after_heading(heading, parent) -> str:
+        """Extract Gemini response text from siblings following a 'Gemini said' heading."""
+        parent_children = ax_get_attribute(parent, "AXChildren") or []
+
+        # Find the heading's position among siblings
+        heading_idx = None
+        for i, child in enumerate(parent_children):
+            if child is heading:
+                heading_idx = i
+                break
+
+        if heading_idx is None:
+            return ""
+
+        # Collect text from subsequent siblings until next heading or end
+        parts: list[str] = []
+        for sibling in parent_children[heading_idx + 1:]:
+            sib_role = ax_get_attribute(sibling, "AXRole") or ""
+            if sib_role == "AXHeading":
+                break
+            text = _collect_child_text(sibling, max_depth=5, max_chars=1000)
+            if text and text.strip():
+                parts.append(text.strip())
+
+        return "\n".join(parts)
+
+    @staticmethod
+    def _strip_speaker_markers(text: str) -> str:
+        """Strip known Gemini UI speaker markers from text (safety net)."""
+        text = text.strip()
+        for prefix in ("You said\n", "Gemini said\n", "You said ", "Gemini said "):
+            if text.startswith(prefix):
+                text = text[len(prefix):]
+        for suffix in ("\nGemini said", "\nYou said"):
+            if text.endswith(suffix):
+                text = text[: -len(suffix)]
+        return text.strip()
 
 
 class SlackExtractor(ConversationExtractor):
@@ -396,7 +575,9 @@ class SlackExtractor(ConversationExtractor):
                 return turns
         except Exception:
             logger.debug("Slack conversation extraction failed", exc_info=True)
-        return None
+
+        # Fall back to generic extraction for resilience
+        return ActionDelimitedExtractor().extract(window_element, max_turns)
 
     def _find_message_groups(
         self,
@@ -490,27 +671,90 @@ class ChatGPTExtractor(ConversationExtractor):
         self, window_element, max_turns: int = 15
     ) -> Optional[list[ConversationTurn]]:
         try:
+            # Strategy 1: article-based layout (older ChatGPT versions)
             articles = self._find_articles(window_element, max_depth=15)
-            if not articles:
-                return None
+            if articles:
+                turns = self._articles_to_turns(articles, max_turns)
+                if turns:
+                    return turns
 
-            turns: list[ConversationTurn] = []
-            for i, article in enumerate(articles):
-                if len(turns) >= max_turns:
-                    break
-                text = _collect_child_text(article, max_depth=5, max_chars=1000)
-                text = text.strip()
-                if not text:
-                    continue
-                # ChatGPT alternates: user (even), assistant (odd)
-                speaker = "User" if i % 2 == 0 else "ChatGPT"
-                turns.append(ConversationTurn(speaker=speaker, text=text))
+            # Strategy 2: SectionList-based layout (ChatGPT 5.x+)
+            # Messages are AXGroup children of an AXSectionList, each
+            # containing AXStaticText with content in AXDescription.
+            message_groups = self._find_section_list_messages(
+                window_element, max_depth=15,
+            )
+            if message_groups:
+                turns = self._articles_to_turns(message_groups, max_turns)
+                if turns:
+                    return turns
 
-            if turns and len(turns) >= 1:
-                return turns
         except Exception:
             logger.debug("ChatGPT conversation extraction failed", exc_info=True)
+
+        # Strategy 3: fall back to generic extraction so layout changes
+        # don't completely break conversation parsing.
+        return ActionDelimitedExtractor().extract(window_element, max_turns)
+
+    def _articles_to_turns(
+        self, containers: list, max_turns: int,
+    ) -> Optional[list[ConversationTurn]]:
+        """Convert a list of message containers into ConversationTurn objects.
+
+        Two-pass approach for speaker detection:
+        1. Check which containers have action buttons (Sources, feedback, etc.)
+        2. If any container has buttons → has_button = ChatGPT, no_button = User
+           If none have buttons → fall back to alternation (even=User, odd=ChatGPT)
+        """
+        # First pass: collect text and detect buttons
+        entries: list[tuple[str, bool]] = []  # (text, has_button)
+        for container in containers:
+            if len(entries) >= max_turns:
+                break
+            text = _collect_child_text(container, max_depth=5, max_chars=1000)
+            text = text.strip()
+            if not text:
+                continue
+            has_button = self._has_action_buttons(container)
+            entries.append((text, has_button))
+
+        any_has_buttons = any(hb for _, hb in entries)
+
+        # Second pass: assign speakers
+        turns: list[ConversationTurn] = []
+        for i, (text, has_button) in enumerate(entries):
+            if any_has_buttons:
+                # Structural detection: buttons → assistant, no buttons → user
+                speaker = "ChatGPT" if has_button else "User"
+            else:
+                # No structural cues — fall back to alternation
+                speaker = "User" if i % 2 == 0 else "ChatGPT"
+            turns.append(ConversationTurn(speaker=speaker, text=text))
+
+        if turns and len(turns) >= 1:
+            return turns
         return None
+
+    @staticmethod
+    def _has_action_buttons(container) -> bool:
+        """Check if a message container has action buttons (Sources, feedback, etc.).
+
+        ChatGPT responses typically contain extra child elements like
+        "Sources" buttons alongside the text, while user messages don't.
+        """
+        children = ax_get_attribute(container, "AXChildren") or []
+        for child in children[:10]:
+            child_role = ax_get_attribute(child, "AXRole") or ""
+            if child_role == "AXButton":
+                return True
+            # Also check grandchildren (common in ChatGPT 5.x: AXGroup > AXButton)
+            if child_role == "AXGroup":
+                grandchildren = ax_get_attribute(child, "AXChildren") or []
+                for gc in grandchildren[:10]:
+                    gc_role = ax_get_attribute(gc, "AXRole") or ""
+                    if gc_role == "AXButton":
+                        return True
+        return False
 
     def _find_articles(
         self,
@@ -546,6 +790,73 @@ class ChatGPTExtractor(ConversationExtractor):
                 articles.extend(child_articles)
 
         return articles
+
+    def _find_section_list_messages(
+        self,
+        element,
+        max_depth: int,
+        depth: int = 0,
+        _visits: Optional[list] = None,
+    ) -> list:
+        """Find message groups inside AXSectionList (ChatGPT 5.x+ layout).
+
+        The structure is:
+            AXList (subrole=AXSectionList)
+              AXGroup  ← message container (may be empty separator)
+              AXGroup  ← message container with content
+              ...
+
+        Returns the non-empty AXGroup children of the first AXSectionList
+        that contains AXStaticText descendants (i.e. actual text content,
+        not sidebar buttons).
+        """
+        if _visits is None:
+            _visits = [0]
+        _visits[0] += 1
+        if _visits[0] > self._MAX_VISITS or depth > max_depth:
+            return []
+
+        role = ax_get_attribute(element, "AXRole") or ""
+        subrole = ax_get_attribute(element, "AXSubrole") or ""
+
+        if role == "AXList" and subrole == "AXSectionList":
+            # Found a section list — check if it has text content
+            children = ax_get_attribute(element, "AXChildren") or []
+            groups = []
+            for child in children[:100]:
+                child_role = ax_get_attribute(child, "AXRole") or ""
+                if child_role == "AXGroup":
+                    grandchildren = ax_get_attribute(child, "AXChildren") or []
+                    if grandchildren and self._has_static_text(child, max_depth=3):
+                        groups.append(child)
+            if groups:
+                return groups
+            # No text content — this is likely a sidebar list, keep searching
+
+        children = ax_get_attribute(element, "AXChildren")
+        if children:
+            for child in children[:50]:
+                result = self._find_section_list_messages(
+                    child, max_depth, depth + 1, _visits
+                )
+                if result:
+                    return result
+
+        return []
+
+    @staticmethod
+    def _has_static_text(element, max_depth: int = 3, depth: int = 0) -> bool:
+        """Check if an element has any AXStaticText descendants."""
+        if depth > max_depth:
+            return False
+        children = ax_get_attribute(element, "AXChildren") or []
+        for child in children[:20]:
+            child_role = ax_get_attribute(child, "AXRole") or ""
+            if child_role == "AXStaticText":
+                return True
+            if ChatGPTExtractor._has_static_text(child, max_depth, depth + 1):
+                return True
+        return False
 
 
 class ClaudeDesktopExtractor(ConversationExtractor):
@@ -687,20 +998,38 @@ class ClaudeDesktopExtractor(ConversationExtractor):
         past_thinking = False
         response_parts: list[str] = []
 
-        for child in inner_children:
+        for i, child in enumerate(inner_children):
             role = ax_get_attribute(child, "AXRole") or ""
             title = ax_get_attribute(child, "AXTitle") or ""
 
-            # "Thought process" button marks start of thinking section
-            if role == "AXButton" and title == "Thought process":
-                has_thinking = True
-                continue
+            # Thinking section: AXButton followed by AXApplicationStatus sibling.
+            # Older Claude used title="Thought process"; newer versions use the
+            # thinking summary as the dynamic button title.
+            if role == "AXButton":
+                if title == "Thought process":
+                    has_thinking = True
+                    continue
+                if i + 1 < len(inner_children):
+                    next_sub = ax_get_attribute(inner_children[i + 1], "AXSubrole") or ""
+                    if next_sub == "AXApplicationStatus":
+                        has_thinking = True
+                        continue
 
             if has_thinking and not past_thinking:
-                # Still inside the thinking section — look for "Done" marker
-                child_text = _collect_child_text(child, max_depth=2, max_chars=50)
-                if child_text.strip() == "Done":
-                    past_thinking = True
+                # Still inside the thinking section — look for "Done" marker.
+                # Check sub-children individually since "Done" may be nested
+                # alongside thinking text in the same group.
+                sub_children = ax_get_attribute(child, "AXChildren") or []
+                for sc in sub_children:
+                    sc_text = _collect_child_text(sc, max_depth=2, max_chars=50)
+                    if sc_text.strip() == "Done":
+                        past_thinking = True
+                        break
+                if not past_thinking:
+                    # Also check the child directly (legacy layout)
+                    child_text = _collect_child_text(child, max_depth=2, max_chars=50)
+                    if child_text.strip() == "Done":
+                        past_thinking = True
                 continue
 
             if past_thinking or not has_thinking:
@@ -930,7 +1259,9 @@ class IMessageExtractor(ConversationExtractor):
                 return turns
         except Exception:
             logger.debug("iMessage conversation extraction failed", exc_info=True)
-        return None
+
+        # Fall back to generic extraction for resilience
+        return ActionDelimitedExtractor().extract(window_element, max_turns)
 
     def _find_messages_collection(
         self,
@@ -1045,6 +1376,724 @@ class IMessageExtractor(ConversationExtractor):
         return ""
 
 
+class WhatsAppExtractor(ConversationExtractor):
+    """Extractor for WhatsApp (macOS Catalyst app).
+
+    WhatsApp's AX tree structure:
+
+    ::
+
+        AXGroup rdesc="Nav bar"
+          AXHeading desc="Chat Name"            ← contact/group name
+        AXGroup rdesc="table" desc="Messages in chat with Chat Name"
+          AXStaticText desc="Your message, ..., Sent to ..., Red"  ← sent
+          AXStaticText desc="Message from X, ..., Received in G"   ← received (group)
+          AXStaticText desc="message, ..., Received from ..."      ← received (1:1)
+          AXHeading                                                ← date separator
+          AXButton desc="N unread messages"                        ← unread marker
+
+    All metadata is in the ``AXDescription`` field.  The ``AXValue`` for
+    messages is always an empty string.  U+200E (LTR mark) characters
+    appear as prefixes throughout descriptions and are stripped during
+    parsing.
+
+    Description format per message type (after stripping U+200E):
+    - Sent: ``Your message, <text>, <ts>, Sent to <recipient>, Red|Blue``
+    - Received (group): ``Message from <sender>, <text>, <ts>, Received in <group>``
+    - Received (1:1): ``message, <text>, <ts>, Received from <phone>``
+    - Media: ``Photo, <ts>, Received from <phone>`` (skipped)
+    - Edited messages append ``, Edited`` at the very end.
+    """
+
+    app_names: tuple[str, ...] = ("\u200eWhatsApp", "WhatsApp")
+
+    _MAX_VISITS = 600
+
+    # Timestamp pattern at end of description segment:
+    # ", March4,at4:10 PM"  or  ", May4,2025at8:14 AM"
+    _TIMESTAMP_RE = re.compile(
+        r",\s*[A-Z][a-z]{2,8}\d{1,2},(?:\d{4})?at\d{1,2}:\d{2}\s[AP]M$"
+    )
+
+    # Phone number with VoiceOver-style commas: "+ 1,8 4 0,2 1 8,1 9 0 0"
+    _PHONE_RE = re.compile(r"^\+\s*\d[\d,\s]*\d")
+
+    # System/chrome messages to skip
+    _SKIP_PREFIXES = (
+        "Use WhatsApp",
+        "end-to-end encrypted",
+        "Messages you send",
+    )
+
+    # Media message prefixes (no useful text content)
+    _MEDIA_PREFIXES = (
+        "Photo,", "Video,", "Voice message,", "Sticker,",
+        "Album with", "GIF,", "Document,", "Contact card,",
+        "Location,", "Live location,",
+    )
+
+    def extract(
+        self, window_element, max_turns: int = 15
+    ) -> Optional[list[ConversationTurn]]:
+        try:
+            table = self._find_message_table(window_element, max_depth=12)
+            if table is None:
+                return None
+
+            chat_name = self._get_chat_name(window_element)
+            turns = self._extract_turns(table, max_turns, chat_name)
+            if turns and len(turns) >= 1:
+                return turns
+        except Exception:
+            logger.debug("WhatsApp conversation extraction failed", exc_info=True)
+        return None
+
+    # -- tree search --
+
+    def _find_message_table(
+        self, element, max_depth: int, depth: int = 0,
+        _visits: Optional[list] = None,
+    ):
+        """Find the AXGroup with roleDescription='table' and description
+        starting with 'Messages in chat with'."""
+        if _visits is None:
+            _visits = [0]
+        _visits[0] += 1
+        if _visits[0] > self._MAX_VISITS or depth > max_depth:
+            return None
+
+        role = ax_get_attribute(element, "AXRole") or ""
+        if role == "AXGroup":
+            rdesc = ax_get_attribute(element, "AXRoleDescription") or ""
+            if rdesc == "table":
+                desc = (
+                    ax_get_attribute(element, "AXDescription") or ""
+                ).replace("\u200e", "")
+                if desc.startswith("Messages in chat with"):
+                    return element
+
+        children = ax_get_attribute(element, "AXChildren")
+        if children:
+            for child in children[:50]:
+                result = self._find_message_table(
+                    child, max_depth, depth + 1, _visits,
+                )
+                if result is not None:
+                    return result
+        return None
+
+    def _get_chat_name(self, window_element) -> str:
+        """Extract chat name from the Nav bar heading."""
+        heading = self._find_nav_heading(window_element, max_depth=10)
+        if heading:
+            desc = (
+                ax_get_attribute(heading, "AXDescription") or ""
+            ).replace("\u200e", "").strip()
+            return desc
+        return ""
+
+    # Sidebar nav bar heading labels that should NOT be used as chat names.
+    _SIDEBAR_HEADINGS = frozenset({"Chats", "Calls", "Updates", "Communities"})
+
+    def _find_nav_heading(
+        self, element, max_depth: int, depth: int = 0,
+        _visits: Optional[list] = None,
+    ):
+        """Find the AXHeading inside the chat-panel Nav bar.
+
+        WhatsApp has two Nav bars: one in the sidebar (heading = "Chats")
+        and one in the chat panel (heading = contact/group name).  We
+        collect all Nav bar headings and return the first whose label is
+        not a known sidebar heading.
+        """
+        headings: list = []
+        self._collect_nav_headings(element, headings, max_depth)
+        # Return the first heading that isn't a sidebar label
+        for heading in headings:
+            desc = (
+                ax_get_attribute(heading, "AXDescription") or ""
+            ).replace("\u200e", "").strip()
+            if desc and desc not in self._SIDEBAR_HEADINGS:
+                return heading
+        # Fallback: return the last heading found (likely the chat panel)
+        return headings[-1] if headings else None
+
+    def _collect_nav_headings(
+        self, element, results: list, max_depth: int,
+        depth: int = 0, _visits: Optional[list] = None,
+    ) -> None:
+        """Collect AXHeading elements from all Nav bar groups."""
+        if _visits is None:
+            _visits = [0]
+        _visits[0] += 1
+        if _visits[0] > self._MAX_VISITS or depth > max_depth:
+            return
+
+        rdesc = ax_get_attribute(element, "AXRoleDescription") or ""
+        if rdesc == "Nav bar":
+            children = ax_get_attribute(element, "AXChildren") or []
+            for child in children:
+                if (ax_get_attribute(child, "AXRole") or "") == "AXHeading":
+                    results.append(child)
+            return  # Don't recurse into nav bars
+
+        children = ax_get_attribute(element, "AXChildren")
+        if children:
+            for child in children[:50]:
+                self._collect_nav_headings(
+                    child, results, max_depth, depth + 1, _visits,
+                )
+
+    # -- turn extraction --
+
+    def _extract_turns(
+        self, table, max_turns: int, chat_name: str,
+    ) -> list[ConversationTurn]:
+        """Extract conversation turns from the message table's children."""
+        children = ax_get_attribute(table, "AXChildren")
+        if not children:
+            return []
+
+        turns: list[ConversationTurn] = []
+        for child in children:
+            if len(turns) >= max_turns:
+                break
+
+            role = ax_get_attribute(child, "AXRole") or ""
+            if role != "AXStaticText":
+                continue
+
+            desc = (
+                ax_get_attribute(child, "AXDescription") or ""
+            ).replace("\u200e", "").strip()
+            if not desc:
+                continue
+
+            # Skip system/chrome messages
+            if any(desc.startswith(p) for p in self._SKIP_PREFIXES):
+                continue
+
+            # Skip media messages (no useful text)
+            if any(desc.startswith(p) for p in self._MEDIA_PREFIXES):
+                continue
+
+            turn = self._parse_message(desc, chat_name)
+            if turn is not None:
+                turns.append(turn)
+
+        return turns
+
+    # -- message parsing --
+
+    def _parse_message(
+        self, desc: str, chat_name: str,
+    ) -> Optional[ConversationTurn]:
+        """Parse a single WhatsApp message description into a ConversationTurn."""
+        # Strip ", Edited" suffix
+        if desc.endswith(", Edited"):
+            desc = desc[: -len(", Edited")]
+
+        if desc.startswith("Your message, "):
+            text = self._parse_sent(desc)
+            if text:
+                return ConversationTurn(speaker="Me", text=text)
+
+        elif desc.startswith("Message from "):
+            sender, text = self._parse_received_group(desc)
+            if text:
+                return ConversationTurn(
+                    speaker=sender or "Unknown", text=text,
+                )
+
+        elif desc.startswith("message, "):
+            text = self._parse_received_dm(desc)
+            if text:
+                return ConversationTurn(
+                    speaker=chat_name or "Them", text=text,
+                )
+
+        return None
+
+    def _parse_sent(self, desc: str) -> Optional[str]:
+        """Parse: ``Your message, <text>, <ts>, Sent to <r>, Red|Blue``"""
+        remainder = desc[len("Your message, "):]
+
+        # Strip delivery status
+        for status in (", Red", ", Blue"):
+            if remainder.endswith(status):
+                remainder = remainder[: -len(status)]
+                break
+
+        # Find ", Sent to " from right
+        idx = remainder.rfind(", Sent to ")
+        if idx == -1:
+            return None
+
+        before_sent = remainder[:idx]
+        return self._strip_timestamp(before_sent)
+
+    def _parse_received_group(self, desc: str) -> tuple[Optional[str], Optional[str]]:
+        """Parse: ``Message from <sender>, <text>, <ts>, Received in <group>``"""
+        remainder = desc[len("Message from "):]
+
+        # Find ", Received in " or ", Received from " from right
+        for suffix in (", Received in ", ", Received from "):
+            idx = remainder.rfind(suffix)
+            if idx != -1:
+                break
+        else:
+            return None, None
+
+        before_recv = remainder[:idx]
+        before_ts = self._strip_timestamp(before_recv)
+        if not before_ts:
+            return None, None
+
+        sender, text = self._split_sender_text(before_ts)
+        return sender, text
+
+    def _parse_received_dm(self, desc: str) -> Optional[str]:
+        """Parse: ``message, <text>, <ts>, Received from <phone>``"""
+        remainder = desc[len("message, "):]
+
+        idx = remainder.rfind(", Received from ")
+        if idx == -1:
+            return None
+
+        before_recv = remainder[:idx]
+        return self._strip_timestamp(before_recv)
+
+    def _strip_timestamp(self, text: str) -> Optional[str]:
+        """Remove trailing timestamp from a description segment."""
+        match = self._TIMESTAMP_RE.search(text)
+        if match:
+            text = text[: match.start()]
+        return text.strip() or None
+
+    def _split_sender_text(self, s: str) -> tuple[str, str]:
+        """Split ``sender, text`` where sender may be a phone number with commas.
+
+        Phone numbers use VoiceOver comma-separated digit groups
+        (``+ 1,8 4 0,2 1 8,1 9 0 0``).  For phone senders, match the
+        leading phone pattern; for named contacts, split at first ``, ``.
+        """
+        phone_match = self._PHONE_RE.match(s)
+        if phone_match:
+            sender = phone_match.group().strip()
+            rest = s[phone_match.end():]
+            if rest.startswith(", "):
+                return sender, rest[2:]
+            return sender, rest.lstrip(", ")
+
+        # Regular contact name: split at first ", "
+        idx = s.find(", ")
+        if idx != -1:
+            return s[:idx], s[idx + 2:]
+        return s, ""
+
+
+# ---------------------------------------------------------------------------
+# Discord
+# ---------------------------------------------------------------------------
+
+class DiscordExtractor(ConversationExtractor):
+    """Extractor for Discord (Electron desktop app).
+
+    Discord's AX tree exposes messages inside an ``AXList`` with
+    ``subrole="AXContentList"`` and ``description`` starting with
+    ``"Messages in"``.
+
+    Each message is an ``AXGroup`` with:
+    - ``subrole="AXDocumentArticle"``
+    - ``roleDescription="message"``
+    - ``title`` in the format: ``"<Speaker> , <text> , <timestamp>"``
+
+    The title is the most reliable source: it contains the speaker name,
+    message text, and timestamp in a comma-separated format.  The child
+    tree also contains these as separate AX elements but the title is
+    simpler to parse.
+
+    Date separators are ``AXSplitter`` elements whose ``description``
+    contains the date string (e.g. ``"December 14, 2025"``).
+    """
+
+    app_names: tuple[str, ...] = ("Discord",)
+
+    _MAX_VISITS = 1200  # Discord's sidebar is deep — needs ~900 visits
+
+    # Timestamp patterns at end of title:
+    # "12/14/25, 11:22 AM" or "10:05 PM" or "Yesterday at 8:47 PM"
+    _TS_FULL_RE = re.compile(
+        r",\s*\d{1,2}/\d{1,2}/\d{2,4},\s*\d{1,2}:\d{2}\s[AP]M$"
+    )
+    _TS_SHORT_RE = re.compile(
+        r",\s*\d{1,2}:\d{2}\s[AP]M$"
+    )
+    _TS_RELATIVE_RE = re.compile(
+        r",\s*(Yesterday|Today)\s+at\s+\d{1,2}:\d{2}\s[AP]M$"
+    )
+
+    # Discord thread role badges appended to speaker names in title strings.
+    # e.g. "Bankim OP Original Poster" → "Bankim"
+    # Order matters: longer/more specific patterns first.
+    _BADGE_SUFFIXES = (
+        " OP Original Poster",
+        " Original Poster",
+        " OP",
+    )
+
+    # Discord server tags appended to display names.
+    # e.g. "MGpai Server Tag: PALM" → "MGpai"
+    _SERVER_TAG_RE = re.compile(r"\s+Server Tag:\s+\S+$")
+
+    def extract(
+        self, window_element, max_turns: int = 15
+    ) -> Optional[list[ConversationTurn]]:
+        try:
+            # Primary: detect current user from the status bar
+            current_username = self._get_current_username(window_element)
+            # Display name may differ from username in server channels
+            display_name = self._get_current_display_name(window_element) if current_username else ""
+
+            msg_list = self._find_message_list(window_element, max_depth=25)
+            if msg_list is not None:
+                # Fallback: infer from DM header image when status bar
+                # isn't available (e.g. AX tree truncated)
+                dm_target = "" if current_username else self._get_dm_target(msg_list)
+                turns = self._extract_turns(
+                    msg_list, max_turns,
+                    current_username=current_username,
+                    dm_target=dm_target,
+                    display_name=display_name,
+                )
+                if turns:
+                    return turns
+        except Exception:
+            logger.debug("Discord conversation extraction failed", exc_info=True)
+
+        # Fall back to action-delimited → generic
+        return ActionDelimitedExtractor().extract(window_element, max_turns)
+
+    # -- tree search --
+
+    def _find_message_list(
+        self, element, max_depth: int, depth: int = 0,
+        _visits: Optional[list] = None,
+    ):
+        """Find the AXList with description starting with 'Messages in'."""
+        if _visits is None:
+            _visits = [0]
+        _visits[0] += 1
+        if _visits[0] > self._MAX_VISITS or depth > max_depth:
+            return None
+
+        role = ax_get_attribute(element, "AXRole") or ""
+        if role == "AXList":
+            subrole = ax_get_attribute(element, "AXSubrole") or ""
+            if subrole == "AXContentList":
+                desc = ax_get_attribute(element, "AXDescription") or ""
+                if desc.startswith("Messages in"):
+                    return element
+
+        children = ax_get_attribute(element, "AXChildren")
+        if children:
+            for child in children[:50]:
+                result = self._find_message_list(
+                    child, max_depth, depth + 1, _visits,
+                )
+                if result is not None:
+                    return result
+        return None
+
+    # -- current user detection (status bar) --
+
+    def _get_current_username(self, window_element) -> str:
+        """Detect the current user's Discord username from the status bar.
+
+        Discord's bottom-left status bar is an ``AXGroup`` with
+        ``subrole="AXLandmarkRegion"`` and ``description`` containing
+        ``"User status"``.  The username is the first ``AXStaticText``
+        value within it.  This is always present regardless of which
+        channel or DM is open.
+        """
+        region = self._find_status_region(window_element, max_depth=15)
+        if region is None:
+            logger.debug("[Discord] Status region NOT found (visit cap or depth limit)")
+            return ""
+        username = self._first_static_text_value(region, max_depth=8)
+        logger.debug("[Discord] Status bar username=%r", username)
+        return username
+
+    def _get_current_display_name(self, window_element) -> str:
+        """Detect the current user's display name from the status bar.
+
+        Discord's status bar may show a display name that differs from
+        the username. The display name appears as the second
+        ``AXStaticText`` value within the status region. Returns empty
+        string if not found or if it matches the username.
+        """
+        region = self._find_status_region(window_element, max_depth=15)
+        if region is None:
+            return ""
+        texts = self._all_static_text_values(region, max_depth=8, max_results=3)
+        # First text is the username; second (if present) is display name
+        if len(texts) >= 2 and texts[1] != texts[0]:
+            return texts[1]
+        return ""
+
+    def _all_static_text_values(
+        self, element, max_depth: int, max_results: int = 3,
+        depth: int = 0, _results: list[str] | None = None,
+    ) -> list[str]:
+        """Collect all AXStaticText values within *element*."""
+        if _results is None:
+            _results = []
+        if depth > max_depth or len(_results) >= max_results:
+            return _results
+        role = ax_get_attribute(element, "AXRole") or ""
+        if role == "AXStaticText":
+            value = ax_get_attribute(element, "AXValue") or ""
+            if value.strip():
+                _results.append(value.strip())
+        children = ax_get_attribute(element, "AXChildren") or []
+        for child in children[:20]:
+            if len(_results) >= max_results:
+                break
+            self._all_static_text_values(child, max_depth, max_results, depth + 1, _results)
+        return _results
+
+    def _find_status_region(
+        self, element, max_depth: int, depth: int = 0,
+        _visits: Optional[list] = None,
+    ):
+        """Find the 'User status and settings' landmark region."""
+        if _visits is None:
+            _visits = [0]
+        _visits[0] += 1
+        if _visits[0] > self._MAX_VISITS or depth > max_depth:
+            return None
+
+        role = ax_get_attribute(element, "AXRole") or ""
+        if role == "AXGroup":
+            subrole = ax_get_attribute(element, "AXSubrole") or ""
+            if subrole == "AXLandmarkRegion":
+                desc = ax_get_attribute(element, "AXDescription") or ""
+                if "User status" in desc:
+                    logger.debug(
+                        "[Discord] Found status region after %d visits at depth %d",
+                        _visits[0], depth,
+                    )
+                    return element
+
+        children = ax_get_attribute(element, "AXChildren") or []
+        for child in children[:50]:
+            result = self._find_status_region(
+                child, max_depth, depth + 1, _visits,
+            )
+            if result is not None:
+                return result
+        return None
+
+    def _first_static_text_value(
+        self, element, max_depth: int, depth: int = 0,
+    ) -> str:
+        """Return the first AXStaticText value found within *element*."""
+        if depth > max_depth:
+            return ""
+        role = ax_get_attribute(element, "AXRole") or ""
+        if role == "AXStaticText":
+            value = ax_get_attribute(element, "AXValue") or ""
+            if value.strip():
+                return value.strip()
+        children = ax_get_attribute(element, "AXChildren") or []
+        for child in children[:20]:
+            val = self._first_static_text_value(child, max_depth, depth + 1)
+            if val:
+                return val
+        return ""
+
+    # -- DM target detection (fallback) --
+
+    def _get_dm_target(self, msg_list) -> str:
+        """Detect the DM target name from the message-list header.
+
+        The first child of the message list in a 1:1 DM is a header group
+        containing an ``AXImage`` whose ``description`` is the contact name
+        (e.g. ``"Bankim"``).  Returns the name, or ``""`` if not found.
+        """
+        children = ax_get_attribute(msg_list, "AXChildren") or []
+        if not children:
+            return ""
+        header = children[0]
+        return self._find_header_image_name(header, max_depth=3)
+
+    def _find_header_image_name(
+        self, element, max_depth: int, depth: int = 0,
+    ) -> str:
+        """Find the AXImage in the DM header and return its description."""
+        if depth > max_depth:
+            return ""
+        role = ax_get_attribute(element, "AXRole") or ""
+        if role == "AXImage":
+            desc = ax_get_attribute(element, "AXDescription") or ""
+            if desc and len(desc) <= 50:
+                return desc
+        children = ax_get_attribute(element, "AXChildren") or []
+        for child in children[:10]:
+            name = self._find_header_image_name(child, max_depth, depth + 1)
+            if name:
+                return name
+        return ""
+
+    # -- turn extraction --
+
+    def _extract_turns(
+        self, msg_list, max_turns: int,
+        current_username: str = "", dm_target: str = "",
+        display_name: str = "",
+    ) -> list[ConversationTurn]:
+        """Extract conversation turns from the message list's children.
+
+        Walks the children of the AXContentList, looking for AXGroup
+        elements with ``roleDescription="message"``.  Uses the ``title``
+        attribute (format: ``"Speaker , text , timestamp"``) for fast
+        parsing, falling back to child-tree text extraction when needed.
+
+        Speaker attribution (in priority order):
+
+        1. **Status bar** (*current_username* / *display_name*): If the
+           speaker matches the current user's username or display name,
+           replace with ``"You"``.  Works for both DMs and server channels.
+        2. **DM header** (*dm_target*): Fallback for 1:1 DMs when the
+           status bar is unavailable — speakers that don't match the
+           DM target are replaced with ``"You"``.
+        """
+        logger.debug(
+            "[Discord] _extract_turns: username=%r display_name=%r dm_target=%r",
+            current_username, display_name, dm_target,
+        )
+        children = ax_get_attribute(msg_list, "AXChildren") or []
+        turns: list[ConversationTurn] = []
+
+        for child in children:
+            if len(turns) >= max_turns:
+                break
+            turn = self._parse_message_element(child)
+            if turn is not None:
+                # Label the current user's messages as "You"
+                if current_username and (
+                    turn.speaker == current_username
+                    or (display_name and turn.speaker == display_name)
+                ):
+                    turn = ConversationTurn(speaker="You", text=turn.text, timestamp=turn.timestamp)
+                elif dm_target and turn.speaker != dm_target:
+                    turn = ConversationTurn(speaker="You", text=turn.text, timestamp=turn.timestamp)
+                turns.append(turn)
+
+        return turns
+
+    def _parse_message_element(self, element) -> Optional[ConversationTurn]:
+        """Parse a single Discord message from the AX tree.
+
+        Discord wraps each message in:
+          AXGroup (outer, no special subrole)
+            └─ AXGroup (subrole=AXDocumentArticle, roleDescription="message",
+                        title="Speaker , text , timestamp")
+        """
+        # The message element itself, or its first AXDocumentArticle child
+        msg_el = self._find_article(element)
+        if msg_el is None:
+            return None
+
+        title = ax_get_attribute(msg_el, "AXTitle") or ""
+        if not title:
+            return None
+
+        return self._parse_title(title, msg_el)
+
+    def _find_article(self, element):
+        """Find the AXDocumentArticle message element (may be nested 1 deep)."""
+        if (ax_get_attribute(element, "AXRoleDescription") or "") == "message":
+            return element
+        children = ax_get_attribute(element, "AXChildren") or []
+        for child in children[:5]:
+            if (ax_get_attribute(child, "AXRoleDescription") or "") == "message":
+                return child
+        return None
+
+    def _parse_title(self, title: str, msg_el) -> Optional[ConversationTurn]:
+        """Parse the title string: ``"Speaker , text , timestamp"``
+
+        The title uses `` , `` (space-comma-space) as separator.
+        The timestamp is always last.  We extract it for context, then
+        split on the first `` , `` to get speaker and text.
+        """
+        # Extract timestamp before stripping it
+        timestamp = ""
+        for ts_re in (self._TS_FULL_RE, self._TS_RELATIVE_RE, self._TS_SHORT_RE):
+            m = ts_re.search(title)
+            if m:
+                # Strip leading ", " from the matched timestamp
+                timestamp = m.group().lstrip(", ").strip()
+                break
+
+        # Strip trailing timestamp
+        text = self._TS_FULL_RE.sub("", title)
+        text = self._TS_RELATIVE_RE.sub("", text)
+        text = self._TS_SHORT_RE.sub("", text)
+
+        # Split on first " , " → speaker, rest
+        sep = " , "
+        idx = text.find(sep)
+        if idx == -1:
+            return None
+
+        speaker = text[:idx].strip()
+        body = text[idx + len(sep):].strip()
+
+        # Strip Discord thread role badges from speaker name
+        for badge in self._BADGE_SUFFIXES:
+            if speaker.endswith(badge):
+                speaker = speaker[: -len(badge)].strip()
+                break
+
+        # Strip Discord server tags: "MGpai Server Tag: PALM" → "MGpai"
+        speaker = self._SERVER_TAG_RE.sub("", speaker).strip()
+
+        if not speaker or not body:
+            # Title didn't have useful text — try child-tree extraction
+            body = self._extract_body_from_children(msg_el)
+            if not body:
+                return None
+
+        # Skip sticker / media-only messages
+        if body.startswith("Sticker,") or body.startswith("Image"):
+            return None
+
+        # Clean up "(edited)" suffix — may include an expanded timestamp
+        # e.g. "(edited) Monday, December 15, 2025 at 10:08 PM"
+        body = re.sub(r"\s*\(edited\)(?:\s+\w+,\s.+)?$", "", body)
+
+        return ConversationTurn(speaker=speaker, text=body, timestamp=timestamp)
+
+    def _extract_body_from_children(self, msg_el) -> str:
+        """Fallback: extract message body from the child tree.
+
+        Looks for AXGroup children (skipping the AXHeading which has the
+        speaker/timestamp) and collects text.
+        """
+        children = ax_get_attribute(msg_el, "AXChildren") or []
+        parts: list[str] = []
+        for child in children:
+            role = ax_get_attribute(child, "AXRole") or ""
+            if role == "AXHeading":
+                continue  # speaker + timestamp header
+            text = _collect_child_text(child, max_depth=5, max_chars=1000)
+            if text and text.strip():
+                parts.append(text.strip())
+        return "\n".join(parts)
+
+
 # --- Registry ---
 
 # All known extractors
@@ -1054,6 +2103,8 @@ _ALL_EXTRACTORS: list[ConversationExtractor] = [
     ChatGPTExtractor(),
     ClaudeDesktopExtractor(),
     IMessageExtractor(),
+    WhatsAppExtractor(),
+    DiscordExtractor(),
 ]
 
 # Map from app name to extractor instance
@@ -1065,12 +2116,39 @@ for _ext in _ALL_EXTRACTORS:
 # Default fallback: action-delimited (tries GenericExtractor internally)
 _FALLBACK_EXTRACTOR = ActionDelimitedExtractor()
 
+# Browser app names — these need window-title-based dispatch instead of
+# a single hardcoded extractor.
+_BROWSER_APP_NAMES: frozenset[str] = frozenset({
+    "Google Chrome", "Chrome", "Microsoft Edge", "Safari", "Arc",
+    "Brave Browser", "Vivaldi", "Opera",
+})
 
-def get_extractor(app_name: str) -> ConversationExtractor:
+# (keywords_to_match_in_title, extractor_instance) — checked in order.
+_WINDOW_TITLE_KEYWORDS: list[tuple[tuple[str, ...], ConversationExtractor]] = [
+    (("Gemini",), GeminiExtractor()),
+    (("ChatGPT",), ChatGPTExtractor()),
+    (("Claude",), ClaudeDesktopExtractor()),
+]
+
+
+def get_extractor(app_name: str, window_title: str = "") -> ConversationExtractor:
     """Return the app-specific extractor for the given app name.
 
     If no specific extractor is registered for the app, returns the
     ActionDelimitedExtractor as a fallback (which itself falls back to
     GenericExtractor).
+
+    For browser apps, the *window_title* is checked against known keywords
+    to pick the right chat-UI extractor (e.g. Gemini-in-Chrome →
+    GeminiExtractor).
     """
-    return _EXTRACTORS.get(app_name, _FALLBACK_EXTRACTOR)
+    # Direct app-name match first (Slack, iMessage, ChatGPT desktop, etc.)
+    if app_name in _EXTRACTORS:
+        return _EXTRACTORS[app_name]
+    # For browsers, check window title keywords
+    if app_name in _BROWSER_APP_NAMES and window_title:
+        title_lower = window_title.lower()
+        for keywords, extractor in _WINDOW_TITLE_KEYWORDS:
+            if any(kw.lower() in title_lower for kw in keywords):
+                return extractor
+    return _FALLBACK_EXTRACTOR

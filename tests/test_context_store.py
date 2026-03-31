@@ -323,6 +323,26 @@ class TestContextStore:
         assert "\u4f60\u597d\u4e16\u754c" in entries[0].content
         assert "Bonjour" in entries[0].content
 
+    def test_reply_context_includes_timestamps(self):
+        """get_reply_context should format timestamps in turn lines."""
+        store = ContextStore(Path("/tmp/test_ts.db"))
+        store.open()
+        try:
+            turns = [
+                {"speaker": "Alice", "text": "hello", "timestamp": "10:05 PM"},
+                {"speaker": "Bob", "text": "hi there"},  # no timestamp
+                {"speaker": "Alice", "text": "how are you", "timestamp": "Yesterday at 8:47 PM"},
+            ]
+            ctx = store.get_reply_context(
+                conversation_turns=turns,
+                source_app="Discord",
+            )
+            assert "Alice [10:05 PM]: hello" in ctx
+            assert "- Bob: hi there" in ctx  # no bracket for missing timestamp
+            assert "Alice [Yesterday at 8:47 PM]: how are you" in ctx
+        finally:
+            store.close()
+
     def test_not_opened_raises(self):
         store = ContextStore(Path("/tmp/unused.db"))
         with pytest.raises(RuntimeError, match="not open"):

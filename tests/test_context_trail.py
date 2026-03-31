@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from autocompleter.context_trail import AppSnapshot, ContextTrail
+from autocompleter.context_trail import AppSnapshot, ContextTrail, _filter_ui_chrome
 from autocompleter.context_store import ContextStore
 from autocompleter.input_observer import VisibleContent
 
@@ -211,8 +211,8 @@ class TestGetRecentCrossAppContext:
 
     def test_respects_max_age(self, trail):
         """Old entries should be excluded based on max_age_seconds."""
-        trail.record(_make_visible_content(app_name="Chrome", text_elements=["old"]))
-        trail.record(_make_visible_content(app_name="VS Code", text_elements=["code"]))
+        trail.record(_make_visible_content(app_name="Chrome", text_elements=["old content from Chrome"]))
+        trail.record(_make_visible_content(app_name="VS Code", text_elements=["code from VS Code"]))
 
         # Manually age the Chrome snapshot
         if trail._trail:
@@ -523,3 +523,154 @@ class TestEndToEnd:
         assert "React Hooks Docs" in context
         assert "useState" in context
         assert "const [items, setItems] =" in context
+
+
+# ---------------------------------------------------------------------------
+# UI chrome filtering tests (Fix 3)
+# ---------------------------------------------------------------------------
+
+class TestUIChromFiltering:
+    def test_filters_discord_ui_elements(self):
+        """Known Discord UI strings should be stripped."""
+        text = "Send GIF\nUnmute\nDo Not Disturb\nHello from Alice"
+        result = _filter_ui_chrome(text)
+        assert "Send GIF" not in result
+        assert "Unmute" not in result
+        assert "Do Not Disturb" not in result
+        assert "Hello from Alice" in result
+
+    def test_preserves_real_content(self):
+        """Substantive messages and content should be preserved."""
+        text = "Hey, how's the project going?\nI just pushed the latest changes.\nLooks great!"
+        result = _filter_ui_chrome(text)
+        assert "project going" in result
+        assert "pushed the latest changes" in result
+        assert "Looks great!" in result
+
+    def test_filters_case_insensitive(self):
+        """Filtering should be case-insensitive."""
+        text = "SEND GIF\nunmute\nReal message here"
+        result = _filter_ui_chrome(text)
+        assert "SEND GIF" not in result
+        assert "unmute" not in result
+        assert "Real message here" in result
+
+    def test_filters_substring_matches(self):
+        """Lines containing known UI chrome substrings should be filtered."""
+        text = "Toggle icon, button\n3 unread messages\nActual chat content"
+        result = _filter_ui_chrome(text)
+        assert "icon, button" not in result
+        assert "unread message" not in result
+        assert "Actual chat content" in result
+
+    def test_filters_very_short_lines(self):
+        """Lines with 3 or fewer chars (icons, separators) should be filtered."""
+        text = "Hi\n|\n---\nA real message"
+        result = _filter_ui_chrome(text)
+        # "Hi" is 2 chars, "|" is 1 char, "---" is 3 chars
+        assert "A real message" in result
+
+    def test_empty_input(self):
+        """Empty input should return empty output."""
+        result = _filter_ui_chrome("")
+        assert result == ""
+
+    def test_all_chrome_filtered_returns_empty(self):
+        """If all lines are chrome, result should be empty."""
+        text = "Send\nMute\nEmoji"
+        result = _filter_ui_chrome(text)
+        assert result.strip() == ""
+
+    def test_text_summary_filters_chrome(self):
+        """ContextTrail._build_text_summary should filter UI chrome."""
+        trail = ContextTrail()
+        content = _make_visible_content(
+            app_name="Discord",
+            text_elements=[
+                "Send GIF",
+                "Unmute",
+                "Hey Alice, how's the project?",
+                "Emoji",
+            ],
+        )
+        # Manually call _build_text_summary
+        summary = trail._build_text_summary(content)
+        assert "Send GIF" not in summary
+        assert "Unmute" not in summary
+        assert "Emoji" not in summary
+        assert "Hey Alice" in summary
+
+
+# ---------------------------------------------------------------------------
+# Noisy cross-app source filtering tests (Fix 4)
+# ---------------------------------------------------------------------------
+
+class TestNoisyCrossAppFiltering:
+    def test_skips_notification_center(self):
+        """Notification Center should be excluded from cross-app context."""
+        trail = ContextTrail()
+        # Chrome -> Notification Center -> VS Code
+        trail.record(_make_visible_content(
+            app_name="Chrome", text_elements=["React docs"],
+        ))
+        trail.record(_make_visible_content(
+            app_name="Notification Center",
+            text_elements=["New message from Bob"],
+        ))
+        trail.record(_make_visible_content(
+            app_name="VS Code", text_elements=["code"],
+        ))
+
+        snapshots = trail.get_recent_cross_app_context("VS Code")
+        app_names = [s.app_name for s in snapshots]
+        assert "Notification Center" not in app_names
+        assert "Chrome" in app_names
+
+    def test_skips_system_ui_server(self):
+        """SystemUIServer should be excluded."""
+        trail = ContextTrail()
+        trail.record(_make_visible_content(
+            app_name="Chrome", text_elements=["docs"],
+        ))
+        trail.record(_make_visible_content(
+            app_name="SystemUIServer", text_elements=["Battery 85%"],
+        ))
+        trail.record(_make_visible_content(
+            app_name="VS Code", text_elements=["code"],
+        ))
+
+        snapshots = trail.get_recent_cross_app_context("VS Code")
+        app_names = [s.app_name for s in snapshots]
+        assert "SystemUIServer" not in app_names
+
+    def test_skips_empty_summaries(self):
+        """Snapshots with empty text summaries after filtering should be skipped."""
+        trail = ContextTrail()
+        # Create a snapshot that will be all UI chrome
+        trail.record(_make_visible_content(
+            app_name="Discord",
+            text_elements=["Send GIF", "Unmute", "Mute"],
+        ))
+        trail.record(_make_visible_content(
+            app_name="VS Code", text_elements=["code"],
+        ))
+
+        snapshots = trail.get_recent_cross_app_context("VS Code")
+        # Discord snapshot should be filtered out (empty after chrome removal)
+        for s in snapshots:
+            assert s.text_summary.strip() != ""
+
+    def test_allows_substantive_apps(self):
+        """Real apps like Chrome, Safari, VS Code should pass through."""
+        trail = ContextTrail()
+        trail.record(_make_visible_content(
+            app_name="Safari",
+            text_elements=["Python documentation: list comprehensions"],
+        ))
+        trail.record(_make_visible_content(
+            app_name="VS Code", text_elements=["code"],
+        ))
+
+        snapshots = trail.get_recent_cross_app_context("VS Code")
+        assert len(snapshots) == 1
+        assert snapshots[0].app_name == "Safari"

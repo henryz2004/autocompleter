@@ -1,0 +1,18 @@
+{
+  "extractor": "ChatGPTExtractor",
+  "app": "ChatGPT",
+  "turns": [
+    {
+      "speaker": "User",
+      "text": "i hear you. since you already know the target split and the t-bill auctions aren’t open, the cleanest move right now is this:\n\ndon’t dump the rest into igsb.\ndon’t dump the rest into vusxx either.\n\njust park the unallocated cash in the core position (your fidelity cash sweep) and wait a day or two. fidelity pays a tiny yield on the sweep, but more importantly it keeps everything liquid until the monday auctions open. then you allocate cleanly without having to unwind anything.\n\nputting it in igsb now would shift your risk higher than you intended.\nputting it in vusxx now means you’ll have to sell it in a few days to fund the auction amounts, which adds unnecessary churn.\n\nso the steady path is:\n\nleave the remaining cash untouched\nbuy the vusxx and igsb slices we already calculated\nwait for monday to place the 13-week and 26-week orders\n\nif you want, tell me the exact cash still unallocated and i’ll restate the clean steps so it’s all lined up."
+    },
+    {
+      "speaker": "ChatGPT",
+      "text": "what is fidelity cash sweep"
+    },
+    {
+      "speaker": "User",
+      "text": "i’m following.\n\nthe fidelity cash sweep is just the holding pen for your uninvested cash. every brokerage has one. it’s where money sits by default before you buy anything. it is:\n\t•\tnot a money market fund\n\t•\tnot a treasury instrument\n\t•\tnot an investment you chose\n\t•\tjust the default cash vehicle\n\nfor business accounts, fidelity usually uses something like FCASH as the sweep. it pays a very small yield, but it’s liquid and instant.\n\nmechanically:\n\t•\twhen you transfer money in → it lands in the sweep\n\t•\twhen you buy something → fidelity pulls from the sweep automatically\n\t•\twhen bills mature → the proceeds go back to the sweep\n\t•\tif you sell igsb → the cash goes to the sweep again\n\nit’s basically your operational cash slot.\n\nthis is why i said to leave the unused cash there until monday. it keeps everything clean and avoids buying something you’ll need to unwind in 48 hours.\n\nyou don’t have to configure anything. fidelity already set it up when they opened your corporate account.\n\nif you want, you can check it by looking at your positions page — you’ll see something like “FCASH” with your cash balance."
+    }
+  ]
+}

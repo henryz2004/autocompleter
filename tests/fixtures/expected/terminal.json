@@ -1,0 +1,5 @@
+{
+  "extractor": "ActionDelimitedExtractor",
+  "app": "Terminal",
+  "turns": []
+}
