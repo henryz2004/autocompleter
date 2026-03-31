@@ -69,6 +69,16 @@ class MemoryStore:
     All public methods are safe to call from any thread.  Heavy operations
     (``add``, ``search``) can optionally run on a background thread via
     ``add_async`` to avoid blocking the hotkey pipeline.
+
+    The **pre-warm / cache** pattern keeps embedding API calls off the
+    latency-critical trigger path:
+
+    1. The observer loop calls ``pre_warm()`` every poll cycle with
+       context signals (app, window title, visible text).
+    2. ``pre_warm()`` builds a composite query, checks if it differs
+       from the cached query, and if so fires a background search.
+    3. At trigger time, ``get_cached_context()`` returns the pre-warmed
+       formatted memory string instantly (no API call).
     """
 
     def __init__(self, config: Config) -> None:
@@ -76,10 +86,18 @@ class MemoryStore:
         self._mem: Any | None = None  # mem0 Memory instance
         self._lock = threading.Lock()
         self._initialized = False
-        # Bounded thread pool for async memory writes (max 2 concurrent).
+        self._vector_count: int = 0  # track FAISS index size for short-circuit
+        # Bounded thread pool for async memory ops (max 2 concurrent).
         self._executor = ThreadPoolExecutor(
-            max_workers=2, thread_name_prefix="mem0-add",
+            max_workers=2, thread_name_prefix="mem0",
         )
+
+        # ---- Pre-warm cache ----
+        self._cache_lock = threading.Lock()
+        self._cached_query: str = ""
+        self._cached_results: list[str] = []
+        self._cached_formatted: str = ""
+        self._warm_in_flight: bool = False  # prevent duplicate warm jobs
 
         if not config.memory_enabled:
             logger.info("Memory system disabled (set AUTOCOMPLETER_MEMORY=1 to enable)")
@@ -152,11 +170,24 @@ class MemoryStore:
         try:
             self._mem = Mem0Memory.from_config(mem0_config)
             self._initialized = True
+            # Capture vector count for short-circuit optimization.
+            try:
+                vs = self._mem.vector_store  # type: ignore[union-attr]
+                self._vector_count = getattr(vs, "index", None)
+                if self._vector_count is not None:
+                    self._vector_count = getattr(
+                        self._vector_count, "ntotal", 0
+                    )
+                else:
+                    self._vector_count = 0
+            except Exception:
+                self._vector_count = 0
             logger.info(
                 "Memory system initialized "
                 f"(llm={cfg.memory_llm_provider}/{cfg.memory_llm_model}, "
                 f"embedder={cfg.memory_embedder_provider}/{cfg.memory_embedder_model}, "
-                f"store=faiss @ {cfg.data_dir / 'memories'})"
+                f"store=faiss @ {cfg.data_dir / 'memories'}, "
+                f"vectors={self._vector_count})"
             )
         except Exception:
             logger.exception("Failed to initialize mem0 — memory disabled")
@@ -184,6 +215,11 @@ class MemoryStore:
         Returns ``[]`` when memory is disabled or on error.
         """
         if not self.enabled or not query.strip():
+            return []
+
+        # Short-circuit: skip the expensive embedding API call when the
+        # FAISS index is empty — there's nothing to match against.
+        if self._vector_count == 0:
             return []
 
         try:
@@ -232,6 +268,9 @@ class MemoryStore:
                 metadata=metadata,
             )
             logger.debug(f"[MEM] add() -> {result}")
+            # Update vector count so short-circuit reflects new memories.
+            if result:
+                self._vector_count += 1
             return result
         except Exception:
             logger.debug("Memory add failed", exc_info=True)
@@ -296,3 +335,85 @@ class MemoryStore:
             total += len(mem)
 
         return "User memories:\n" + "\n".join(parts)
+
+    # ---- Pre-warm / cache API ----
+
+    @staticmethod
+    def build_query(
+        app_name: str = "",
+        window_title: str = "",
+        visible_snippet: str = "",
+    ) -> str:
+        """Build a composite memory search query from context signals.
+
+        Combines app name, window title (often contains the contact /
+        channel name), and a snippet of visible text to give the
+        embedding model richer retrieval signal than cursor text alone.
+        """
+        parts: list[str] = []
+        if app_name:
+            parts.append(app_name)
+        if window_title:
+            parts.append(window_title)
+        if visible_snippet:
+            # Take last ~200 chars — most recent content is most relevant.
+            parts.append(visible_snippet.strip()[-200:])
+        return " | ".join(parts)
+
+    def pre_warm(
+        self,
+        query: str,
+        *,
+        limit: int = 3,
+        user_id: str = _DEFAULT_USER_ID,
+    ) -> None:
+        """Pre-warm the memory cache in the background.
+
+        Called by the observer loop every poll cycle.  If *query* matches
+        the already-cached query, this is a no-op.  Otherwise it submits
+        a background search and updates the cache when done.
+        """
+        if not self.enabled:
+            return
+
+        with self._cache_lock:
+            if query == self._cached_query or self._warm_in_flight:
+                return
+            self._warm_in_flight = True
+
+        def _do_warm() -> None:
+            try:
+                memories = self.search(query, limit=limit, user_id=user_id)
+                formatted = self.format_for_context(memories)
+                with self._cache_lock:
+                    self._cached_query = query
+                    self._cached_results = memories
+                    self._cached_formatted = formatted
+                if formatted:
+                    logger.debug(
+                        f"[MEM] pre-warm: {len(memories)} memories "
+                        f"({len(formatted)} chars) for query {query[:60]!r}"
+                    )
+            except Exception:
+                logger.debug("Memory pre-warm failed", exc_info=True)
+            finally:
+                with self._cache_lock:
+                    self._warm_in_flight = False
+
+        self._executor.submit(_do_warm)
+
+    def get_cached_context(self) -> str:
+        """Return the pre-warmed formatted memory string.
+
+        This is the hot-path method called at trigger time.  Returns
+        immediately with whatever was last cached (possibly empty string
+        if pre-warm hasn't run yet or there are no memories).
+        No API calls, no blocking.
+        """
+        with self._cache_lock:
+            return self._cached_formatted
+
+    def get_cached_results(self) -> list[str]:
+        """Return the raw pre-warmed memory list."""
+        with self._cache_lock:
+            return list(self._cached_results)

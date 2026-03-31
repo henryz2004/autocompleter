@@ -73,6 +73,7 @@ class TestMemorySearch:
         # Force-enable by injecting a mock
         store._mem = MagicMock()
         store._initialized = True
+        store._vector_count = 10  # non-zero so search isn't short-circuited
         return store
 
     def test_search_returns_memories(self):
@@ -332,3 +333,148 @@ class TestContextStoreIntegration:
             assert "User memories:" not in context
         finally:
             cs.close()
+
+
+# ---------------------------------------------------------------------------
+# Build query tests
+# ---------------------------------------------------------------------------
+
+class TestBuildQuery:
+    """Test MemoryStore.build_query() composite query construction."""
+
+    def test_all_signals(self):
+        q = MemoryStore.build_query(
+            app_name="Discord",
+            window_title="@Bankim - Discord",
+            visible_snippet="hey, how's the project going?",
+        )
+        assert "Discord" in q
+        assert "@Bankim" in q
+        assert "project going?" in q
+
+    def test_app_and_title_only(self):
+        q = MemoryStore.build_query(app_name="Messages", window_title="Alice")
+        assert "Messages" in q
+        assert "Alice" in q
+
+    def test_empty_inputs(self):
+        q = MemoryStore.build_query()
+        assert q == ""
+
+    def test_snippet_truncated(self):
+        long_text = "x" * 500
+        q = MemoryStore.build_query(visible_snippet=long_text)
+        # Last 200 chars
+        assert len(q) == 200
+
+
+# ---------------------------------------------------------------------------
+# Short-circuit tests
+# ---------------------------------------------------------------------------
+
+class TestShortCircuitEmptyIndex:
+    """Test that search() skips the API call when vector count is 0."""
+
+    def test_search_skipped_when_zero_vectors(self):
+        store = MemoryStore(_make_config(memory_enabled=False))
+        store._mem = MagicMock()
+        store._initialized = True
+        store._vector_count = 0
+        results = store.search("test query")
+        assert results == []
+        # mem0.search should NOT have been called
+        store._mem.search.assert_not_called()
+
+    def test_search_proceeds_when_vectors_exist(self):
+        store = MemoryStore(_make_config(memory_enabled=False))
+        store._mem = MagicMock()
+        store._initialized = True
+        store._vector_count = 5
+        store._mem.search.return_value = {"results": []}
+        store.search("test query")
+        # mem0.search SHOULD have been called
+        store._mem.search.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Pre-warm / cache tests
+# ---------------------------------------------------------------------------
+
+class TestPreWarmCache:
+    """Test the pre-warm caching layer."""
+
+    def _make_store_with_mock(self):
+        store = MemoryStore(_make_config(memory_enabled=False))
+        store._mem = MagicMock()
+        store._initialized = True
+        store._vector_count = 10  # non-zero so search proceeds
+        return store
+
+    def test_get_cached_context_empty_initially(self):
+        store = MemoryStore(_make_config(memory_enabled=False))
+        assert store.get_cached_context() == ""
+        assert store.get_cached_results() == []
+
+    def test_pre_warm_populates_cache(self):
+        store = self._make_store_with_mock()
+        store._mem.search.return_value = {
+            "results": [
+                {"memory": "User likes Python", "score": 0.9},
+            ]
+        }
+        store.pre_warm("Discord | @Bankim | hey")
+        # Wait for background thread
+        store._executor.shutdown(wait=True)
+
+        cached = store.get_cached_context()
+        assert "User likes Python" in cached
+        assert store.get_cached_results() == ["User likes Python"]
+
+    def test_pre_warm_noop_for_same_query(self):
+        store = self._make_store_with_mock()
+        store._mem.search.return_value = {"results": []}
+
+        store.pre_warm("same query")
+        store._executor.shutdown(wait=True)
+
+        # Reset mock to track second call
+        store._mem.search.reset_mock()
+
+        store.pre_warm("same query")
+        store._executor.shutdown(wait=True)
+
+        # Should NOT have searched again — query didn't change
+        store._mem.search.assert_not_called()
+
+    def test_pre_warm_refreshes_on_new_query(self):
+        store = self._make_store_with_mock()
+        store._mem.search.return_value = {
+            "results": [{"memory": "Memory A", "score": 0.9}]
+        }
+
+        store.pre_warm("query 1")
+        store._executor.shutdown(wait=True)
+        assert "Memory A" in store.get_cached_context()
+
+        # Recreate executor after shutdown so we can submit again.
+        from concurrent.futures import ThreadPoolExecutor
+        store._executor = ThreadPoolExecutor(max_workers=2)
+
+        store._mem.search.return_value = {
+            "results": [{"memory": "Memory B", "score": 0.8}]
+        }
+        store.pre_warm("query 2")
+        store._executor.shutdown(wait=True)
+        assert "Memory B" in store.get_cached_context()
+        assert "Memory A" not in store.get_cached_context()
+
+    def test_pre_warm_when_disabled_is_noop(self):
+        store = MemoryStore(_make_config(memory_enabled=False))
+        store.pre_warm("anything")  # should not raise
+
+    def test_add_increments_vector_count(self):
+        store = self._make_store_with_mock()
+        store._vector_count = 0
+        store._mem.add.return_value = {"id": "mem_123"}
+        store.add([{"role": "user", "content": "test"}])
+        assert store._vector_count == 1

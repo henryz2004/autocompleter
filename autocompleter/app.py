@@ -464,6 +464,22 @@ class Autocompleter:
                             entry_type="user_input",
                         )
 
+                # Pre-warm memory cache (fire-and-forget, non-blocking).
+                # Uses app name + window title + recent visible text as a
+                # composite query — much richer than cursor text alone.
+                if self.memory.enabled and self._last_observed_app:
+                    from autocompleter.memory import MemoryStore
+                    _snippet = ""
+                    if content and content.text_elements:
+                        _snippet = "\n".join(content.text_elements[-5:])
+                    mem_query = MemoryStore.build_query(
+                        app_name=self._last_observed_app,
+                        window_title=self._last_observed_window,
+                        visible_snippet=_snippet,
+                    )
+                    if mem_query:
+                        self.memory.pre_warm(mem_query)
+
                 # Periodic DB pruning
                 self._observe_iteration += 1
                 if self._observe_iteration % self._PRUNE_EVERY == 0:
@@ -766,19 +782,11 @@ class Autocompleter:
         use_shell = False
         use_tui = False
         effective_before_cursor = focused.before_cursor
-        # Search long-term memory for relevant context (before shell/mode detection
-        # so memory is available for all paths including shell context).
-        memory_context = ""
-        if self.memory.enabled:
-            query = effective_before_cursor.strip()[-200:]
-            if query:
-                memories = self.memory.search(query, limit=3)
-                memory_context = self.memory.format_for_context(memories)
-                if memory_context:
-                    logger.info(
-                        f"[MEM] Retrieved {len(memories)} memories "
-                        f"({len(memory_context)} chars)"
-                    )
+        # Read pre-warmed memory context (populated by observer loop — instant,
+        # no API call).  Falls back to "" if cache is cold or memory disabled.
+        memory_context = self.memory.get_cached_context()
+        if memory_context:
+            logger.info(f"[MEM] Using cached memory context ({len(memory_context)} chars)")
 
         if is_shell_app(app_name):
             # Try TUI detection first (e.g. Claude Code running inside terminal)
@@ -966,19 +974,11 @@ class Autocompleter:
         use_tui = False
         effective_before_cursor = focused.before_cursor
 
-        # Search long-term memory for relevant context (before shell/mode detection
-        # so memory is available for all paths including shell context).
-        memory_context = ""
-        if self.memory.enabled:
-            query = effective_before_cursor.strip()[-200:]
-            if query:
-                memories = self.memory.search(query, limit=3)
-                memory_context = self.memory.format_for_context(memories)
-                if memory_context:
-                    logger.info(
-                        f"[MEM] Retrieved {len(memories)} memories "
-                        f"({len(memory_context)} chars)"
-                    )
+        # Read pre-warmed memory context (populated by observer loop — instant,
+        # no API call).  Falls back to "" if cache is cold or memory disabled.
+        memory_context = self.memory.get_cached_context()
+        if memory_context:
+            logger.info(f"[MEM] Using cached memory context ({len(memory_context)} chars)")
 
         if is_shell_app(app_name):
             # Try TUI detection first (e.g. Claude Code running inside terminal)
