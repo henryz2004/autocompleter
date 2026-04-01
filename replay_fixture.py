@@ -432,6 +432,114 @@ class LLMResult:
     streamed: bool  # Whether streaming was used
 
 
+# Anthropic client cache
+_anthropic_client = None
+
+
+def _call_anthropic(
+    system_prompt: str,
+    user_prompt: str,
+    model: str,
+    api_key: str,
+    temperature: float,
+    max_tokens: int,
+    stream: bool,
+    extract_fn,
+) -> LLMResult:
+    """Call Anthropic API using the native SDK."""
+    import anthropic
+
+    global _anthropic_client
+    if _anthropic_client is None:
+        _anthropic_client = anthropic.Anthropic(api_key=api_key)
+
+    provider_label = f"anthropic/{model}"
+
+    try:
+        if stream:
+            t0 = time.time()
+            suggestions = []
+            per_times = []
+            ttft = 0.0
+            json_buf = ""
+            last_yielded = 0
+
+            with _anthropic_client.messages.stream(
+                model=model,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+                temperature=temperature,
+                max_tokens=max_tokens,
+            ) as response:
+                for text_chunk in response.text_stream:
+                    json_buf += text_chunk
+                    complete = extract_fn(json_buf)
+                    while len(complete) > last_yielded:
+                        s = complete[last_yielded]
+                        elapsed = time.time() - t0
+                        if last_yielded == 0:
+                            ttft = elapsed
+                        per_times.append(elapsed)
+                        suggestions.append(s)
+                        last_yielded += 1
+
+            total = time.time() - t0
+
+            # Fallback: parse full buffer
+            if not suggestions and json_buf.strip():
+                try:
+                    data = json.loads(json_buf)
+                    for s in data.get("suggestions", []):
+                        text = s.get("text", "") if isinstance(s, dict) else str(s)
+                        if text.strip():
+                            suggestions.append(text.strip())
+                    ttft = total
+                    per_times = [total] * len(suggestions)
+                except json.JSONDecodeError:
+                    suggestions = [json_buf.strip()]
+                    ttft = total
+                    per_times = [total]
+
+            return LLMResult(
+                suggestions=suggestions, ttft=ttft,
+                per_suggestion_times=per_times, total=total,
+                provider=provider_label, streamed=True,
+            )
+        else:
+            t0 = time.time()
+            response = _anthropic_client.messages.create(
+                model=model,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            total = time.time() - t0
+            content = response.content[0].text if response.content else ""
+
+            suggestions = []
+            try:
+                data = json.loads(content)
+                for s in data.get("suggestions", []):
+                    text = s.get("text", "") if isinstance(s, dict) else str(s)
+                    if text.strip():
+                        suggestions.append(text.strip())
+            except json.JSONDecodeError:
+                suggestions = [content.strip()]
+
+            return LLMResult(
+                suggestions=suggestions, ttft=total,
+                per_suggestion_times=[total] * len(suggestions), total=total,
+                provider=provider_label, streamed=False,
+            )
+    except Exception as e:
+        return LLMResult(
+            suggestions=[f"(LLM error: {e})"], ttft=0.0,
+            per_suggestion_times=[0.0], total=0.0,
+            provider=provider_label, streamed=stream,
+        )
+
+
 def call_llm(
     system_prompt: str,
     user_prompt: str,
@@ -462,6 +570,14 @@ def call_llm(
 
     temp = 0.3 if mode == AutocompleteMode.CONTINUATION else 0.7
     max_tokens = 80 if mode == AutocompleteMode.CONTINUATION else 200
+
+    # Anthropic SDK path (separate from OpenAI-compatible)
+    if base_url == "anthropic":
+        api_key = api_key or config.anthropic_api_key
+        return _call_anthropic(
+            system_prompt, user_prompt, model, api_key,
+            temp, max_tokens, stream, _extract_complete_suggestions,
+        )
 
     host = base_url.split("//")[1].split("/")[0] if base_url and "//" in base_url else "?"
     provider_label = f"{host}/{model}"
@@ -772,9 +888,12 @@ def replay(
 # ---------------------------------------------------------------------------
 
 # Provider presets: name → (base_url, env_var_for_key, default_model)
+# base_url="anthropic" is a sentinel for the Anthropic SDK path.
 PROVIDER_PRESETS: dict[str, tuple[str, str, str]] = {
     "cerebras": ("https://api.cerebras.ai/v1", "CEREBRAS_API_KEY", "qwen-3-235b-a22b-instruct-2507"),
     "groq": ("https://api.groq.com/openai/v1", "GROQ_API_KEY", "qwen/qwen3-32b"),
+    "openai": ("https://api.openai.com/v1", "OPENAI_API_KEY", "gpt-4.1-mini"),
+    "anthropic": ("anthropic", "ANTHROPIC_API_KEY", "claude-sonnet-4-20250514"),
     "sambanova": ("https://api.sambanova.ai/v1", "SAMBANOVA_API_KEY", "Qwen3-32B"),
     "together": ("https://api.together.xyz/v1", "TOGETHER_API_KEY", "Qwen/Qwen3-235B-A22B-FP8"),
     "fireworks": ("https://api.fireworks.ai/inference/v1", "FIREWORKS_API_KEY", "accounts/fireworks/models/qwen3-235b-a22b"),
