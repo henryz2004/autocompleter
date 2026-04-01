@@ -42,6 +42,7 @@ class Config:
     num_suggestions: int = 3
     debounce_ms: int = 500
     hotkey: str = "ctrl+space"
+    regenerate_hotkey: str = "ctrl+r"
 
     # Context store
     max_context_age_hours: int = 72
@@ -146,6 +147,7 @@ def load_config() -> Config:
             "AUTOCOMPLETER_ESCALATION_TIMEOUT_MS", "400"
         )),
         hotkey=os.environ.get("AUTOCOMPLETER_HOTKEY", "ctrl+space"),
+        regenerate_hotkey=os.environ.get("AUTOCOMPLETER_REGENERATE_HOTKEY", "ctrl+r"),
         auto_trigger_enabled=os.environ.get(
             "AUTOCOMPLETER_AUTO_TRIGGER", ""
         ).lower() in ("1", "true"),

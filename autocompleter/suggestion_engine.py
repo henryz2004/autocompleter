@@ -512,6 +512,7 @@ class SuggestionEngine:
         feedback_stats: Optional[dict] = None,
         negative_patterns: Optional[list[str]] = None,
         shell_mode: Optional[bool] = None,
+        temperature_boost: float = 0.0,
     ) -> Generator[Suggestion, None, None]:
         """Generate completion suggestions via streaming, yielding each as it completes.
 
@@ -529,6 +530,8 @@ class SuggestionEngine:
             negative_patterns: Optional list of recently dismissed suggestion texts.
             shell_mode: Explicit override for shell prompt selection. If None,
                 inferred from app_name. Pass False to force generic prompts.
+            temperature_boost: Added to the base temperature (e.g. 0.3 on
+                regenerate) to increase output diversity. Clamped to [0, 2].
 
         Yields:
             Suggestion objects, in the order they are completed by the LLM.
@@ -579,6 +582,10 @@ class SuggestionEngine:
         # Apply feedback-based temperature adjustment
         if feedback_stats is not None:
             temperature = adjust_temperature(temperature, feedback_stats.get("accept_rate", 0.5))
+
+        # Apply temperature boost (e.g. on regenerate for more diversity)
+        if temperature_boost:
+            temperature = min(temperature + temperature_boost, 2.0)
 
         # Append negative patterns to system prompt
         if negative_patterns:

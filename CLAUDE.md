@@ -51,7 +51,11 @@ Each mode has its own system prompt, context assembly strategy in `context_store
 
 ### Streaming path
 
-LLM outputs suggestions separated by `---SUGGESTION---` delimiters. `generate_suggestions_stream()` buffers tokens, yields each `Suggestion` as its delimiter is hit, so the overlay updates incrementally.
+LLM outputs JSON (`{"suggestions": [{"text": "..."}]}`). `generate_suggestions_stream()` incrementally parses the growing buffer via `_extract_complete_suggestions()`, yielding each `Suggestion` as its JSON object closes. The overlay updates with each arrival. Timeout-based escalation fires a fallback provider (Groq) if the primary (Cerebras) hasn't responded within 400ms.
+
+### Regenerate
+
+When the overlay is visible, `Ctrl+R` (configurable via `AUTOCOMPLETER_REGENERATE_HOTKEY`) re-triggers the LLM with the same context but fresh sampling, producing different suggestions. Validates the user is still in the same app (by PID) and re-captures the caret position to track window movement. Saved trigger state is cleared on dismiss to avoid memory leaks.
 
 ### Context assembly tiers (continuation mode)
 
@@ -86,6 +90,7 @@ Accepts/dismisses recorded in SQLite `suggestion_feedback` table. Accept rate fe
 Use `--log-file` for full DEBUG output. Key log prefixes:
 - `[CTX]` — context extraction and assembly
 - `--- TRIGGER ---` — hotkey fired, focused element info
+- `--- REGENERATE ---` — regenerate hotkey fired
 - `--- SUGGESTIONS ---` — LLM results with generation ID and timing
 - `--- CONTEXT ---` — full context sent to the LLM
 

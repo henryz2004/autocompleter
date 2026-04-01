@@ -3,7 +3,7 @@
 Displays suggestions in a minimal dropdown anchored near the cursor position.
 Uses PyObjC to create a borderless, floating NSWindow that stays above all
 other windows. Supports keyboard navigation: arrow keys to select,
-Tab/Enter to accept, Esc to dismiss.
+Tab/Enter to accept, Ctrl+R to regenerate, Esc to dismiss.
 """
 
 from __future__ import annotations
@@ -315,7 +315,7 @@ if HAS_APPKIT:
                 AppKit.NSFontAttributeName: hint_font,
                 AppKit.NSForegroundColorAttributeName: hint_color,
             }
-            hint_text = "Tab/Click accept  \u2191\u2193 navigate  Esc dismiss"
+            hint_text = "Tab accept  \u2191\u2193 navigate  \u2303R regen  Esc dismiss"
             hint_str = AppKit.NSAttributedString.alloc().initWithString_attributes_(
                 hint_text, hint_attrs
             )

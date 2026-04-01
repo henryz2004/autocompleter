@@ -223,6 +223,10 @@ class Autocompleter:
         self._last_observed_app: str = ""
         self._last_observed_window: str = ""
 
+        # Regenerate state — stores the last trigger's arguments so we can
+        # replay the LLM call with a fresh generation_id (new sampling).
+        self._last_trigger_args: dict | None = None
+
         # Auto-trigger state
         self._auto_trigger_enabled: bool = self.config.auto_trigger_enabled
         self._last_dismiss_time: float = 0.0
@@ -285,6 +289,9 @@ class Autocompleter:
         self.hotkey_listener.register(
             f"shift+{self.config.hotkey}", self._on_toggle_auto_trigger
         )
+        self.hotkey_listener.register(
+            self.config.regenerate_hotkey, self._on_regenerate
+        )
         self.hotkey_listener.register("up", self._on_nav_up)
         self.hotkey_listener.register("down", self._on_nav_down)
         self.hotkey_listener.register("tab", self._on_nav_accept)
@@ -309,6 +316,7 @@ class Autocompleter:
             f"Provider: {self.config.llm_provider} | Model: {self.config.llm_model}"
         )
         print(f"Autocompleter running. Press {self.config.hotkey} to get suggestions.")
+        print(f"Press {self.config.regenerate_hotkey} to regenerate suggestions.")
         print(f"Press Shift+{self.config.hotkey} to toggle auto-trigger (currently {auto_state}).")
         print("Press Ctrl+C to exit.")
 
@@ -738,6 +746,19 @@ class Autocompleter:
             # Capture AX tree on a background thread to avoid blocking the tap
             self._dumper.capture_ax_tree(snapshot)
 
+        # Save trigger state so _on_regenerate can replay the LLM call
+        self._last_trigger_args = dict(
+            focused=focused,
+            x=x, y=y, caret_height=caret_height,
+            mode=mode,
+            window_title=window_title,
+            source_url=source_url,
+            conversation_turns=conversation_turns,
+            visible_text_elements=visible_text_elements,
+            cross_app_context=cross_app_context,
+            subtree_context=subtree_context,
+        )
+
         # Dispatch the LLM call to a worker thread so we don't block the tap.
         # Use the streaming path by default for faster perceived response.
         threading.Thread(
@@ -957,6 +978,7 @@ class Autocompleter:
         cross_app_context: str = "",
         snapshot: TriggerSnapshot | None = None,
         subtree_context: str | None = None,
+        temperature_boost: float = 0.0,
     ) -> None:
         """Run the streaming LLM call on a worker thread, updating the overlay incrementally."""
         app_name = focused.app_name
@@ -1105,6 +1127,7 @@ class Autocompleter:
                 feedback_stats=feedback_stats,
                 negative_patterns=negative_patterns,
                 shell_mode=use_shell,
+                temperature_boost=temperature_boost,
             ):
                 # Check if a newer trigger has superseded this one
                 if generation_id != self._generation_id:
@@ -1323,6 +1346,79 @@ class Autocompleter:
             lambda timer: self.overlay.hide() if self._generation_id == feedback_gen else None,
         )
 
+    def _on_regenerate(self) -> bool:
+        """Regenerate suggestions using the same context but fresh sampling.
+
+        Only active when the overlay is visible and we have saved trigger args.
+        Validates that the user is still in the same app/field before replaying.
+        Re-captures the caret position so the overlay tracks window movement.
+        """
+        if not self.overlay.is_visible:
+            return False
+        if self._last_trigger_args is None:
+            return False
+
+        # Validate: user must still be in the same app — otherwise stale
+        # context would produce wrong suggestions and overlay would appear
+        # at the old position.
+        focused = self.observer.get_focused_element()
+        if focused is None:
+            logger.debug("Regenerate: no focused element, aborting")
+            return False
+        saved_focused = self._last_trigger_args["focused"]
+        if focused.app_pid != saved_focused.app_pid:
+            logger.info(
+                f"Regenerate: app changed ({saved_focused.app_name!r} → "
+                f"{focused.app_name!r}), aborting"
+            )
+            return False
+
+        logger.info("--- REGENERATE ---")
+        self._auto_trigger_debouncer.cancel()
+        self._trigger_time = time.time()
+        self._latency_tracker.start(generation_id=self._generation_id + 1)
+        self._latency_tracker.mark("trigger")
+
+        args = self._last_trigger_args
+
+        # Re-capture caret position so overlay tracks window scroll/resize
+        x, y, caret_height = args["x"], args["y"], args["caret_height"]
+        caret_pos = _get_caret_screen_position()
+        if caret_pos:
+            x, y, caret_height = caret_pos
+            # Apply same element-bottom clamp as _on_trigger
+            if focused.position and focused.size:
+                elem_bottom = focused.position[1] + focused.size[1]
+                if y < elem_bottom:
+                    y = elem_bottom
+
+        # Bump generation to discard any in-flight stream
+        self._generation_id += 1
+        gen_id = self._generation_id
+
+        # Show loading indicator at the (updated) position
+        self._run_on_main(lambda: self.overlay.show(
+            [Suggestion(text="Regenerating...", index=0)],
+            x, y, caret_height=caret_height,
+        ))
+
+        # Re-dispatch the streaming LLM call with boosted temperature for diversity
+        threading.Thread(
+            target=self._generate_and_show_streaming,
+            args=(
+                args["focused"], x, y, caret_height,
+                args["mode"], args["window_title"], args["source_url"],
+                args["conversation_turns"], args["visible_text_elements"],
+                gen_id, args["cross_app_context"],
+                None,  # snapshot — skip trigger dump on regenerate
+                args["subtree_context"],
+            ),
+            kwargs={"temperature_boost": 0.3},
+            daemon=True,
+        ).start()
+
+        return True
+
     def _on_nav_up(self) -> bool:
         """Handle up arrow — only intercept when overlay is visible."""
         if not self.overlay.is_visible:
@@ -1479,6 +1575,9 @@ class Autocompleter:
 
         # Bump generation_id so any in-flight LLM stream is discarded
         self._generation_id += 1
+
+        # Free saved trigger state (avoids holding stale FocusedElement/context)
+        self._last_trigger_args = None
 
         # Record dismissed feedback for all currently shown suggestions
         def _dismiss():
