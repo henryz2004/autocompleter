@@ -979,6 +979,7 @@ class Autocompleter:
         snapshot: TriggerSnapshot | None = None,
         subtree_context: str | None = None,
         temperature_boost: float = 0.0,
+        extra_negative_patterns: list[str] | None = None,
     ) -> None:
         """Run the streaming LLM call on a worker thread, updating the overlay incrementally."""
         app_name = focused.app_name
@@ -1111,6 +1112,10 @@ class Autocompleter:
             logger.debug("Could not fetch feedback data", exc_info=True)
             feedback_stats = None
             negative_patterns = None
+
+        # Merge extra negative patterns (e.g. previous suggestions on regenerate)
+        if extra_negative_patterns:
+            negative_patterns = (negative_patterns or []) + extra_negative_patterns
 
         self._latency_tracker.mark("context_ready")
         self._latency_tracker.mark("llm_start")
@@ -1260,11 +1265,8 @@ class Autocompleter:
         else:
             x, y = 100.0, 100.0
 
-        # Show loading indicator
-        self.overlay.show(
-            [Suggestion(text="Generating...", index=0)], x, y,
-            caret_height=caret_height,
-        )
+        # Skip loading indicator for auto-trigger — suggestions just appear
+        # silently when ready, without the disruptive "Generating..." flash.
 
         # Reuse cached visible content if fresh enough
         cache_age = time.time() - self._last_visible_content_time
@@ -1402,6 +1404,11 @@ class Autocompleter:
             x, y, caret_height=caret_height,
         ))
 
+        # Feed current suggestions as negative examples so the LLM avoids
+        # repeating them.  This is more effective than temperature alone
+        # because inference providers may cache prefixes aggressively.
+        prev_texts = [s.text for s in self._current_suggestions if s.text.strip()]
+
         # Re-dispatch the streaming LLM call with boosted temperature for diversity
         threading.Thread(
             target=self._generate_and_show_streaming,
@@ -1413,7 +1420,10 @@ class Autocompleter:
                 None,  # snapshot — skip trigger dump on regenerate
                 args["subtree_context"],
             ),
-            kwargs={"temperature_boost": 0.3},
+            kwargs={
+                "temperature_boost": 0.3,
+                "extra_negative_patterns": prev_texts,
+            },
             daemon=True,
         ).start()
 

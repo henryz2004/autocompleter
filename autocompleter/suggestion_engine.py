@@ -590,10 +590,19 @@ class SuggestionEngine:
         # Append negative patterns to system prompt
         if negative_patterns:
             avoided = "\n".join(f"- {p}" for p in negative_patterns)
-            system += (
-                "\n\nAvoid generating suggestions similar to these recently "
-                "dismissed completions:\n" + avoided
-            )
+            if temperature_boost > 0:
+                # Regenerate: stronger diversity instruction
+                system += (
+                    "\n\nIMPORTANT: The user is regenerating because they want "
+                    "DIFFERENT suggestions. Do NOT repeat or closely paraphrase "
+                    "any of these previous suggestions — take a completely "
+                    "different angle, tone, or approach:\n" + avoided
+                )
+            else:
+                system += (
+                    "\n\nAvoid generating suggestions similar to these recently "
+                    "dismissed completions:\n" + avoided
+                )
 
         logger.debug(
             f"--- LLM STREAM REQUEST ({self.config.llm_provider}/{self.config.llm_model}, "
