@@ -36,6 +36,8 @@ def config():
         num_suggestions=3,
         debounce_ms=0,  # disable debounce for testing
         max_tokens=150,
+        fallback_api_key="",  # disable fallback in tests
+        escalation_timeout_ms=50,  # short timeout for fast tests
     )
 
 
@@ -350,6 +352,8 @@ class TestOpenAIStreaming:
             num_suggestions=3,
             debounce_ms=0,
             max_tokens=150,
+            fallback_api_key="",  # disable fallback in tests
+            escalation_timeout_ms=50,
         )
 
     @pytest.fixture

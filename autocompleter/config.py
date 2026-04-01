@@ -27,6 +27,13 @@ class Config:
     max_tokens: int = 200
     temperature: float = 0.7
 
+    # Fallback provider (used when primary doesn't respond in time)
+    fallback_provider: str = "openai"  # same convention as llm_provider
+    fallback_base_url: str = "https://api.groq.com/openai/v1"
+    fallback_model: str = "qwen/qwen3-32b"
+    fallback_api_key: str = "__UNSET__"
+    escalation_timeout_ms: int = 400  # ms to wait before firing fallback
+
     # Per-mode overrides (continuation = low entropy, reply = higher entropy)
     continuation_temperature: float = 0.3
     reply_temperature: float = 0.8
@@ -62,9 +69,12 @@ class Config:
     # Long-term memory (mem0)
     memory_enabled: bool = False
     memory_llm_provider: str = "groq"        # LLM used by mem0 for fact extraction
-    memory_llm_model: str = "qwen-3-32b"
+    memory_llm_model: str = "qwen/qwen3-32b"
     memory_embedder_provider: str = "openai"  # "openai" or "huggingface"
     memory_embedder_model: str = "text-embedding-3-small"
+
+    # Sentinel to distinguish "not provided" from "explicitly set to empty"
+    _UNSET: str = "__UNSET__"
 
     def __post_init__(self):
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -77,6 +87,22 @@ class Config:
                 if key:
                     self.openai_api_key = key
                     break
+        if self.fallback_api_key == self._UNSET:
+            # Not explicitly set — auto-resolve from env vars
+            self.fallback_api_key = ""
+            fallback_key_map = {
+                "https://api.groq.com/openai/v1": "GROQ_API_KEY",
+                "https://api.cerebras.ai/v1": "CEREBRAS_API_KEY",
+                "https://api.sambanova.ai/v1": "SAMBANOVA_API_KEY",
+                "https://api.together.xyz/v1": "TOGETHER_API_KEY",
+                "https://api.fireworks.ai/inference/v1": "FIREWORKS_API_KEY",
+                "https://api.deepinfra.com/v1/openai": "DEEPINFRA_API_KEY",
+            }
+            env_var = fallback_key_map.get(self.fallback_base_url)
+            if env_var:
+                self.fallback_api_key = os.environ.get(env_var, "")
+            if not self.fallback_api_key:
+                self.fallback_api_key = os.environ.get("GROQ_API_KEY", "")
 
 
 def _load_dotenv() -> None:
@@ -107,6 +133,18 @@ def load_config() -> Config:
         llm_model=os.environ.get(
             "AUTOCOMPLETER_LLM_MODEL", "qwen-3-235b-a22b-instruct-2507"
         ),
+        fallback_provider=os.environ.get(
+            "AUTOCOMPLETER_FALLBACK_PROVIDER", "openai"
+        ),
+        fallback_base_url=os.environ.get(
+            "AUTOCOMPLETER_FALLBACK_BASE_URL", "https://api.groq.com/openai/v1"
+        ),
+        fallback_model=os.environ.get(
+            "AUTOCOMPLETER_FALLBACK_MODEL", "qwen/qwen3-32b"
+        ),
+        escalation_timeout_ms=int(os.environ.get(
+            "AUTOCOMPLETER_ESCALATION_TIMEOUT_MS", "400"
+        )),
         hotkey=os.environ.get("AUTOCOMPLETER_HOTKEY", "ctrl+space"),
         auto_trigger_enabled=os.environ.get(
             "AUTOCOMPLETER_AUTO_TRIGGER", ""
@@ -118,7 +156,7 @@ def load_config() -> Config:
             "AUTOCOMPLETER_MEMORY_LLM_PROVIDER", "groq"
         ),
         memory_llm_model=os.environ.get(
-            "AUTOCOMPLETER_MEMORY_LLM_MODEL", "qwen-3-32b"
+            "AUTOCOMPLETER_MEMORY_LLM_MODEL", "qwen/qwen3-32b"
         ),
         memory_embedder_provider=os.environ.get(
             "AUTOCOMPLETER_MEMORY_EMBEDDER_PROVIDER", "openai"

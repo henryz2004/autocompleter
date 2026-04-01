@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os as _os
 import sys
 import tempfile
 import time
@@ -401,52 +402,180 @@ def assemble_context(
 
 
 # ---------------------------------------------------------------------------
-# LLM call (optional)
+# LLM call (optional) — streaming with client reuse
 # ---------------------------------------------------------------------------
 
-def call_llm(system_prompt: str, user_prompt: str, mode) -> list[str]:
-    """Call the LLM and return suggestions."""
-    from autocompleter.config import Config
-    from autocompleter.suggestion_engine import AutocompleteMode
+# Module-level client cache for connection reuse across calls.
+_client_cache: dict[str, object] = {}
 
+
+def _get_cached_client(base_url: str, api_key: str):
+    """Return a cached OpenAI client for the given base_url."""
+    cache_key = base_url or "__default__"
+    if cache_key not in _client_cache:
+        import openai
+        kwargs: dict = {"api_key": api_key}
+        if base_url:
+            kwargs["base_url"] = base_url
+        _client_cache[cache_key] = openai.OpenAI(**kwargs)
+    return _client_cache[cache_key]
+
+
+@dataclass
+class LLMResult:
+    """Result from an LLM call with per-suggestion timing."""
+    suggestions: list[str]
+    ttft: float  # Time to first suggestion (seconds)
+    per_suggestion_times: list[float]  # Elapsed time when each suggestion completed
+    total: float  # Total wall time
+    provider: str  # Which provider/model was used
+    streamed: bool  # Whether streaming was used
+
+
+def call_llm(
+    system_prompt: str,
+    user_prompt: str,
+    mode,
+    base_url: str | None = None,
+    api_key: str | None = None,
+    model: str | None = None,
+    stream: bool = True,
+) -> LLMResult:
+    """Call the LLM and return suggestions with timing breakdown.
+
+    Uses streaming by default (mirroring the live pipeline) and caches
+    the OpenAI client for connection reuse across calls.
+    """
+    from autocompleter.config import Config, _load_dotenv
+    from autocompleter.suggestion_engine import (
+        AutocompleteMode,
+        _extract_complete_suggestions,
+        _strip_think_tags,
+    )
+
+    _load_dotenv()
     config = Config()
+
+    base_url = base_url or config.llm_base_url
+    api_key = api_key or config.openai_api_key
+    model = model or config.llm_model
 
     temp = 0.3 if mode == AutocompleteMode.CONTINUATION else 0.7
     max_tokens = 80 if mode == AutocompleteMode.CONTINUATION else 200
 
+    host = base_url.split("//")[1].split("/")[0] if base_url and "//" in base_url else "?"
+    provider_label = f"{host}/{model}"
+
+    # Disable Qwen3 thinking mode on providers that support it
+    extra_body: dict = {}
+    if base_url:
+        from urllib.parse import urlparse
+        hostname = urlparse(base_url).hostname or ""
+        if hostname.endswith("groq.com"):
+            extra_body["reasoning_effort"] = "none"
+
     try:
-        import openai
-        client = openai.OpenAI(
-            api_key=config.openai_api_key,
-            base_url=config.llm_base_url or None,
-        )
-        t0 = time.time()
-        response = client.chat.completions.create(
-            model=config.llm_model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=temp,
-            max_tokens=max_tokens,
-        )
-        elapsed = time.time() - t0
-        content = response.choices[0].message.content or ""
+        client = _get_cached_client(base_url, api_key)
 
-        # Parse JSON suggestions
-        suggestions = []
-        try:
-            data = json.loads(content)
-            for s in data.get("suggestions", []):
-                text = s.get("text", "") if isinstance(s, dict) else str(s)
-                if text.strip():
-                    suggestions.append(text.strip())
-        except json.JSONDecodeError:
-            suggestions = [content.strip()]
+        if stream:
+            # Streaming path — mirrors the live pipeline
+            t0 = time.time()
+            create_kwargs: dict = dict(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                stream=True,
+                temperature=temp,
+                max_tokens=max_tokens,
+            )
+            if extra_body:
+                create_kwargs["extra_body"] = extra_body
+            response = client.chat.completions.create(**create_kwargs)
+            json_buf = ""
+            last_yielded = 0
+            suggestions = []
+            per_times = []
+            ttft = 0.0
 
-        return suggestions, elapsed
+            for chunk in response:
+                delta = chunk.choices[0].delta if chunk.choices else None
+                content = delta.content if delta else None
+                if content:
+                    json_buf += content
+                    complete = _extract_complete_suggestions(json_buf)
+                    while len(complete) > last_yielded:
+                        s = complete[last_yielded]
+                        elapsed = time.time() - t0
+                        if last_yielded == 0:
+                            ttft = elapsed
+                        per_times.append(elapsed)
+                        suggestions.append(s)
+                        last_yielded += 1
+
+            total = time.time() - t0
+
+            # Fallback: parse full buffer if streaming yielded nothing
+            if not suggestions and json_buf.strip():
+                try:
+                    json_buf = _strip_think_tags(json_buf)
+                    data = json.loads(json_buf)
+                    for s in data.get("suggestions", []):
+                        text = s.get("text", "") if isinstance(s, dict) else str(s)
+                        if text.strip():
+                            suggestions.append(text.strip())
+                    ttft = total
+                    per_times = [total] * len(suggestions)
+                except json.JSONDecodeError:
+                    suggestions = [json_buf.strip()]
+                    ttft = total
+                    per_times = [total]
+
+            return LLMResult(
+                suggestions=suggestions, ttft=ttft,
+                per_suggestion_times=per_times, total=total,
+                provider=provider_label, streamed=True,
+            )
+        else:
+            # Blocking path
+            t0 = time.time()
+            create_kwargs_block: dict = dict(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=temp,
+                max_tokens=max_tokens,
+            )
+            if extra_body:
+                create_kwargs_block["extra_body"] = extra_body
+            response = client.chat.completions.create(**create_kwargs_block)
+            total = time.time() - t0
+            content = _strip_think_tags(response.choices[0].message.content or "")
+
+            suggestions = []
+            try:
+                data = json.loads(content)
+                for s in data.get("suggestions", []):
+                    text = s.get("text", "") if isinstance(s, dict) else str(s)
+                    if text.strip():
+                        suggestions.append(text.strip())
+            except json.JSONDecodeError:
+                suggestions = [content.strip()]
+
+            return LLMResult(
+                suggestions=suggestions, ttft=total,
+                per_suggestion_times=[total] * len(suggestions), total=total,
+                provider=provider_label, streamed=False,
+            )
     except Exception as e:
-        return [f"(LLM error: {e})"], 0.0
+        return LLMResult(
+            suggestions=[f"(LLM error: {e})"], ttft=0.0,
+            per_suggestion_times=[0.0], total=0.0,
+            provider=provider_label, streamed=stream,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -468,6 +597,9 @@ def replay(
     do_call_llm: bool = False,
     num_suggestions: int = 3,
     out_file=None,
+    provider_base_url: str | None = None,
+    provider_api_key: str | None = None,
+    provider_model: str | None = None,
 ):
     """Run the full replay pipeline and print results."""
     from autocompleter.suggestion_engine import (
@@ -612,11 +744,20 @@ def replay(
                 _section(f, f"I. LLM SUGGESTIONS ({mode.name})")
                 f.write("  Calling LLM...\n")
                 f.flush()
-                suggestions, elapsed = call_llm(system_prompt, user_prompt, mode)
-                f.write(f"  Latency: {elapsed:.3f}s\n")
-                f.write(f"  Suggestions ({len(suggestions)}):\n")
-                for i, s in enumerate(suggestions):
-                    f.write(f"    [{i+1}] {s}\n")
+                result = call_llm(
+                    system_prompt, user_prompt, mode,
+                    base_url=provider_base_url,
+                    api_key=provider_api_key,
+                    model=provider_model,
+                )
+                f.write(f"  Provider: {result.provider}\n")
+                f.write(f"  Streamed: {result.streamed}\n")
+                f.write(f"  TTFT: {result.ttft:.3f}s\n")
+                f.write(f"  Total: {result.total:.3f}s\n")
+                f.write(f"  Suggestions ({len(result.suggestions)}):\n")
+                for i, s in enumerate(result.suggestions):
+                    t = result.per_suggestion_times[i] if i < len(result.per_suggestion_times) else 0.0
+                    f.write(f"    [{i+1}] ({t:.3f}s) {s}\n")
     else:
         _section(f, "E-I. SKIPPED")
         f.write("  (no focused element or conversation turns — cannot assemble context)\n")
@@ -629,6 +770,32 @@ def replay(
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
+# Provider presets: name → (base_url, env_var_for_key, default_model)
+PROVIDER_PRESETS: dict[str, tuple[str, str, str]] = {
+    "cerebras": ("https://api.cerebras.ai/v1", "CEREBRAS_API_KEY", "qwen-3-235b-a22b-instruct-2507"),
+    "groq": ("https://api.groq.com/openai/v1", "GROQ_API_KEY", "qwen/qwen3-32b"),
+    "sambanova": ("https://api.sambanova.ai/v1", "SAMBANOVA_API_KEY", "Qwen3-32B"),
+    "together": ("https://api.together.xyz/v1", "TOGETHER_API_KEY", "Qwen/Qwen3-235B-A22B-FP8"),
+    "fireworks": ("https://api.fireworks.ai/inference/v1", "FIREWORKS_API_KEY", "accounts/fireworks/models/qwen3-235b-a22b"),
+    "deepinfra": ("https://api.deepinfra.com/v1/openai", "DEEPINFRA_API_KEY", "Qwen/Qwen3-235B-A22B"),
+}
+
+
+def _resolve_provider(name: str) -> tuple[str, str, str]:
+    """Resolve a provider preset name to (base_url, api_key, model)."""
+    from autocompleter.config import _load_dotenv
+    _load_dotenv()
+    preset = PROVIDER_PRESETS.get(name.lower())
+    if preset is None:
+        available = ", ".join(sorted(PROVIDER_PRESETS.keys()))
+        raise ValueError(f"Unknown provider {name!r}. Available: {available}")
+    base_url, env_var, model = preset
+    api_key = _os.environ.get(env_var, "")
+    if not api_key:
+        raise ValueError(f"Provider {name!r} requires {env_var} environment variable")
+    return base_url, api_key, model
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -656,10 +823,35 @@ def main():
         help="Number of suggestions (default: 3)",
     )
     parser.add_argument(
+        "--provider", type=str, default=None,
+        help=f"Provider preset: {', '.join(sorted(PROVIDER_PRESETS.keys()))}",
+    )
+    parser.add_argument(
+        "--base-url", type=str, default=None,
+        help="Custom LLM base URL (overrides --provider)",
+    )
+    parser.add_argument(
+        "--model", type=str, default=None,
+        help="Custom model name (overrides --provider default)",
+    )
+    parser.add_argument(
         "-o", "--output", type=str, default=None,
         help="Output file (default: stdout)",
     )
     args = parser.parse_args()
+
+    # Resolve provider overrides
+    provider_base_url = args.base_url
+    provider_api_key = None
+    provider_model = args.model
+
+    if args.provider:
+        base_url, api_key, default_model = _resolve_provider(args.provider)
+        provider_base_url = provider_base_url or base_url
+        provider_api_key = api_key
+        provider_model = provider_model or default_model
+        # --call-llm implied when --provider is set
+        args.call_llm = True
 
     out_file = None
     if args.output:
@@ -673,6 +865,9 @@ def main():
             do_call_llm=args.call_llm,
             num_suggestions=args.num_suggestions,
             out_file=out_file,
+            provider_base_url=provider_base_url,
+            provider_api_key=provider_api_key,
+            provider_model=provider_model,
         )
     finally:
         if out_file:

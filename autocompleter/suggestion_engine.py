@@ -15,6 +15,8 @@ from __future__ import annotations
 import enum
 import json
 import logging
+import queue
+import threading
 import time
 from dataclasses import dataclass
 from typing import Generator, Optional
@@ -306,6 +308,26 @@ class SuggestionEngine:
                 self._raw_client = openai.OpenAI(**kwargs)
         return self._raw_client
 
+    _fallback_client = None  # Cached fallback provider client
+    _fallback_client_lock = threading.Lock()
+
+    def _get_fallback_client(self):
+        """Get a raw client for the fallback provider (thread-safe)."""
+        if self._fallback_client is not None:
+            return self._fallback_client
+        with self._fallback_client_lock:
+            # Double-check after acquiring lock
+            if self._fallback_client is not None:
+                return self._fallback_client
+            if not self.config.fallback_api_key:
+                return None
+            import openai
+            kwargs: dict = {"api_key": self.config.fallback_api_key}
+            if self.config.fallback_base_url:
+                kwargs["base_url"] = self.config.fallback_base_url
+            self._fallback_client = openai.OpenAI(**kwargs)
+        return self._fallback_client
+
     # Cooldown duration (seconds) after a rate-limit hit
     _RATE_LIMIT_COOLDOWN = 30.0
 
@@ -583,102 +605,318 @@ class SuggestionEngine:
                 logger.exception("Error during streaming suggestions")
             return
 
+    # ---- Streaming helpers ----
+
+    @staticmethod
+    def _stream_openai_to_queue(
+        client,
+        model: str,
+        system: str,
+        user_msg: str,
+        temperature: Optional[float],
+        max_tokens: Optional[int],
+        out_q: queue.Queue,
+        cancel: threading.Event,
+        tag: str,
+        extra_body: Optional[dict] = None,
+    ) -> None:
+        """Run an OpenAI-compatible streaming call, pushing suggestions to *out_q*.
+
+        Each item pushed is ``(tag, Suggestion)`` or ``(tag, None)`` for end-of-stream.
+        On error pushes ``(tag, Exception)``.  Stops early if *cancel* is set.
+        """
+        try:
+            create_kwargs: dict = dict(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user_msg},
+                ],
+                stream=True,
+                temperature=temperature,
+                max_tokens=max_tokens or 1024,
+            )
+            if extra_body:
+                create_kwargs["extra_body"] = extra_body
+            response = client.chat.completions.create(**create_kwargs)
+            json_buf = ""
+            last_yielded = 0
+            for chunk in response:
+                if cancel.is_set():
+                    # The other provider won — stop reading
+                    try:
+                        response.close()
+                    except Exception:
+                        pass
+                    return
+                delta = chunk.choices[0].delta if chunk.choices else None
+                content = delta.content if delta else None
+                if content:
+                    json_buf += content
+                    complete = _extract_complete_suggestions(json_buf)
+                    while len(complete) > last_yielded:
+                        s = complete[last_yielded]
+                        out_q.put((tag, Suggestion(text=s, index=last_yielded)))
+                        last_yielded += 1
+            # Signal stream complete
+            out_q.put((tag, None))
+        except Exception as exc:
+            out_q.put((tag, exc))
+
+    @staticmethod
+    def _stream_anthropic_to_queue(
+        client,
+        model: str,
+        system: str,
+        user_msg: str,
+        temperature: Optional[float],
+        max_tokens: Optional[int],
+        out_q: queue.Queue,
+        cancel: threading.Event,
+        tag: str,
+    ) -> None:
+        """Run an Anthropic streaming call, pushing suggestions to *out_q*."""
+        try:
+            with client.messages.stream(
+                model=model,
+                system=system,
+                messages=[{"role": "user", "content": user_msg}],
+                temperature=temperature,
+                max_tokens=max_tokens or 1024,
+            ) as stream:
+                json_buf = ""
+                last_yielded = 0
+                for text_chunk in stream.text_stream:
+                    if cancel.is_set():
+                        return
+                    json_buf += text_chunk
+                    complete = _extract_complete_suggestions(json_buf)
+                    while len(complete) > last_yielded:
+                        s = complete[last_yielded]
+                        out_q.put((tag, Suggestion(text=s, index=last_yielded)))
+                        last_yielded += 1
+            out_q.put((tag, None))
+        except Exception as exc:
+            out_q.put((tag, exc))
+
     def _call_llm_stream(
         self, system: str, user_msg: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
     ) -> Generator[Suggestion, None, None]:
-        """Stream suggestions via raw provider SDK for true incremental delivery.
+        """Stream suggestions with timeout-based provider escalation.
 
-        Uses plain-text JSON output (not tool calls) to bypass Anthropic's
-        tool_use key-value buffering and Instructor's sync list() collection.
-        Parses the growing JSON buffer incrementally and yields each Suggestion
-        as soon as its JSON object is complete.
+        Starts the primary provider immediately.  If no suggestion arrives
+        within ``escalation_timeout_ms``, fires the fallback provider in
+        parallel.  Whichever provider yields first wins — the loser is
+        cancelled via a ``threading.Event``.
 
-        Falls back to the blocking _call_llm path on error or if the stream
-        produces no suggestions.
+        Falls back to the blocking ``_call_llm`` path if both streams fail.
         """
-        client = self._get_raw_client()
         # NOTE: system already includes STREAMING_JSON_INSTRUCTION via
-        # build_messages(streaming=True); no need to append it again.
-        json_system = system
+        # build_messages(streaming=True).
+        out_q: queue.Queue = queue.Queue()
+        cancel_primary = threading.Event()
+        cancel_fallback = threading.Event()
+
+        # Compute extra_body for providers that need it (e.g. Groq reasoning_effort)
+        def _extra_body_for_url(base_url: str) -> dict | None:
+            if not base_url:
+                return None
+            from urllib.parse import urlparse
+            hostname = urlparse(base_url).hostname or ""
+            if hostname.endswith("groq.com"):
+                return {"reasoning_effort": "none"}
+            return None
+
+        # Start primary provider
+        primary_client = self._get_raw_client()
+        if self.config.llm_provider == "anthropic":
+            primary_fn = self._stream_anthropic_to_queue
+        else:
+            primary_fn = self._stream_openai_to_queue
+
+        primary_extra = _extra_body_for_url(self.config.llm_base_url)
+        primary_args = [
+            primary_client, self.config.llm_model, system, user_msg,
+            temperature, max_tokens, out_q, cancel_primary, "primary",
+        ]
+        if primary_fn == self._stream_openai_to_queue and primary_extra:
+            primary_args.append(primary_extra)
+
+        primary_thread = threading.Thread(
+            target=primary_fn,
+            args=tuple(primary_args),
+            daemon=True,
+        )
+        primary_thread.start()
+
+        # Pre-compute fallback extra_body for Qwen3 thinking-mode suppression
+        fallback_extra = _extra_body_for_url(self.config.fallback_base_url)
+
+        def _start_fallback(client) -> threading.Thread:
+            """Create and start a fallback streaming thread."""
+            args = (
+                client, self.config.fallback_model,
+                system, user_msg, temperature, max_tokens,
+                out_q, cancel_fallback, "fallback",
+            )
+            if fallback_extra:
+                args = args + (fallback_extra,)
+            t = threading.Thread(
+                target=self._stream_openai_to_queue,
+                args=args, daemon=True,
+            )
+            t.start()
+            return t
+
+        escalation_timeout = self.config.escalation_timeout_ms / 1000.0
+        max_wall_time = 15.0  # Hard cap to prevent infinite loops
+        wall_start = time.time()
+        fallback_started = False
+        winner = None  # Which provider yielded first
+        loser_cancel = None
 
         try:
-            json_buf = ""
-            last_yielded = 0
+            while time.time() - wall_start < max_wall_time:
+                # Determine timeout: use escalation timeout until fallback
+                # starts, then wait indefinitely for whichever is active.
+                if not fallback_started and winner is None:
+                    timeout = escalation_timeout
+                else:
+                    timeout = 5.0  # generous timeout for remaining suggestions
 
-            if self.config.llm_provider == "anthropic":
-                with client.messages.stream(
-                    model=self.config.llm_model,
-                    system=json_system,
-                    messages=[{"role": "user", "content": user_msg}],
-                    temperature=temperature,
-                    max_tokens=max_tokens or 1024,
-                ) as stream:
-                    for text_chunk in stream.text_stream:
-                        json_buf += text_chunk
-                        complete = _extract_complete_suggestions(json_buf)
-                        while len(complete) > last_yielded:
-                            s = complete[last_yielded]
-                            logger.debug(
-                                f"Stream yielding suggestion [{last_yielded}]: {s[:80]!r}"
+                try:
+                    tag, item = out_q.get(timeout=timeout)
+                except queue.Empty:
+                    if not fallback_started and winner is None:
+                        # Primary didn't respond in time — escalate
+                        fallback_client = self._get_fallback_client()
+                        if fallback_client is not None:
+                            logger.info(
+                                f"Primary provider didn't respond in "
+                                f"{self.config.escalation_timeout_ms}ms, "
+                                f"escalating to fallback "
+                                f"({self.config.fallback_model})"
                             )
-                            yield Suggestion(text=s, index=last_yielded)
-                            last_yielded += 1
-            else:
-                # OpenAI
-                response = client.chat.completions.create(
-                    model=self.config.llm_model,
-                    messages=[
-                        {"role": "system", "content": json_system},
-                        {"role": "user", "content": user_msg},
-                    ],
-                    stream=True,
-                    temperature=temperature,
-                    max_tokens=max_tokens or 1024,
-                )
-                for chunk in response:
-                    delta = chunk.choices[0].delta if chunk.choices else None
-                    content = delta.content if delta else None
-                    if content:
-                        json_buf += content
-                        complete = _extract_complete_suggestions(json_buf)
-                        while len(complete) > last_yielded:
-                            s = complete[last_yielded]
-                            logger.debug(
-                                f"Stream yielding suggestion [{last_yielded}]: {s[:80]!r}"
-                            )
-                            yield Suggestion(text=s, index=last_yielded)
-                            last_yielded += 1
+                            _start_fallback(fallback_client)
+                            fallback_started = True
+                            continue
+                        else:
+                            # No fallback configured — keep waiting
+                            continue
+                    else:
+                        # Both providers active but no response — give up
+                        logger.warning("Both providers timed out")
+                        break
 
-            if last_yielded == 0:
-                logger.warning(
-                    "Stream produced no suggestions, falling back to blocking"
-                )
-                results = self._call_llm(
-                    system, user_msg, temperature=temperature, max_tokens=max_tokens,
-                )
-                for suggestion in results:
+                # Handle errors
+                if isinstance(item, Exception):
+                    if winner is not None and tag != winner:
+                        # The loser errored — ignore
+                        continue
+                    if self._is_rate_limit_error(item):
+                        if tag == "primary" and not fallback_started:
+                            # Primary rate-limited — escalate immediately
+                            logger.info("Primary rate-limited, escalating")
+                            fallback_client = self._get_fallback_client()
+                            if fallback_client is not None:
+                                _start_fallback(fallback_client)
+                                fallback_started = True
+                                cancel_primary.set()
+                                continue
+                        self._handle_rate_limit()
+                        yield Suggestion(
+                            text="Rate limited — try again later", index=0,
+                        )
+                        return
+                    logger.warning(
+                        f"Stream error from {tag}: {item}", exc_info=item,
+                    )
+                    if not fallback_started and tag == "primary":
+                        # Primary failed — try fallback
+                        fallback_client = self._get_fallback_client()
+                        if fallback_client is not None:
+                            logger.info("Primary failed, escalating to fallback")
+                            _start_fallback(fallback_client)
+                            fallback_started = True
+                            continue
+                    break
+
+                # Handle end-of-stream
+                if item is None:
+                    if tag == winner:
+                        # Winner finished — done
+                        break
+                    # One stream ended — if no winner yet and fallback is
+                    # running, wait for the other
+                    if winner is None and fallback_started:
+                        continue
+                    break
+
+                # Handle suggestion
+                suggestion = item
+                if winner is None:
+                    winner = tag
+                    loser_cancel = (
+                        cancel_fallback if tag == "primary" else cancel_primary
+                    )
+                    loser_cancel.set()
+                    logger.info(
+                        f"Provider '{tag}' won the race "
+                        f"(model={self.config.llm_model if tag == 'primary' else self.config.fallback_model})"
+                    )
+
+                if tag == winner:
+                    logger.debug(
+                        f"Stream yielding suggestion [{suggestion.index}] "
+                        f"from {tag}: {suggestion.text[:80]!r}"
+                    )
                     yield suggestion
+                # else: discard suggestions from the loser
+
+            # If no suggestions were yielded, fall back to blocking path
+            if winner is None:
+                logger.warning(
+                    "Streams produced no suggestions, falling back to blocking"
+                )
+                cancel_primary.set()
+                cancel_fallback.set()
+                try:
+                    results = self._call_llm(
+                        system, user_msg,
+                        temperature=temperature, max_tokens=max_tokens,
+                    )
+                    for suggestion in results:
+                        yield suggestion
+                except Exception:
+                    logger.exception("Blocking fallback also failed")
+                    yield Suggestion(text="LLM error — try again", index=0)
 
         except Exception as exc:
+            cancel_primary.set()
+            cancel_fallback.set()
             if self._is_rate_limit_error(exc):
                 self._handle_rate_limit()
                 yield Suggestion(text="Rate limited — try again later", index=0)
                 return
             logger.warning(
-                "Raw streaming failed, falling back to blocking", exc_info=True,
+                "Streaming with escalation failed, falling back to blocking",
+                exc_info=True,
             )
             try:
                 results = self._call_llm(
-                    system, user_msg, temperature=temperature, max_tokens=max_tokens,
+                    system, user_msg,
+                    temperature=temperature, max_tokens=max_tokens,
                 )
                 for suggestion in results:
                     yield suggestion
             except Exception as fallback_exc:
                 if self._is_rate_limit_error(fallback_exc):
                     self._handle_rate_limit()
-                    yield Suggestion(text="Rate limited — try again later", index=0)
+                    yield Suggestion(
+                        text="Rate limited — try again later", index=0,
+                    )
                 else:
                     logger.exception("Blocking fallback also failed")
                     yield Suggestion(text="LLM error — try again", index=0)
@@ -732,13 +970,44 @@ def adjust_temperature(base_temp: float, accept_rate: float) -> float:
     return max(0.1, min(1.0, temp))
 
 
+def _strip_think_tags(text: str) -> str:
+    """Strip Qwen3 ``<think>...</think>`` reasoning blocks from LLM output.
+
+    Qwen3 models default to thinking mode on some providers, emitting a
+    ``<think>`` block **before** the actual JSON.  We only strip blocks
+    that precede the first ``{`` (the JSON payload start) so legitimate
+    ``<think>`` text inside suggestion content is never touched.
+    """
+    import re
+    # Find where the JSON payload begins
+    json_start = text.find("{")
+    if json_start == -1:
+        # No JSON yet — if the whole buffer is a <think> block, return ""
+        stripped = re.sub(r"<think>.*?</think>\s*", "", text, flags=re.DOTALL)
+        if stripped.lstrip().startswith("<think>"):
+            return ""  # incomplete <think> still streaming
+        return stripped
+    # Only strip <think> blocks in the prefix before JSON
+    prefix = text[:json_start]
+    payload = text[json_start:]
+    prefix = re.sub(r"<think>.*?</think>\s*", "", prefix, flags=re.DOTALL)
+    # If prefix still has an incomplete <think>, drop it
+    if "<think>" in prefix:
+        prefix = ""
+    return prefix + payload
+
+
 def _extract_complete_suggestions(json_buf: str) -> list[str]:
     """Extract complete suggestion texts from a growing JSON buffer.
 
     Scans for complete ``{"text": "..."}`` objects inside the
     ``"suggestions"`` array.  Incomplete objects (still being streamed)
     are skipped, so only fully-received suggestions are returned.
+
+    Automatically strips Qwen3 ``<think>`` blocks that some providers
+    emit before the JSON payload.
     """
+    json_buf = _strip_think_tags(json_buf)
     marker = '"suggestions"'
     idx = json_buf.find(marker)
     if idx == -1:

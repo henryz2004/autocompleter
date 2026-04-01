@@ -25,7 +25,7 @@ def _make_config(memory_enabled: bool = True, **overrides) -> Config:
         data_dir=data_dir,
         memory_enabled=memory_enabled,
         memory_llm_provider="groq",
-        memory_llm_model="qwen-3-32b",
+        memory_llm_model="qwen/qwen3-32b",
         memory_embedder_provider="openai",
         memory_embedder_model="text-embedding-3-small",
     )
