@@ -593,6 +593,9 @@ def call_llm(
     try:
         client = _get_cached_client(base_url, api_key)
 
+        # GPT-5+ models require max_completion_tokens instead of max_tokens
+        _tok_key = "max_completion_tokens" if model.startswith("gpt-5") else "max_tokens"
+
         if stream:
             # Streaming path — mirrors the live pipeline
             t0 = time.time()
@@ -604,8 +607,8 @@ def call_llm(
                 ],
                 stream=True,
                 temperature=temp,
-                max_tokens=max_tokens,
             )
+            create_kwargs[_tok_key] = max_tokens
             if extra_body:
                 create_kwargs["extra_body"] = extra_body
             response = client.chat.completions.create(**create_kwargs)
@@ -663,8 +666,8 @@ def call_llm(
                     {"role": "user", "content": user_prompt},
                 ],
                 temperature=temp,
-                max_tokens=max_tokens,
             )
+            create_kwargs_block[_tok_key] = max_tokens
             if extra_body:
                 create_kwargs_block["extra_body"] = extra_body
             response = client.chat.completions.create(**create_kwargs_block)
@@ -892,8 +895,8 @@ def replay(
 PROVIDER_PRESETS: dict[str, tuple[str, str, str]] = {
     "cerebras": ("https://api.cerebras.ai/v1", "CEREBRAS_API_KEY", "qwen-3-235b-a22b-instruct-2507"),
     "groq": ("https://api.groq.com/openai/v1", "GROQ_API_KEY", "qwen/qwen3-32b"),
-    "openai": ("https://api.openai.com/v1", "OPENAI_API_KEY", "gpt-4.1-mini"),
-    "anthropic": ("anthropic", "ANTHROPIC_API_KEY", "claude-sonnet-4-20250514"),
+    "openai": ("https://api.openai.com/v1", "OPENAI_API_KEY", "gpt-4.1-nano"),
+    "anthropic": ("anthropic", "ANTHROPIC_API_KEY", "claude-haiku-4-5-20251001"),
     "sambanova": ("https://api.sambanova.ai/v1", "SAMBANOVA_API_KEY", "Qwen3-32B"),
     "together": ("https://api.together.xyz/v1", "TOGETHER_API_KEY", "Qwen/Qwen3-235B-A22B-FP8"),
     "fireworks": ("https://api.fireworks.ai/inference/v1", "FIREWORKS_API_KEY", "accounts/fireworks/models/qwen3-235b-a22b"),
