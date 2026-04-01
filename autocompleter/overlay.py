@@ -252,6 +252,25 @@ if HAS_APPKIT:
                     highlight.set()
                     highlight_path.fill()
 
+                # Draw number badge (1, 2, 3) at the left edge
+                badge_offset = 0.0
+                if i < 9:  # Only show badges for first 9 items
+                    badge_font = AppKit.NSFont.monospacedDigitSystemFontOfSize_weight_(
+                        cfg.font_size - 2, 0.0
+                    )
+                    badge_num_color = dim_text_color
+                    badge_attrs = {
+                        AppKit.NSFontAttributeName: badge_font,
+                        AppKit.NSForegroundColorAttributeName: badge_num_color,
+                    }
+                    badge_text = AppKit.NSAttributedString.alloc().initWithString_attributes_(
+                        str(i + 1), badge_attrs
+                    )
+                    badge_x = item_rect.origin.x + 6
+                    badge_y = item_rect.origin.y + (item_h - cfg.font_size) / 2
+                    badge_text.drawAtPoint_(AppKit.NSMakePoint(badge_x, badge_y))
+                    badge_offset = 16.0  # Space for the badge
+
                 # Draw text with word wrapping — clip to item rect
                 AppKit.NSGraphicsContext.currentContext().saveGraphicsState()
                 clip_path = AppKit.NSBezierPath.bezierPathWithRect_(item_rect)
@@ -266,9 +285,9 @@ if HAS_APPKIT:
                     suggestion.text, attrs
                 )
                 text_rect = NSMakeRect(
-                    item_rect.origin.x + 6,
+                    item_rect.origin.x + 6 + badge_offset,
                     item_rect.origin.y + 4,
-                    item_rect.size.width - 12,
+                    item_rect.size.width - 12 - badge_offset,
                     item_h - 8,
                 )
                 text.drawInRect_(text_rect)
@@ -315,7 +334,7 @@ if HAS_APPKIT:
                 AppKit.NSFontAttributeName: hint_font,
                 AppKit.NSForegroundColorAttributeName: hint_color,
             }
-            hint_text = "Tab accept  \u2191\u2193 navigate  \u2303R regen  Esc dismiss"
+            hint_text = "1-3 or Tab accept  \u2303R regen  Esc dismiss"
             hint_str = AppKit.NSAttributedString.alloc().initWithString_attributes_(
                 hint_text, hint_attrs
             )

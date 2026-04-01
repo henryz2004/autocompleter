@@ -298,6 +298,9 @@ class Autocompleter:
         self.hotkey_listener.register("return", self._on_nav_accept)
         self.hotkey_listener.register("shift+tab", self._on_partial_accept)
         self.hotkey_listener.register("escape", self._on_nav_dismiss)
+        # Number keys for direct selection (1-indexed)
+        for i in range(1, 4):
+            self.hotkey_listener.register(str(i), lambda idx=i: self._on_nav_accept_index(idx - 1))
 
         # Start the hotkey listener
         self.hotkey_listener.start()
@@ -1497,6 +1500,79 @@ class Autocompleter:
                             metadata={"app": app_name, "mode": self._trigger_mode},
                         )
                     # Record accepted feedback
+                    latency_ms = None
+                    if self._trigger_time is not None:
+                        latency_ms = (time.time() - self._trigger_time) * 1000
+                    try:
+                        self.context_store.record_feedback(
+                            source_app=self._trigger_app,
+                            mode=self._trigger_mode,
+                            suggestion_text=suggestion.text,
+                            action="accepted",
+                            suggestion_index=suggestion.index,
+                            total_suggestions=len(self._current_suggestions),
+                            latency_ms=latency_ms,
+                        )
+                    except Exception:
+                        logger.debug("Failed to record accepted feedback", exc_info=True)
+                else:
+                    logger.warning("Failed to inject suggestion")
+
+        self._run_on_main(_accept)
+        return True
+
+    def _on_nav_accept_index(self, index: int) -> bool:
+        """Handle number key — accept the suggestion at the given index.
+
+        Only intercepts when the overlay is visible and the index is valid.
+        Returns False (pass-through) so the key types normally when the
+        overlay isn't showing.
+        """
+        if not self.overlay.is_visible:
+            return False
+        if index < 0 or index >= len(self._current_suggestions):
+            return False
+
+        # Select the target suggestion and accept it
+        def _accept():
+            focused = self.observer.get_focused_element()
+            cursor_pos = focused.insertion_point if focused else None
+            app_name = focused.app_name if focused else "Unknown"
+            app_pid = focused.app_pid if focused else 0
+
+            # Set the selection to the target index
+            self.overlay._selected_index = index
+            suggestion = self.overlay.accept_selection()
+            if suggestion:
+                text = suggestion.text
+                if self._trigger_before_cursor.endswith(" ") and text.startswith(" "):
+                    text = text.lstrip(" ")
+                success = self.injector.inject(
+                    text,
+                    replace=self._replace_on_inject,
+                    insertion_point=cursor_pos,
+                    app_name=app_name,
+                    app_pid=app_pid,
+                )
+                if success:
+                    logger.info(f"Injected [{index}]: {text[:60]}")
+                    self.context_store.add_entry(
+                        source_app=app_name,
+                        content=suggestion.text,
+                        entry_type="accepted_suggestion",
+                    )
+                    if self.memory.enabled:
+                        before_text = (
+                            focused.before_cursor if focused
+                            else self._trigger_before_cursor
+                        )
+                        self.memory.add_async(
+                            [
+                                {"role": "user", "content": before_text[-300:]},
+                                {"role": "assistant", "content": suggestion.text},
+                            ],
+                            metadata={"app": app_name, "mode": self._trigger_mode},
+                        )
                     latency_ms = None
                     if self._trigger_time is not None:
                         latency_ms = (time.time() - self._trigger_time) * 1000

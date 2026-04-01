@@ -31,6 +31,9 @@ KEY_CODES = {
     "down": 125,
     "left": 123,
     "right": 124,
+    "1": 18,
+    "2": 19,
+    "3": 20,
 }
 
 # Modifier flag masks
