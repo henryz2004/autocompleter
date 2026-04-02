@@ -1299,6 +1299,19 @@ class Autocompleter:
         # Fetch subtree context (XML from walking up from focused element)
         subtree_context = self.observer.get_subtree_context(token_budget=500)
 
+        # Save trigger state so _on_regenerate can replay (same as manual trigger)
+        self._last_trigger_args = dict(
+            focused=focused,
+            x=x, y=y, caret_height=caret_height,
+            mode=mode,
+            window_title=window_title,
+            source_url=source_url,
+            conversation_turns=conversation_turns,
+            visible_text_elements=visible_text_elements,
+            cross_app_context=cross_app_context,
+            subtree_context=subtree_context,
+        )
+
         self._generation_id += 1
         gen_id = self._generation_id
 
