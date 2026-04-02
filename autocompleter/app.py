@@ -221,6 +221,20 @@ class Autocompleter:
         self._last_observed_app: str = ""
         self._last_observed_window: str = ""
 
+        # ---- Pre-computed context cache (populated by observer loop) ----
+        # Protected by _context_cache_lock: observer writes, trigger reads.
+        self._context_cache_lock = threading.Lock()
+        self._cached_subtree_context: str | None = None
+        self._cached_subtree_time: float = 0.0
+        self._cached_visible_text_elements: list[str] = []
+        self._cached_conversation_turns: list[dict[str, str]] | None = None
+        self._cached_window_title: str = ""
+        self._cached_source_url: str = ""
+        self._cached_cross_app_context: str = ""
+        self._cached_feedback_stats: dict | None = None
+        self._cached_negative_patterns: list[str] | None = None
+        self._cached_feedback_time: float = 0.0
+
         # Auto-trigger state
         self._auto_trigger_enabled: bool = self.config.auto_trigger_enabled
         self._last_dismiss_time: float = 0.0
@@ -396,6 +410,9 @@ class Autocompleter:
     _POLL_MAX = 4.0     # Slowest poll rate (idle)
     _POLL_DECAY = 1.5   # Multiply interval by this each idle tick
 
+    # Feedback cache TTL (seconds) — stats change rarely
+    _FEEDBACK_CACHE_TTL = 30.0
+
     def _observe_loop(self) -> None:
         """Background loop that observes visible content and stores context."""
         while self._running:
@@ -502,6 +519,9 @@ class Autocompleter:
                     if pruned:
                         logger.debug(f"Observer: pruned {pruned} old entries")
 
+                # ---- Pre-compute context for the trigger path ----
+                self._precompute_context(content, focused, content_changed or input_changed)
+
                 # Reset error backoff on success
                 self._observe_consecutive_errors = 0
 
@@ -529,6 +549,105 @@ class Autocompleter:
                 self._MAX_ERROR_BACKOFF,
             ) if self._observe_consecutive_errors > 0 else 1
             time.sleep(self._current_poll_interval * backoff)
+
+    # ---- Pre-computation (runs in observer thread) ----
+
+    def _precompute_context(self, content, focused, changed: bool) -> None:
+        """Pre-compute expensive context off the trigger critical path.
+
+        Called every observer tick. Refreshes cached subtree context,
+        visible content metadata, cross-app context, and feedback data
+        so that ``_on_trigger`` can skip these expensive operations.
+
+        All writes to ``_cached_*`` fields are protected by
+        ``_context_cache_lock`` to prevent torn reads on the trigger thread.
+        """
+        now = time.time()
+        app_name = content.app_name if content else ""
+
+        # --- Visible content metadata (already computed by observer) ---
+        if content:
+            # Build new values outside the lock to minimise hold time.
+            window_title = content.window_title or ""
+            source_url = content.url or ""
+
+            if content.conversation_turns:
+                conversation_turns = [
+                    {"speaker": t.speaker, "text": t.text, "timestamp": t.timestamp}
+                    for t in content.conversation_turns
+                ]
+            else:
+                conversation_turns = None
+
+            visible_text_elements = content.text_elements or []
+            if visible_text_elements:
+                filtered = _filter_ui_chrome("\n".join(visible_text_elements))
+                visible_text_elements = [
+                    line for line in filtered.split("\n") if line.strip()
+                ]
+            else:
+                visible_text_elements = []
+
+            with self._context_cache_lock:
+                self._cached_window_title = window_title
+                self._cached_source_url = source_url
+                self._cached_conversation_turns = conversation_turns
+                self._cached_visible_text_elements = visible_text_elements
+        else:
+            # No content — clear stale values to avoid cross-app leakage.
+            with self._context_cache_lock:
+                self._cached_window_title = ""
+                self._cached_source_url = ""
+                self._cached_visible_text_elements = []
+                self._cached_conversation_turns = None
+
+        # --- Cross-app context ---
+        if app_name:
+            cross_app_snapshots = self.context_trail.get_recent_cross_app_context(
+                current_app=app_name,
+                max_age_seconds=60.0,
+                max_entries=3,
+            )
+            cross_app_ctx = ContextTrail.format_cross_app_context(cross_app_snapshots)
+            with self._context_cache_lock:
+                self._cached_cross_app_context = cross_app_ctx
+
+        # --- Subtree context (most expensive: AX tree walk) ---
+        # Refresh when content changed, or every poll cycle if stale.
+        subtree_age = now - self._cached_subtree_time
+        if changed or subtree_age > self._current_poll_interval * 2:
+            try:
+                t0 = time.monotonic()
+                ctx = self.observer.get_subtree_context(token_budget=500)
+                elapsed_ms = (time.monotonic() - t0) * 1000
+                with self._context_cache_lock:
+                    self._cached_subtree_context = ctx
+                    self._cached_subtree_time = now
+                if ctx:
+                    logger.debug(
+                        f"[PRE] Subtree context pre-computed: {len(ctx)} chars "
+                        f"(~{len(ctx) // 4} tokens) in {elapsed_ms:.0f}ms"
+                    )
+            except Exception:
+                logger.debug("Pre-compute subtree context failed", exc_info=True)
+
+        # --- Feedback stats + dismissed patterns (DB queries, TTL-cached) ---
+        feedback_age = now - self._cached_feedback_time
+        if feedback_age > self._FEEDBACK_CACHE_TTL:
+            try:
+                stats = self.context_store.get_feedback_stats(
+                    source_app=app_name or None,
+                )
+                patterns = self.context_store.get_recent_dismissed_patterns(
+                    source_app=app_name or None,
+                )
+                with self._context_cache_lock:
+                    self._cached_feedback_stats = stats
+                    self._cached_negative_patterns = patterns
+                    self._cached_feedback_time = now
+                logger.debug("[PRE] Feedback stats refreshed")
+            except Exception:
+                logger.debug("Pre-compute feedback stats failed", exc_info=True)
 
     # ---- Hotkey callbacks (run on background event-tap thread) ----
     # Each returns True to suppress the key event, False to pass it through.
@@ -640,90 +759,40 @@ class Autocompleter:
             caret_height=caret_height,
         ))
 
-        # Fetch subtree context (XML from walking up from focused element).
-        # Done before visible content because it's fast and more reliable.
-        subtree_context = self.observer.get_subtree_context(token_budget=500)
+        # ---- Use pre-computed context from observer loop ----
+        # The observer thread continuously refreshes these caches in
+        # _precompute_context().  Snapshot under lock to get a consistent set.
+        with self._context_cache_lock:
+            subtree_context = self._cached_subtree_context
+            window_title = self._cached_window_title
+            source_url = self._cached_source_url
+            visible_text_elements = list(self._cached_visible_text_elements)
+            conversation_turns = (
+                [dict(t) for t in self._cached_conversation_turns]
+                if self._cached_conversation_turns else None
+            )
+            cross_app_context = self._cached_cross_app_context
+
         if subtree_context:
             logger.info(
-                f"[CTX] Subtree context: {len(subtree_context)} chars "
+                f"[CTX] Subtree context (pre-computed): {len(subtree_context)} chars "
                 f"(~{len(subtree_context) // 4} tokens)"
             )
-
-        # Reuse cached visible content if fresh enough, otherwise re-fetch.
-        # The observer loop polls dynamically, so if the cache is younger
-        # than the current poll interval, an AX tree re-traversal is redundant.
-        cache_age = time.time() - self._last_visible_content_time
-        if (self._last_visible_content is not None
-                and cache_age < self._current_poll_interval
-                and self._last_visible_content.app_name == focused.app_name):
-            visible = self._last_visible_content
-            logger.debug(f"Using cached visible content ({cache_age:.1f}s old)")
-        else:
-            visible = self.observer.get_visible_content()
-        window_title = visible.window_title if visible else ""
-        source_url = visible.url if visible else ""
-        visible_text_elements: list[str] = []
-        conversation_turns = None
-        if visible:
-            visible_text_elements = visible.text_elements or []
-            # Filter UI chrome (buttons, sidebar labels, status indicators) from
-            # visible text before it reaches the LLM context.
-            if visible_text_elements:
-                filtered = _filter_ui_chrome("\n".join(visible_text_elements))
-                visible_text_elements = [
-                    line for line in filtered.split("\n") if line.strip()
-                ]
-            logger.info(
-                f"[CTX] Window: {visible.window_title!r} | URL: {visible.url!r} | "
-                f"text_elements: {len(visible_text_elements)} | "
-                f"conversation_turns: {len(visible.conversation_turns) if visible.conversation_turns else 0}"
-            )
-            if visible.conversation_turns:
-                conversation_turns = [
-                    {"speaker": t.speaker, "text": t.text, "timestamp": t.timestamp}
-                    for t in visible.conversation_turns
-                ]
-                for i, t in enumerate(visible.conversation_turns):
-                    ts_info = f" [{t.timestamp}]" if t.timestamp else ""
-                    logger.debug(f"[CTX]   Turn [{i}]: {t.speaker}{ts_info}: {t.text[:100]!r}")
-            # Log a sample of visible text elements
-            for i, elem in enumerate(visible_text_elements[:10]):
-                logger.debug(f"[CTX]   Visible text [{i}]: {elem[:120]!r}")
-            if len(visible_text_elements) > 10:
-                logger.debug(f"[CTX]   ... and {len(visible_text_elements) - 10} more elements")
-
-            # Store fresh observation in context store so the worker thread
-            # sees up-to-date data (fixes stale context at trigger time).
-            if visible.text_elements:
-                combined = "\n".join(visible.text_elements[:50])
-                if combined.strip():
-                    content_hash = self._hash_content(
-                        f"{visible.app_name}\0{visible.window_title}\0{visible.url}\0{combined}"
-                    )
-                    if content_hash != self._last_content_hash:
-                        self._last_content_hash = content_hash
-                        self.context_store.add_entry(
-                            source_app=visible.app_name,
-                            content=combined,
-                            entry_type="visible_text",
-                            source_url=visible.url,
-                            window_title=visible.window_title,
-                        )
-        else:
-            logger.info("[CTX] No visible content captured")
-
-        # Fetch cross-app context from the trail
-        cross_app_snapshots = self.context_trail.get_recent_cross_app_context(
-            current_app=focused.app_name,
-            max_age_seconds=60.0,
-            max_entries=3,
+        logger.info(
+            f"[CTX] Window: {window_title!r} | URL: {source_url!r} | "
+            f"text_elements: {len(visible_text_elements)} | "
+            f"conversation_turns: {len(conversation_turns) if conversation_turns else 0}"
         )
-        cross_app_context = ContextTrail.format_cross_app_context(cross_app_snapshots)
+        if conversation_turns:
+            for i, t in enumerate(conversation_turns):
+                ts_info = f" [{t.get('timestamp', '')}]" if t.get("timestamp") else ""
+                logger.debug(f"[CTX]   Turn [{i}]: {t['speaker']}{ts_info}: {t['text'][:100]!r}")
+        for i, elem in enumerate(visible_text_elements[:10]):
+            logger.debug(f"[CTX]   Visible text [{i}]: {elem[:120]!r}")
+        if len(visible_text_elements) > 10:
+            logger.debug(f"[CTX]   ... and {len(visible_text_elements) - 10} more elements")
         if cross_app_context:
-            logger.info(
-                f"[CTX] Cross-app context ({len(cross_app_snapshots)} snapshots):\n"
-                + cross_app_context
-            )
+            logger.info(f"[CTX] Cross-app context (pre-computed): {len(cross_app_context)} chars")
 
         # Bump generation counter — only the latest generation updates the overlay
         self._generation_id += 1
@@ -750,6 +819,11 @@ class Autocompleter:
             # Capture AX tree on a background thread to avoid blocking the tap
             self._dumper.capture_ax_tree(snapshot)
 
+        # Snapshot pre-computed feedback data for the worker thread
+        with self._context_cache_lock:
+            feedback_stats = self._cached_feedback_stats
+            negative_patterns = self._cached_negative_patterns
+
         # Dispatch the LLM call to a worker thread so we don't block the tap.
         # Use the streaming path by default for faster perceived response.
         threading.Thread(
@@ -759,6 +833,7 @@ class Autocompleter:
                 window_title, source_url, conversation_turns,
                 visible_text_elements, gen_id, cross_app_context,
                 snapshot, subtree_context,
+                feedback_stats, negative_patterns,
             ),
             daemon=True,
         ).start()
@@ -875,18 +950,19 @@ class Autocompleter:
             logger.info(f"[CTX]   | {line}")
         logger.info("[CTX] --- END CONTEXT ---")
 
-        # Fetch feedback stats and dismissed patterns for suggestion tuning
-        try:
-            feedback_stats = self.context_store.get_feedback_stats(
-                source_app=app_name,
-            )
-            negative_patterns = self.context_store.get_recent_dismissed_patterns(
-                source_app=app_name,
-            )
-        except Exception:
-            logger.debug("Could not fetch feedback data", exc_info=True)
-            feedback_stats = None
-            negative_patterns = None
+        # Use pre-computed feedback data
+        feedback_stats = self._cached_feedback_stats
+        negative_patterns = self._cached_negative_patterns
+        if feedback_stats is None and negative_patterns is None:
+            try:
+                feedback_stats = self.context_store.get_feedback_stats(
+                    source_app=app_name,
+                )
+                negative_patterns = self.context_store.get_recent_dismissed_patterns(
+                    source_app=app_name,
+                )
+            except Exception:
+                logger.debug("Could not fetch feedback data", exc_info=True)
 
         self._latency_tracker.mark("context_ready")
         self._latency_tracker.mark("llm_start")
@@ -960,6 +1036,8 @@ class Autocompleter:
         cross_app_context: str = "",
         snapshot: TriggerSnapshot | None = None,
         subtree_context: str | None = None,
+        feedback_stats: dict | None = None,
+        negative_patterns: list[str] | None = None,
     ) -> None:
         """Run the streaming LLM call on a worker thread, updating the overlay incrementally."""
         app_name = focused.app_name
@@ -1070,18 +1148,17 @@ class Autocompleter:
                 snapshot.has_conversation_turns = True
                 snapshot.conversation_turn_count = len(conversation_turns)
 
-        # Fetch feedback stats and dismissed patterns for suggestion tuning
-        try:
-            feedback_stats = self.context_store.get_feedback_stats(
-                source_app=app_name,
-            )
-            negative_patterns = self.context_store.get_recent_dismissed_patterns(
-                source_app=app_name,
-            )
-        except Exception:
-            logger.debug("Could not fetch feedback data", exc_info=True)
-            feedback_stats = None
-            negative_patterns = None
+        # Use pre-computed feedback data if available, otherwise fetch inline
+        if feedback_stats is None and negative_patterns is None:
+            try:
+                feedback_stats = self.context_store.get_feedback_stats(
+                    source_app=app_name,
+                )
+                negative_patterns = self.context_store.get_recent_dismissed_patterns(
+                    source_app=app_name,
+                )
+            except Exception:
+                logger.debug("Could not fetch feedback data", exc_info=True)
 
         self._latency_tracker.mark("context_ready")
         self._latency_tracker.mark("llm_start")
@@ -1236,33 +1313,19 @@ class Autocompleter:
             caret_height=caret_height,
         )
 
-        # Reuse cached visible content if fresh enough
-        cache_age = time.time() - self._last_visible_content_time
-        if (self._last_visible_content is not None
-                and cache_age < self._current_poll_interval
-                and self._last_visible_content.app_name == focused.app_name):
-            visible = self._last_visible_content
-        else:
-            visible = self.observer.get_visible_content()
-        window_title = visible.window_title if visible else ""
-        source_url = visible.url if visible else ""
-        visible_text_elements: list[str] = visible.text_elements if visible else []
-        conversation_turns = None
-        if visible and visible.conversation_turns:
-            conversation_turns = [
-                {"speaker": t.speaker, "text": t.text, "timestamp": t.timestamp}
-                for t in visible.conversation_turns
-            ]
-
-        cross_app_snapshots = self.context_trail.get_recent_cross_app_context(
-            current_app=focused.app_name,
-            max_age_seconds=60.0,
-            max_entries=3,
-        )
-        cross_app_context = ContextTrail.format_cross_app_context(cross_app_snapshots)
-
-        # Fetch subtree context (XML from walking up from focused element)
-        subtree_context = self.observer.get_subtree_context(token_budget=500)
+        # Use pre-computed context from observer loop (snapshot under lock)
+        with self._context_cache_lock:
+            window_title = self._cached_window_title
+            source_url = self._cached_source_url
+            visible_text_elements = list(self._cached_visible_text_elements)
+            conversation_turns = (
+                [dict(t) for t in self._cached_conversation_turns]
+                if self._cached_conversation_turns else None
+            )
+            cross_app_context = self._cached_cross_app_context
+            subtree_context = self._cached_subtree_context
+            feedback_stats = self._cached_feedback_stats
+            negative_patterns = self._cached_negative_patterns
 
         self._generation_id += 1
         gen_id = self._generation_id
@@ -1274,6 +1337,7 @@ class Autocompleter:
                 window_title, source_url, conversation_turns,
                 visible_text_elements, gen_id, cross_app_context,
                 None, subtree_context,
+                feedback_stats, negative_patterns,
             ),
             daemon=True,
         ).start()
