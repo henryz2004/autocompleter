@@ -69,6 +69,11 @@ Rules:
 where the cursor is
 - If the text before the cursor is mid-sentence or mid-question, CONTINUE \
 the sentence/question — do NOT answer it or provide advice
+- If the text before the cursor ends with a completed sentence or question \
+(e.g. ends with . ? !), write what the SAME AUTHOR would say NEXT — a \
+follow-up thought, elaboration, or new sentence in the same voice. Do NOT \
+answer, respond to, or evaluate what they wrote. You ARE the author, not \
+a respondent.
 - Write in the SAME voice, person, and perspective as the existing text \
 (if they write "I think...", continue as "I", never comment from outside)
 - MATCH THE USER'S EXACT TONE: if they write casually (lowercase, slang, \

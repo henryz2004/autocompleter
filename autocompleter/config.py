@@ -64,8 +64,8 @@ class Config:
 
     # Auto-trigger
     auto_trigger_enabled: bool = False
-    auto_trigger_delay_ms: int = 1500
-    auto_trigger_cooldown_ms: int = 3000  # cooldown after dismiss
+    auto_trigger_delay_ms: int = 3000
+    auto_trigger_cooldown_ms: int = 5000  # cooldown after dismiss
 
     # Long-term memory (mem0)
     memory_enabled: bool = False
