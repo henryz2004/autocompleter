@@ -217,6 +217,14 @@ class ContextStore:
         )
         return [ContextEntry(*row) for row in cursor.fetchall()]
 
+    # Apps whose user_input entries are not useful as "sent messages"
+    # (shell prompts, code editor buffers, etc.)
+    _EXCLUDE_SENT_APPS = {
+        "Terminal", "iTerm2", "Warp", "Alacritty", "kitty",
+        "Hyper", "Code", "Visual Studio Code", "Xcode",
+        "TextEdit", "Notes",
+    }
+
     def get_recent_sent_messages(
         self,
         source_app: str | None = None,
@@ -230,6 +238,9 @@ class ContextStore:
         collapses sequential ``user_input`` entries from the same app into
         only the longest (final) version — eliminating the intermediate
         keystroke fragments (e.g. "it", "it's", "it's 4" → "it's 4").
+
+        Excludes entries from terminal/editor apps (see ``_EXCLUDE_SENT_APPS``)
+        since those are shell prompts or code, not chat messages.
 
         Parameters
         ----------
@@ -266,6 +277,9 @@ class ContextStore:
             params,
         )
         raw = [ContextEntry(*row) for row in cursor.fetchall()]
+
+        # Filter out terminal/editor apps whose input is not chat messages
+        raw = [e for e in raw if e.source_app not in self._EXCLUDE_SENT_APPS]
 
         # Collapse keystroke fragments: sequential user_input from the same
         # app+window where each entry is a prefix of the next → keep only

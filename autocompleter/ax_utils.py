@@ -104,12 +104,16 @@ def ax_get_tree_attrs(element) -> dict[str, object]:
     """
     attrs = ax_get_multiple_attributes(element, _TREE_ATTRS)
     children = attrs.get("AXVisibleChildren")
-    if children is None or (isinstance(children, list) and len(children) == 0):
+    # AXVisibleChildren may return an AXValueRef or other non-list type
+    # on some elements — only trust it if it's actually a list.
+    if not isinstance(children, list) or len(children) == 0:
         # AXVisibleChildren not supported or empty — try AXChildren
         fallback_children = ax_get_attribute(element, "AXChildren")
-        if fallback_children:
+        if isinstance(fallback_children, list) and fallback_children:
             children = fallback_children
-    attrs["children"] = children or []
+        else:
+            children = []
+    attrs["children"] = children
     return attrs
 
 
@@ -121,9 +125,12 @@ def ax_get_children(element) -> list:
     back to ``AXChildren`` if the element doesn't support visible children.
     """
     children = ax_get_attribute(element, "AXVisibleChildren")
-    if children:
+    if isinstance(children, list) and children:
         return children
-    return ax_get_attribute(element, "AXChildren") or []
+    children = ax_get_attribute(element, "AXChildren")
+    if isinstance(children, list):
+        return children
+    return []
 
 
 def ax_get_visible_text(element) -> str | None:
