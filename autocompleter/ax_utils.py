@@ -105,16 +105,35 @@ def ax_get_tree_attrs(element) -> dict[str, object]:
     attrs = ax_get_multiple_attributes(element, _TREE_ATTRS)
     children = attrs.get("AXVisibleChildren")
     # AXVisibleChildren may return an AXValueRef or other non-list type
-    # on some elements — only trust it if it's actually a list.
-    if not isinstance(children, list) or len(children) == 0:
+    # on some elements — only trust it if it's a usable sequence.
+    if not _is_ax_list(children) or len(children) == 0:
         # AXVisibleChildren not supported or empty — try AXChildren
         fallback_children = ax_get_attribute(element, "AXChildren")
-        if isinstance(fallback_children, list) and fallback_children:
-            children = fallback_children
+        if _is_ax_list(fallback_children) and len(fallback_children) > 0:
+            children = list(fallback_children)
         else:
             children = []
+    else:
+        children = list(children)
     attrs["children"] = children
     return attrs
+
+
+def _is_ax_list(obj) -> bool:
+    """Check if an AX return value is a usable list of elements.
+
+    pyobjc may return ``NSArray`` (or ``NSCFArray``) which is iterable
+    and supports ``len()`` but fails ``isinstance(obj, list)``.  We
+    accept anything that looks like a sequence of AX elements while
+    rejecting scalar wrappers like ``AXValueRef``.
+    """
+    if obj is None:
+        return False
+    if isinstance(obj, (list, tuple)):
+        return True
+    # pyobjc NSArray: has __len__ and __getitem__ but is not list/tuple.
+    # AXValueRef does NOT have __len__, so this distinguishes them.
+    return hasattr(obj, "__len__") and hasattr(obj, "__getitem__") and not isinstance(obj, (str, bytes))
 
 
 def ax_get_children(element) -> list:
@@ -125,11 +144,11 @@ def ax_get_children(element) -> list:
     back to ``AXChildren`` if the element doesn't support visible children.
     """
     children = ax_get_attribute(element, "AXVisibleChildren")
-    if isinstance(children, list) and children:
-        return children
+    if _is_ax_list(children) and len(children) > 0:
+        return list(children)
     children = ax_get_attribute(element, "AXChildren")
-    if isinstance(children, list):
-        return children
+    if _is_ax_list(children):
+        return list(children)
     return []
 
 
