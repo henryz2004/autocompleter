@@ -1,0 +1,807 @@
+{
+  "app": "‎WhatsApp",
+  "windowTitle": "‎WhatsApp",
+  "capturedAt": "2026-03-05T10:03:07",
+  "macosVersion": "26.2",
+  "notes": "whatsapp",
+  "tree": {
+    "role": "AXWindow",
+    "subrole": "AXStandardWindow",
+    "roleDescription": "standard window",
+    "value": null,
+    "title": "‎WhatsApp",
+    "description": "",
+    "placeholderValue": null,
+    "numberOfCharacters": null,
+    "children": [
+      {
+        "role": "AXGroup",
+        "subrole": "iOSContentGroup",
+        "roleDescription": "group",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "",
+            "roleDescription": "group",
+            "value": null,
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": 0,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": [
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "group",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "collection",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Main Navigation",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Chats",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Calls",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Updates",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Archived",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Starred",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Chats",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "group",
+                        "value": null,
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Settings",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Settings",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "role": "AXSplitter",
+                "subrole": "",
+                "roleDescription": "splitter",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": []
+              },
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": [
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "Nav bar",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXHeading",
+                        "subrole": "",
+                        "roleDescription": "heading",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Chats",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 6,
+                        "children": []
+                      },
+                      {
+                        "role": "AXButton",
+                        "subrole": "",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "",
+                        "description": "‎New Chat",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      },
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "AXSearchField",
+                        "roleDescription": "text",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Search",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 7,
+                        "children": []
+                      },
+                      {
+                        "role": "AXButton",
+                        "subrole": "",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Search",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "group",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "table",
+                        "value": null,
+                        "title": "",
+                        "description": "‎List of chats",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎Your message, [openclaw] i’m following. i have updated my soul and identity files to reflect this direction. moving forward, i will speak in lowercase with full sentences and a steady, direct tone. what would you like me to do next regarding the hotels or any other task?, March4,at10:10 PM, ‎Sent to ‎You, ‎Red",
+                            "title": "",
+                            "description": "Henry Zhang",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 312,
+                            "children": []
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "‎Your message, thank you, March4,at10:01 PM, ‎Sent to + 5 2,9 9 8,2 2 7,2 5 1 7, ‎Red",
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 85,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎Message from ‎Maybe Eohan George, I'm planning to attend, March4,at3:43 PM, ‎Received in Fusen Ignite, ‎Edited",
+                            "title": "",
+                            "description": "Fusen Ignite",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 111,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎Your message, Samnnnn 30k stars congrats, March1,at10:00 AM, ‎Sent to Wework survivors, ‎Red",
+                            "title": "",
+                            "description": "Wework survivors",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 93,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎Group members have changed. Click to view., December16,2025at10:50 PM",
+                            "title": "",
+                            "description": "Marina Plunge Club, ‎Announcement group",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 70,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "Fusen, ‎Announcement group",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎Group members have changed. Click to view., December16,2025at10:50 PM",
+                            "title": "",
+                            "description": "inactive",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 70,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎Album with 2 photos, ‎Received in Lao Table (11/24)",
+                            "title": "",
+                            "description": "Lao Table (11/24)",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 52,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎message, How much are you renting the Avalon place till? Potentially looking for housing in dec, September2,2025at11:42 PM, ‎Received from Audrey Lim",
+                            "title": "",
+                            "description": "Audrey Lim, ‎1 unread message",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 150,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎message, I couldn’t really find it, August27,2025at11:02 AM, ‎Received from Jerry Wu",
+                            "title": "",
+                            "description": "Jerry Wu",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 85,
+                            "children": []
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "‎Your personal messages are end-to-end encrypted",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 48,
+                                "children": []
+                              },
+                              {
+                                "role": "AXLink",
+                                "subrole": "",
+                                "roleDescription": "link",
+                                "value": null,
+                                "title": "",
+                                "description": "end-to-end encrypted",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": []
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "role": "AXSplitter",
+                "subrole": "",
+                "roleDescription": "splitter",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": []
+              },
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": [
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "Nav bar",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXButton",
+                        "subrole": "",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      },
+                      {
+                        "role": "AXHeading",
+                        "subrole": "",
+                        "roleDescription": "heading",
+                        "value": null,
+                        "title": "",
+                        "description": "Bahía Tolok Hotel Boutique",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 26,
+                        "children": []
+                      },
+                      {
+                        "role": "AXButton",
+                        "subrole": "",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Call",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      },
+                      {
+                        "role": "AXButton",
+                        "subrole": "",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "group",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "table",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Messages in chat with Bahía Tolok Hotel Boutique",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "‎Use WhatsApp on your phone to see older messages.",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 50,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "",
+                            "title": "",
+                            "description": "‎Photo, March4,at3:11 PM, ‎Received from + 5 2,9 9 8,2 2 7,2 5 1 7",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 66,
+                            "children": []
+                          },
+                          {
+                            "role": "AXHeading",
+                            "subrole": "",
+                            "roleDescription": "heading",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "",
+                            "title": "",
+                            "description": "‎Your message, yes i would love to book those dates!, March4,at4:10 PM, ‎Sent to + 5 2,9 9 8,2 2 7,2 5 1 7, ‎Red",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 112,
+                            "children": []
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "",
+                            "title": "",
+                            "description": "‎message, Sure, please provide your full name, email, and phone number to make your reservation., March4,at4:16 PM, ‎Received from + 5 2,9 9 8,2 2 7,2 5 1 7",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 156,
+                            "children": []
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "",
+                            "title": "",
+                            "description": "‎Your message, Hengyuan Zhang, March4,at4:27 PM, ‎Sent to + 5 2,9 9 8,2 2 7,2 5 1 7, ‎Red",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 89,
+                            "children": []
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "",
+                            "title": "",
+                            "description": "‎Your message, henryz2004@gmail.com, March4,at4:27 PM, ‎Sent to + 5 2,9 9 8,2 2 7,2 5 1 7, ‎Red",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 95,
+                            "children": []
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "",
+                            "title": "",
+                            "description": "‎Your message, +1 508-335-9713, March4,at4:27 PM, ‎Sent to + 5 2,9 9 8,2 2 7,2 5 1 7, ‎Red",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 90,
+                            "children": []
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "",
+                            "title": "",
+                            "description": "‎message, OK, would that be the days from March 17th to 20th?, March4,at5:01 PM, ‎Received from + 5 2,9 9 8,2 2 7,2 5 1 7, ‎Edited",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 130,
+                            "children": []
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "",
+                            "title": "",
+                            "description": "‎message, it´s correct?, March4,at5:02 PM, ‎Received from + 5 2,9 9 8,2 2 7,2 5 1 7",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 83,
+                            "children": []
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "",
+                            "title": "",
+                            "description": "‎Your message, yes, March4,at5:15 PM, ‎Sent to + 5 2,9 9 8,2 2 7,2 5 1 7, ‎Red",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 78,
+                            "children": []
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "",
+                            "title": "",
+                            "description": "‎message, OK, your reservation is ready, March4,at5:27 PM, ‎Received from + 5 2,9 9 8,2 2 7,2 5 1 7",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 99,
+                            "children": []
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "",
+                            "title": "",
+                            "description": "‎Your message, can i please have a confirmation email?, March4,at5:36 PM, ‎Sent to + 5 2,9 9 8,2 2 7,2 5 1 7, ‎Red",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 114,
+                            "children": []
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "",
+                            "title": "",
+                            "description": "‎message, Ready, March4,at6:38 PM, ‎Received from + 5 2,9 9 8,2 2 7,2 5 1 7",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 75,
+                            "children": []
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "",
+                            "title": "",
+                            "description": "‎Your message, thank you, March4,at10:01 PM, ‎Sent to + 5 2,9 9 8,2 2 7,2 5 1 7, ‎Red",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 85,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXButton",
+                        "subrole": "",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Share media",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      },
+                      {
+                        "role": "AXTextArea",
+                        "subrole": "",
+                        "roleDescription": "text entry area",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Compose message",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      },
+                      {
+                        "role": "AXButton",
+                        "subrole": "",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "",
+                        "description": "C5651129 AE47 45BB 8CC5 A0423D",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      },
+                      {
+                        "role": "AXButton",
+                        "subrole": "",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Voice message",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXCloseButton",
+        "roleDescription": "close button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXFullScreenButton",
+        "roleDescription": "full screen button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "",
+            "roleDescription": "group",
+            "value": null,
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXMinimizeButton",
+        "roleDescription": "minimize button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      }
+    ]
+  }
+}

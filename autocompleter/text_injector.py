@@ -173,6 +173,13 @@ class TextInjector:
             new_value = text
             cursor_after = len(text)
         elif insertion_point is not None:
+            # For continuation/splice mode we need to reposition the cursor
+            # after setting AXValue. If AXSelectedTextRange isn't settable
+            # (common in web/Electron apps), bail out so the caller falls
+            # through to CDP/clipboard which insert at the OS cursor position.
+            if not ax_is_attribute_settable(focused, "AXSelectedTextRange"):
+                logger.debug("AXSelectedTextRange not settable — skipping AX for continuation")
+                return False
             # Clamp insertion_point to valid range
             clamped = max(0, min(insertion_point, len(current_value)))
             new_value = current_value[:clamped] + text + current_value[clamped:]
@@ -183,60 +190,78 @@ class TextInjector:
             cursor_after = len(new_value)
 
         if ax_set_attribute(focused, "AXValue", new_value):
-            # Move the cursor to just after the injected text so the user
-            # can continue typing seamlessly.
-            try:
-                import ApplicationServices as _AS
-                range_value = _AS.AXValueCreate(
-                    _AS.kAXValueTypeCFRange, (cursor_after, 0),
-                )
-                ax_set_attribute(focused, "AXSelectedTextRange", range_value)
-            except Exception:
-                logger.debug(
-                    "Could not set AXSelectedTextRange after injection",
-                    exc_info=True,
-                )
-
-            # Try to trigger a confirm/change notification
+            # Try to trigger a confirm/change notification first — some apps
+            # reset cursor position during confirm, so we set cursor AFTER.
             ApplicationServices.AXUIElementPerformAction(
                 focused, "AXConfirm"
             )
+
+            # Let the app process the confirm before repositioning the cursor
+            # — some apps handle it asynchronously.
+            time.sleep(0.05)
+            self._set_cursor_position(focused, cursor_after)
             return True
 
         return False
 
+    @staticmethod
+    def _set_cursor_position(element, position: int) -> bool:
+        """Move the text cursor to *position* in the focused element.
+
+        Tries two strategies:
+        1. NSValue.valueWithRange_ — most reliable with PyObjC
+        2. AXValueCreate with kAXValueTypeCFRange — fallback
+        """
+        # Strategy 1: NSValue (preferred — well-supported in PyObjC)
+        try:
+            from Foundation import NSRange, NSValue
+            range_value = NSValue.valueWithRange_(NSRange(position, 0))
+            if ax_set_attribute(element, "AXSelectedTextRange", range_value):
+                logger.debug(f"Cursor set to {position} via NSValue")
+                return True
+            else:
+                logger.debug(f"NSValue cursor set to {position} returned False")
+        except Exception:
+            logger.debug("NSValue cursor set failed", exc_info=True)
+
+        # Strategy 2: AXValueCreate (older API)
+        try:
+            import ApplicationServices as _AS
+            range_value = _AS.AXValueCreate(
+                _AS.kAXValueTypeCFRange, (position, 0),
+            )
+            if range_value is not None:
+                if ax_set_attribute(element, "AXSelectedTextRange", range_value):
+                    logger.debug(f"Cursor set to {position} via AXValueCreate")
+                    return True
+                else:
+                    logger.debug(
+                        f"AXValueCreate cursor set to {position} returned False"
+                    )
+            else:
+                logger.debug("AXValueCreate returned None")
+        except Exception:
+            logger.debug("AXValueCreate cursor set failed", exc_info=True)
+
+        logger.warning(f"Could not set cursor position to {position}")
+        return False
+
     def _inject_via_clipboard(self, text: str) -> bool:
-        """Inject by placing text on the clipboard and simulating Cmd+V."""
+        """Inject by placing text on the clipboard and simulating Cmd+V.
+
+        Note: This overwrites the user's clipboard. We intentionally do NOT
+        restore the previous clipboard contents because Electron and web apps
+        process paste events asynchronously — restoring too early causes the
+        app to paste the old content instead of the suggestion text.
+        """
         if not HAS_INJECTION:
             return False
 
         pasteboard = AppKit.NSPasteboard.generalPasteboard()
-
-        # Save current clipboard content
-        old_types = pasteboard.types()
-        old_content = None
-        if (
-            old_types
-            and AppKit.NSPasteboardTypeString in old_types
-        ):
-            old_content = pasteboard.stringForType_(
-                AppKit.NSPasteboardTypeString
-            )
-
-        # Set our text, paste, and always restore the clipboard
-        try:
-            pasteboard.clearContents()
-            pasteboard.setString_forType_(text, AppKit.NSPasteboardTypeString)
-            self._simulate_cmd_v()
-            time.sleep(0.1)  # Brief pause for the paste to register
-        finally:
-            if old_content is not None:
-                time.sleep(0.05)
-                pasteboard.clearContents()
-                pasteboard.setString_forType_(
-                    old_content, AppKit.NSPasteboardTypeString
-                )
-
+        pasteboard.clearContents()
+        pasteboard.setString_forType_(text, AppKit.NSPasteboardTypeString)
+        self._simulate_cmd_v()
+        time.sleep(0.1)
         return True
 
     def _inject_via_keystrokes(self, text: str) -> bool:

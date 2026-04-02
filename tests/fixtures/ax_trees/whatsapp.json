@@ -1,0 +1,789 @@
+{
+  "app": "‎WhatsApp",
+  "windowTitle": "‎WhatsApp",
+  "capturedAt": "2026-03-05T09:59:26",
+  "macosVersion": "26.2",
+  "notes": "WhatsApp conversation with messages visible",
+  "tree": {
+    "role": "AXWindow",
+    "subrole": "AXStandardWindow",
+    "roleDescription": "standard window",
+    "value": null,
+    "title": "‎WhatsApp",
+    "description": "",
+    "placeholderValue": null,
+    "numberOfCharacters": null,
+    "children": [
+      {
+        "role": "AXGroup",
+        "subrole": "iOSContentGroup",
+        "roleDescription": "group",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "",
+            "roleDescription": "group",
+            "value": null,
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": 0,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": [
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "group",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "collection",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Main Navigation",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Chats",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Calls",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Updates",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Archived",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Starred",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Chats",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "group",
+                        "value": null,
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Settings",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Settings",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "role": "AXSplitter",
+                "subrole": "",
+                "roleDescription": "splitter",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": []
+              },
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": [
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "Nav bar",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXHeading",
+                        "subrole": "",
+                        "roleDescription": "heading",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Chats",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 6,
+                        "children": []
+                      },
+                      {
+                        "role": "AXButton",
+                        "subrole": "",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "",
+                        "description": "‎New Chat",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      },
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "AXSearchField",
+                        "roleDescription": "text",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Search",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 7,
+                        "children": []
+                      },
+                      {
+                        "role": "AXButton",
+                        "subrole": "",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Search",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "group",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "table",
+                        "value": null,
+                        "title": "",
+                        "description": "‎List of chats",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎Your message, [openclaw] i’m following. i have updated my soul and identity files to reflect this direction. moving forward, i will speak in lowercase with full sentences and a steady, direct tone. what would you like me to do next regarding the hotels or any other task?, March4,at10:10 PM, ‎Sent to ‎You, ‎Red",
+                            "title": "",
+                            "description": "Henry Zhang",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 312,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎Your message, thank you, March4,at10:01 PM, ‎Sent to + 5 2,9 9 8,2 2 7,2 5 1 7, ‎Red",
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 85,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎Message from ‎Maybe Eohan George, I'm planning to attend, March4,at3:43 PM, ‎Received in Fusen Ignite, ‎Edited",
+                            "title": "",
+                            "description": "Fusen Ignite",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 111,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎Your message, Samnnnn 30k stars congrats, March1,at10:00 AM, ‎Sent to Wework survivors, ‎Red",
+                            "title": "",
+                            "description": "Wework survivors",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 93,
+                            "children": []
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "‎Group members have changed. Click to view., December16,2025at10:50 PM",
+                            "title": "",
+                            "description": "Marina Plunge Club, ‎Announcement group",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 70,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "Fusen, ‎Announcement group",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎Group members have changed. Click to view., December16,2025at10:50 PM",
+                            "title": "",
+                            "description": "inactive",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 70,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎Album with 2 photos, ‎Received in Lao Table (11/24)",
+                            "title": "",
+                            "description": "Lao Table (11/24)",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 52,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎message, How much are you renting the Avalon place till? Potentially looking for housing in dec, September2,2025at11:42 PM, ‎Received from Audrey Lim",
+                            "title": "",
+                            "description": "Audrey Lim, ‎1 unread message",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 150,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎message, I couldn’t really find it, August27,2025at11:02 AM, ‎Received from Jerry Wu",
+                            "title": "",
+                            "description": "Jerry Wu",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 85,
+                            "children": []
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "‎Your personal messages are end-to-end encrypted",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 48,
+                                "children": []
+                              },
+                              {
+                                "role": "AXLink",
+                                "subrole": "",
+                                "roleDescription": "link",
+                                "value": null,
+                                "title": "",
+                                "description": "end-to-end encrypted",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": []
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "role": "AXSplitter",
+                "subrole": "",
+                "roleDescription": "splitter",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": []
+              },
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": [
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "Nav bar",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXHeading",
+                        "subrole": "",
+                        "roleDescription": "heading",
+                        "value": "‎Announcements",
+                        "title": "",
+                        "description": "Marina Plunge Club",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 14,
+                        "children": []
+                      },
+                      {
+                        "role": "AXButton",
+                        "subrole": "",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Start video call with Marina Plunge Club",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      },
+                      {
+                        "role": "AXButton",
+                        "subrole": "",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Start voice call with Marina Plunge Club",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      },
+                      {
+                        "role": "AXButton",
+                        "subrole": "",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "group",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "table",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Messages in chat with Marina Plunge Club",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "‎Use WhatsApp on your phone to see older messages.",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 50,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXHeading",
+                            "subrole": "",
+                            "roleDescription": "heading",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "May 4, 2025",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 11,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "",
+                            "title": "",
+                            "description": "‎40 unread messages",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "",
+                            "title": "",
+                            "description": "‎Message from ‎Maybe Nathan Davenport, Good morning everyone! It’s a beautiful morning for plunging! Look forward to seeing everyone down there! We have created a new community group chat since the last one got overrun by scammers! If you’d like to join the new one please message me directly and I can do so for you!, May4,2025at8:14 AM, ‎Received in Marina Plunge Club",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 370,
+                            "children": []
+                          },
+                          {
+                            "role": "AXHeading",
+                            "subrole": "",
+                            "roleDescription": "heading",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "May 17, 2025",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 12,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "",
+                            "title": "",
+                            "description": "‎Message from + 1,8 4 0,2 1 8,1 9 0 0, hey people! please sign up for tomorrows plunge through the pie link!, May17,2025at8:51 AM, ‎Received in Marina Plunge Club",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 162,
+                            "children": []
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "",
+                            "title": "",
+                            "description": "‎Message from + 1,8 4 0,2 1 8,1 9 0 0, https://getpie.at/uPvoruA7, May17,2025at8:52 AM, ‎Received in Marina Plunge Club",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 119,
+                            "children": []
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "",
+                            "title": "",
+                            "description": "‎Message from + 1,8 4 0,2 1 8,1 9 0 0, hey people! please sign up for tomorrows plunge through the pie link!, May17,2025at8:52 AM, ‎Received in Marina Plunge Club",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 162,
+                            "children": []
+                          },
+                          {
+                            "role": "AXHeading",
+                            "subrole": "",
+                            "roleDescription": "heading",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "May 24, 2025",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 12,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "",
+                            "title": "",
+                            "description": "‎Message from + 1,8 4 0,2 1 8,1 9 0 0, https://getpie.at/uC7UShH3 \n\nlink for tomorrows plunge! \nsee you there tomorrow :), May24,2025at3:53 PM, ‎Received in Marina Plunge Club",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 175,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "group",
+                        "value": null,
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Go to most recent message",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "",
+                        "roleDescription": "text",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Only admins can send messages",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 30,
+                        "children": []
+                      },
+                      {
+                        "role": "AXLink",
+                        "subrole": "",
+                        "roleDescription": "link",
+                        "value": null,
+                        "title": "",
+                        "description": "admins",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXCloseButton",
+        "roleDescription": "close button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXFullScreenButton",
+        "roleDescription": "full screen button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "",
+            "roleDescription": "group",
+            "value": null,
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXMinimizeButton",
+        "roleDescription": "minimize button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      }
+    ]
+  }
+}

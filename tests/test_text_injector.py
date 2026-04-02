@@ -224,21 +224,25 @@ class TestInjectViaAxCursorUpdate:
         )
 
         mock_as = MagicMock()
+        mock_nsvalue = MagicMock()
         range_sentinel = MagicMock(name="range_value")
-        mock_as.AXValueCreate.return_value = range_sentinel
-        mock_as.kAXValueTypeCFRange = "CFRange"
+        mock_nsvalue.valueWithRange_.return_value = range_sentinel
+        mock_nsrange = MagicMock(side_effect=lambda loc, length: (loc, length))
 
         with patch("autocompleter.text_injector.ax_get_attribute", side_effect=get), \
              patch("autocompleter.text_injector.ax_set_attribute", side_effect=set_), \
              patch("autocompleter.text_injector.ax_is_attribute_settable", side_effect=settable), \
              patch("autocompleter.text_injector.ApplicationServices", mock_as), \
-             patch.dict("sys.modules", {"ApplicationServices": mock_as}):
+             patch.dict("sys.modules", {
+                 "ApplicationServices": mock_as,
+                 "Foundation": MagicMock(NSValue=mock_nsvalue, NSRange=mock_nsrange),
+             }):
             result = injector._inject_via_ax("XY", insertion_point=3)
 
         assert result is True
         assert captured["AXValue"] == "abcXYdef"
         # The cursor should be placed at position 3 + 2 = 5
-        mock_as.AXValueCreate.assert_called_once_with("CFRange", (5, 0))
+        mock_nsrange.assert_called_with(5, 0)
         assert captured["AXSelectedTextRange"] == range_sentinel
 
     def test_cursor_set_after_append(self, injector):
@@ -248,21 +252,25 @@ class TestInjectViaAxCursorUpdate:
         )
 
         mock_as = MagicMock()
+        mock_nsvalue = MagicMock()
         range_sentinel = MagicMock(name="range_value")
-        mock_as.AXValueCreate.return_value = range_sentinel
-        mock_as.kAXValueTypeCFRange = "CFRange"
+        mock_nsvalue.valueWithRange_.return_value = range_sentinel
+        mock_nsrange = MagicMock(side_effect=lambda loc, length: (loc, length))
 
         with patch("autocompleter.text_injector.ax_get_attribute", side_effect=get), \
              patch("autocompleter.text_injector.ax_set_attribute", side_effect=set_), \
              patch("autocompleter.text_injector.ax_is_attribute_settable", side_effect=settable), \
              patch("autocompleter.text_injector.ApplicationServices", mock_as), \
-             patch.dict("sys.modules", {"ApplicationServices": mock_as}):
+             patch.dict("sys.modules", {
+                 "ApplicationServices": mock_as,
+                 "Foundation": MagicMock(NSValue=mock_nsvalue, NSRange=mock_nsrange),
+             }):
             result = injector._inject_via_ax("de")
 
         assert result is True
         assert captured["AXValue"] == "abcde"
         # Cursor at end: len("abcde") = 5
-        mock_as.AXValueCreate.assert_called_once_with("CFRange", (5, 0))
+        mock_nsrange.assert_called_with(5, 0)
 
 
 # ===================================================================

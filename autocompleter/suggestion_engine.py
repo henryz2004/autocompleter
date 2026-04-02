@@ -5,14 +5,15 @@ calls an external LLM API with short max token limit, and returns
 1-3 short completions. Includes debouncing to avoid excessive API calls.
 
 Supports both blocking (generate_suggestions) and streaming
-(generate_suggestions_stream) modes. The streaming mode yields
-Suggestion objects one at a time via Instructor's create_iterable,
-enabling the overlay to update incrementally.
+(generate_suggestions_stream) modes. The streaming mode uses the raw
+provider SDK with plain-text JSON output, parsing incrementally to
+yield Suggestion objects one at a time as they complete.
 """
 
 from __future__ import annotations
 
 import enum
+import json
 import logging
 import time
 from dataclasses import dataclass
@@ -21,6 +22,18 @@ from typing import Generator, Optional
 from pydantic import BaseModel, Field
 
 from .config import Config
+
+# ---- Shell / terminal app detection ----
+
+_SHELL_APP_NAMES: frozenset[str] = frozenset({
+    "Terminal", "iTerm2", "iTerm", "Warp",
+    "Alacritty", "kitty", "Hyper", "WezTerm",
+})
+
+
+def is_shell_app(app_name: str) -> bool:
+    """Return True if *app_name* is a known terminal emulator."""
+    return app_name in _SHELL_APP_NAMES
 
 
 class SuggestionItem(BaseModel):
@@ -45,15 +58,28 @@ class AutocompleteMode(enum.Enum):
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT_COMPLETION = """\
-You are a text completion engine. You predict what the user will type next.
+You are a ghostwriter continuing the user's text. Write AS the user, in \
+their voice, continuing their exact train of thought. Your output will be \
+spliced directly onto what they have already written.
 
 Rules:
-- Complete naturally from the cursor — do not restate text before the cursor
+- Continue the same sentence, paragraph, or thought — pick up exactly \
+where the cursor is
+- If the text before the cursor is mid-sentence or mid-question, CONTINUE \
+the sentence/question — do NOT answer it or provide advice
+- Write in the SAME voice, person, and perspective as the existing text \
+(if they write "I think...", continue as "I", never comment from outside)
+- MATCH THE USER'S EXACT TONE: if they write casually (lowercase, slang, \
+abbreviations), continue casually. If formal, stay formal. Mirror their \
+style precisely — word choice, punctuation, capitalization, everything.
+- Do not restate, summarize, or comment on text before the cursor
 - Do not introduce new topics or tangents
-- Preserve the existing formatting, tone, and style
-- Keep completion length proportional to what's already written
-- Each completion should be short (a few words to 1-2 sentences max)
-- Output ONLY the completion text, no meta-commentary or descriptions
+- Keep completions SHORT — a few words to half a sentence
+- Never generate more than ~15 words per completion
+- Vary direction across suggestions: branch the thought in different \
+plausible ways (e.g. different word choices, different next clauses, \
+different emphasis)
+- Output ONLY the continuation text, nothing else
 """
 
 SYSTEM_PROMPT_REPLY = """\
@@ -61,12 +87,22 @@ You are a message suggestion assistant. You suggest messages the user \
 might type next.
 
 Rules:
-- If there is a conversation, suggest replies to the latest message
+- If the user has a "Draft so far", output ONLY the remaining text to \
+COMPLETE their draft — your output will be appended directly after what \
+they already typed. Do NOT repeat any part of the draft.
+- If there is no draft or the draft is empty, suggest complete replies \
+to the latest message
 - If there is no conversation yet, suggest conversation starters \
 appropriate for the app
-- Match the tone and formality of the context
-- Vary intent across suggestions (e.g. agree, ask follow-up, greet, \
-start a new topic)
+- MATCH THE USER'S EXACT TONE from the conversation. If the user writes \
+casually (lowercase, no punctuation, slang, abbreviations), suggest in \
+that same casual style. If formal, stay formal. Mirror how the USER \
+actually writes, not the assistant.
+- Keep suggestions SHORT — 1 sentence max, like a real text message
+- Focus on the most recent messages in the conversation — older messages \
+are background context, not topics to address directly
+- Vary approach across suggestions (e.g. agree, ask follow-up, push back) \
+but keep them relevant to the latest exchange
 - Do not repeat or quote content already visible
 - Output ONLY the message text, no meta-commentary or descriptions
 - Never refuse to generate suggestions
@@ -75,22 +111,128 @@ start a new topic)
 USER_PROMPT_TEMPLATE_COMPLETION = """\
 {context}
 
-Complete the text at the cursor position. Generate exactly \
-{num_suggestions} distinct, short, natural completions.\
+Continue writing from the cursor position as the same author. Generate \
+exactly {num_suggestions} distinct, short, natural continuations (a few words each).\
 """
 
 USER_PROMPT_TEMPLATE_REPLY = """\
 {context}
 
 Generate exactly {num_suggestions} distinct suggestions for what the \
-user might type next. If there is a conversation, suggest replies. \
-If there is no conversation, suggest conversation starters. \
-For longer conversations or email-like contexts, suggestions may span \
-multiple sentences or paragraphs (up to ~{max_suggestion_lines} lines).\
+user might type next. If a "Draft so far" is shown, output ONLY the \
+remaining text to complete it (your output is appended directly). \
+If there is no draft, suggest complete replies or conversation starters. \
+Keep each suggestion to 1 short sentence max — like a real text message.\
+"""
+
+# ---- Shell-specific prompts ----
+
+SYSTEM_PROMPT_SHELL_COMPLETION = """\
+You are a shell command completion assistant. Complete the command the \
+user is currently typing in their terminal.
+
+Rules:
+- Output ONLY the remaining text to complete the command — your output \
+will be spliced directly onto what they have already typed
+- Suggest flags, arguments, file paths, or subcommands as appropriate
+- Keep completions SHORT — finish the current command, don't chain new ones
+- Use the command history for context (e.g. repeat similar flags, \
+continue a workflow)
+- Match the user's shell style (aliases, flag styles, quoting conventions)
+- Never output explanations, comments, or prose — only shell syntax
+"""
+
+SYSTEM_PROMPT_SHELL_REPLY = """\
+You are a shell command suggestion assistant. Suggest commands the user \
+might want to run next in their terminal.
+
+Rules:
+- Suggest complete, runnable shell commands
+- Use the command history and output to infer what the user is doing \
+and suggest logical next steps
+- If a previous command failed, suggest a fix or alternative
+- Keep suggestions short — one command per suggestion (pipes are OK)
+- Never output explanations or prose — only shell commands
+"""
+
+USER_PROMPT_TEMPLATE_SHELL_COMPLETION = """\
+{context}
+
+Complete the command being typed. Generate exactly {num_suggestions} \
+distinct completions. Output ONLY the remaining text to append \
+(not the part already typed).\
+"""
+
+USER_PROMPT_TEMPLATE_SHELL_REPLY = """\
+{context}
+
+Suggest exactly {num_suggestions} distinct commands the user might want \
+to run next. Each suggestion should be a complete, runnable command.\
 """
 
 
 MAX_PREVIEW_LENGTH = 80
+
+
+def build_messages(
+    mode: AutocompleteMode,
+    context: str,
+    num_suggestions: int = 3,
+    max_suggestion_lines: int = 10,
+    streaming: bool = False,
+    source_app: str = "",
+    shell_mode: Optional[bool] = None,
+) -> tuple[str, str]:
+    """Build (system_prompt, user_message) for an LLM call.
+
+    Shared by SuggestionEngine and the benchmark harness so prompt
+    construction stays in one place.
+
+    Args:
+        mode: CONTINUATION or REPLY.
+        context: Assembled context string.
+        num_suggestions: Number of suggestions to request.
+        max_suggestion_lines: Max lines per suggestion (reply mode only).
+        streaming: If True, append STREAMING_JSON_INSTRUCTION to the
+            system prompt (used by the streaming / benchmark paths).
+        source_app: Name of the source application. If a shell app,
+            shell-specific prompts are used instead of the generic ones.
+        shell_mode: Explicit override for shell prompt selection. If None,
+            inferred from source_app. Pass False to force generic prompts
+            even for shell apps (e.g. when inside a TUI like Claude Code).
+
+    Returns:
+        (system_prompt, user_message) tuple.
+    """
+    ctx = context or "(no context yet)"
+
+    use_shell = shell_mode if shell_mode is not None else is_shell_app(source_app)
+    if use_shell:
+        # Shell-specific prompts
+        if mode == AutocompleteMode.CONTINUATION:
+            system = SYSTEM_PROMPT_SHELL_COMPLETION
+            user_msg = USER_PROMPT_TEMPLATE_SHELL_COMPLETION.format(
+                context=ctx, num_suggestions=num_suggestions,
+            )
+        else:
+            system = SYSTEM_PROMPT_SHELL_REPLY
+            user_msg = USER_PROMPT_TEMPLATE_SHELL_REPLY.format(
+                context=ctx, num_suggestions=num_suggestions,
+            )
+    elif mode == AutocompleteMode.CONTINUATION:
+        system = SYSTEM_PROMPT_COMPLETION
+        user_msg = USER_PROMPT_TEMPLATE_COMPLETION.format(
+            context=ctx, num_suggestions=num_suggestions,
+        )
+    else:
+        system = SYSTEM_PROMPT_REPLY
+        user_msg = USER_PROMPT_TEMPLATE_REPLY.format(
+            context=ctx, num_suggestions=num_suggestions,
+            max_suggestion_lines=max_suggestion_lines,
+        )
+    if streaming:
+        system += STREAMING_JSON_INSTRUCTION
+    return system, user_msg
 
 
 @dataclass
@@ -116,29 +258,95 @@ class Suggestion:
         return first_line
 
 
+STREAMING_JSON_INSTRUCTION = """
+
+CRITICAL: You MUST respond with a JSON object in this exact format:
+{"suggestions": [{"text": "suggestion 1"}, {"text": "suggestion 2"}, {"text": "suggestion 3"}]}
+Output ONLY the raw JSON object. No other text, no markdown, no code blocks."""
+
+
 class SuggestionEngine:
     def __init__(self, config: Config):
         self.config = config
         self._last_request_time: float = 0.0
-        self._client = None
+        self._client = None  # Instructor client (for blocking path)
+        self._raw_client = None  # Raw provider client (for streaming path)
+        self._rate_limited_until: float = 0.0  # timestamp when cooldown expires
 
     def _get_client(self):
         if self._client is None:
             import instructor
 
-            api_key = (
-                self.config.anthropic_api_key
-                if self.config.llm_provider == "anthropic"
-                else self.config.openai_api_key
-            )
-            self._client = instructor.from_provider(
-                f"{self.config.llm_provider}/{self.config.llm_model}",
-                api_key=api_key,
-            )
+            if self.config.llm_provider == "anthropic":
+                import anthropic
+                raw = anthropic.Anthropic(api_key=self.config.anthropic_api_key)
+                self._client = instructor.from_anthropic(raw)
+            else:
+                import openai
+                kwargs: dict = {"api_key": self.config.openai_api_key}
+                if self.config.llm_base_url:
+                    kwargs["base_url"] = self.config.llm_base_url
+                raw = openai.OpenAI(**kwargs)
+                self._client = instructor.from_openai(raw)
         return self._client
+
+    def _get_raw_client(self):
+        """Get a raw provider client for true text streaming."""
+        if self._raw_client is None:
+            if self.config.llm_provider == "anthropic":
+                import anthropic
+                self._raw_client = anthropic.Anthropic(
+                    api_key=self.config.anthropic_api_key,
+                )
+            else:
+                import openai
+                kwargs: dict = {"api_key": self.config.openai_api_key}
+                if self.config.llm_base_url:
+                    kwargs["base_url"] = self.config.llm_base_url
+                self._raw_client = openai.OpenAI(**kwargs)
+        return self._raw_client
+
+    # Cooldown duration (seconds) after a rate-limit hit
+    _RATE_LIMIT_COOLDOWN = 30.0
+
+    @property
+    def is_rate_limited(self) -> bool:
+        """True if we're in a rate-limit cooldown period."""
+        return time.time() < self._rate_limited_until
+
+    def _is_rate_limit_error(self, exc: Exception) -> bool:
+        """Check if an exception is a rate-limit (429) error."""
+        # OpenAI SDK
+        try:
+            import openai
+            if isinstance(exc, openai.RateLimitError):
+                return True
+        except ImportError:
+            pass
+        # Anthropic SDK
+        try:
+            import anthropic
+            if isinstance(exc, anthropic.RateLimitError):
+                return True
+        except ImportError:
+            pass
+        # Generic: check for status_code attribute
+        status = getattr(exc, "status_code", None)
+        if status == 429:
+            return True
+        return False
+
+    def _handle_rate_limit(self) -> None:
+        """Set cooldown after a rate-limit hit."""
+        self._rate_limited_until = time.time() + self._RATE_LIMIT_COOLDOWN
+        logger.warning(
+            f"Rate limited — cooling down for {self._RATE_LIMIT_COOLDOWN:.0f}s"
+        )
 
     def can_request(self) -> bool:
         """Check if enough time has passed since the last request (debounce)."""
+        if self.is_rate_limited:
+            return False
         elapsed_ms = (time.time() - self._last_request_time) * 1000
         return elapsed_ms >= self.config.debounce_ms
 
@@ -151,6 +359,7 @@ class SuggestionEngine:
         before_cursor: Optional[str] = None,
         feedback_stats: Optional[dict] = None,
         negative_patterns: Optional[list[str]] = None,
+        shell_mode: Optional[bool] = None,
     ) -> list[Suggestion]:
         """Generate completion suggestions using the configured LLM.
 
@@ -165,10 +374,17 @@ class SuggestionEngine:
                 Used to adjust temperature based on accept rate.
             negative_patterns: Optional list of recently dismissed suggestion
                 texts. Appended to the system prompt to avoid similar suggestions.
+            shell_mode: Explicit override for shell prompt selection. If None,
+                inferred from app_name. Pass False to force generic prompts.
 
         Returns:
             A list of Suggestion objects.
         """
+        if self.is_rate_limited:
+            remaining = self._rate_limited_until - time.time()
+            logger.debug(f"Rate limited, {remaining:.0f}s remaining")
+            return [Suggestion(text=f"Rate limited — retry in {remaining:.0f}s", index=0)]
+
         if not self.can_request():
             logger.debug("Debounce: skipping request (too soon)")
             return []
@@ -183,25 +399,28 @@ class SuggestionEngine:
                 before_cursor=before_cursor if before_cursor is not None else current_input,
             )
 
-        num = self.config.num_suggestions
-        ctx = context or "(no context yet)"
+        _use_shell = shell_mode if shell_mode is not None else is_shell_app(app_name)
+
+        system, user_msg = build_messages(
+            mode=mode,
+            context=context,
+            num_suggestions=self.config.num_suggestions,
+            max_suggestion_lines=getattr(self.config, "max_suggestion_lines", 10),
+            streaming=False,
+            source_app=app_name,
+            shell_mode=_use_shell,
+        )
 
         if mode == AutocompleteMode.CONTINUATION:
-            system = SYSTEM_PROMPT_COMPLETION
-            user_msg = USER_PROMPT_TEMPLATE_COMPLETION.format(
-                context=ctx, num_suggestions=num,
-            )
             temperature = self.config.continuation_temperature
-            max_tokens = self.config.continuation_max_tokens
         else:
-            max_lines = getattr(self.config, "max_suggestion_lines", 10)
-            system = SYSTEM_PROMPT_REPLY
-            user_msg = USER_PROMPT_TEMPLATE_REPLY.format(
-                context=ctx, num_suggestions=num,
-                max_suggestion_lines=max_lines,
-            )
             temperature = self.config.reply_temperature
-            max_tokens = self.config.reply_max_tokens
+
+        # Override temperature for shell apps (lower = more precise commands)
+        if _use_shell:
+            temperature = 0.2 if mode == AutocompleteMode.CONTINUATION else 0.5
+
+        max_tokens = self.config.max_tokens
 
         # Adjust temperature based on feedback stats
         if feedback_stats is not None:
@@ -230,9 +449,12 @@ class SuggestionEngine:
             )
             logger.debug(f"LLM returned {len(results)} suggestions")
             return results
-        except Exception:
+        except Exception as exc:
+            if self._is_rate_limit_error(exc):
+                self._handle_rate_limit()
+                return [Suggestion(text="Rate limited — try again later", index=0)]
             logger.exception("Error generating suggestions")
-            return []
+            return [Suggestion(text="LLM error — try again", index=0)]
 
     def _call_llm(
         self, system: str, user_msg: str,
@@ -267,11 +489,12 @@ class SuggestionEngine:
         before_cursor: Optional[str] = None,
         feedback_stats: Optional[dict] = None,
         negative_patterns: Optional[list[str]] = None,
+        shell_mode: Optional[bool] = None,
     ) -> Generator[Suggestion, None, None]:
         """Generate completion suggestions via streaming, yielding each as it completes.
 
         Yields Suggestion objects one at a time as they become available
-        from the LLM via Instructor's create_iterable.
+        from the LLM via raw SDK text streaming with incremental JSON parsing.
 
         Args:
             current_input: The text the user has typed so far.
@@ -282,10 +505,18 @@ class SuggestionEngine:
                 when mode is None. Falls back to current_input if not provided.
             feedback_stats: Optional dict from ContextStore.get_feedback_stats().
             negative_patterns: Optional list of recently dismissed suggestion texts.
+            shell_mode: Explicit override for shell prompt selection. If None,
+                inferred from app_name. Pass False to force generic prompts.
 
         Yields:
             Suggestion objects, in the order they are completed by the LLM.
         """
+        if self.is_rate_limited:
+            remaining = self._rate_limited_until - time.time()
+            logger.debug(f"Rate limited, {remaining:.0f}s remaining")
+            yield Suggestion(text=f"Rate limited — retry in {remaining:.0f}s", index=0)
+            return
+
         if not self.can_request():
             logger.debug("Debounce: skipping streaming request (too soon)")
             return
@@ -300,25 +531,28 @@ class SuggestionEngine:
                 before_cursor=before_cursor if before_cursor is not None else current_input,
             )
 
-        num = self.config.num_suggestions
-        ctx = context or "(no context yet)"
+        _use_shell = shell_mode if shell_mode is not None else is_shell_app(app_name)
+
+        system, user_msg = build_messages(
+            mode=mode,
+            context=context,
+            num_suggestions=self.config.num_suggestions,
+            max_suggestion_lines=getattr(self.config, "max_suggestion_lines", 10),
+            streaming=True,
+            source_app=app_name,
+            shell_mode=_use_shell,
+        )
 
         if mode == AutocompleteMode.CONTINUATION:
-            system = SYSTEM_PROMPT_COMPLETION
-            user_msg = USER_PROMPT_TEMPLATE_COMPLETION.format(
-                context=ctx, num_suggestions=num,
-            )
             temperature = self.config.continuation_temperature
-            max_tokens = self.config.continuation_max_tokens
         else:
-            max_lines = getattr(self.config, "max_suggestion_lines", 10)
-            system = SYSTEM_PROMPT_REPLY
-            user_msg = USER_PROMPT_TEMPLATE_REPLY.format(
-                context=ctx, num_suggestions=num,
-                max_suggestion_lines=max_lines,
-            )
             temperature = self.config.reply_temperature
-            max_tokens = self.config.reply_max_tokens
+
+        # Override temperature for shell apps
+        if _use_shell:
+            temperature = 0.2 if mode == AutocompleteMode.CONTINUATION else 0.5
+
+        max_tokens = self.config.max_tokens
 
         # Apply feedback-based temperature adjustment
         if feedback_stats is not None:
@@ -341,8 +575,12 @@ class SuggestionEngine:
             yield from self._call_llm_stream(
                 system, user_msg, temperature=temperature, max_tokens=max_tokens,
             )
-        except Exception:
-            logger.exception("Error during streaming suggestions")
+        except Exception as exc:
+            if self._is_rate_limit_error(exc):
+                self._handle_rate_limit()
+                yield Suggestion(text="Rate limited — try again later", index=0)
+            else:
+                logger.exception("Error during streaming suggestions")
             return
 
     def _call_llm_stream(
@@ -350,19 +588,100 @@ class SuggestionEngine:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
     ) -> Generator[Suggestion, None, None]:
-        """Generate suggestions via Instructor with validated count.
+        """Stream suggestions via raw provider SDK for true incremental delivery.
 
-        Uses create() with SuggestionList (which has min_length validation
-        and max_retries) to ensure the LLM returns the expected number of
-        items, then yields them one at a time for incremental overlay
-        updates.
+        Uses plain-text JSON output (not tool calls) to bypass Anthropic's
+        tool_use key-value buffering and Instructor's sync list() collection.
+        Parses the growing JSON buffer incrementally and yields each Suggestion
+        as soon as its JSON object is complete.
+
+        Falls back to the blocking _call_llm path on error or if the stream
+        produces no suggestions.
         """
-        results = self._call_llm(system, user_msg, temperature=temperature, max_tokens=max_tokens)
-        for suggestion in results:
-            logger.debug(
-                f"Stream yielding suggestion [{suggestion.index}]: {suggestion.text[:80]!r}"
+        client = self._get_raw_client()
+        # NOTE: system already includes STREAMING_JSON_INSTRUCTION via
+        # build_messages(streaming=True); no need to append it again.
+        json_system = system
+
+        try:
+            json_buf = ""
+            last_yielded = 0
+
+            if self.config.llm_provider == "anthropic":
+                with client.messages.stream(
+                    model=self.config.llm_model,
+                    system=json_system,
+                    messages=[{"role": "user", "content": user_msg}],
+                    temperature=temperature,
+                    max_tokens=max_tokens or 1024,
+                ) as stream:
+                    for text_chunk in stream.text_stream:
+                        json_buf += text_chunk
+                        complete = _extract_complete_suggestions(json_buf)
+                        while len(complete) > last_yielded:
+                            s = complete[last_yielded]
+                            logger.debug(
+                                f"Stream yielding suggestion [{last_yielded}]: {s[:80]!r}"
+                            )
+                            yield Suggestion(text=s, index=last_yielded)
+                            last_yielded += 1
+            else:
+                # OpenAI
+                response = client.chat.completions.create(
+                    model=self.config.llm_model,
+                    messages=[
+                        {"role": "system", "content": json_system},
+                        {"role": "user", "content": user_msg},
+                    ],
+                    stream=True,
+                    temperature=temperature,
+                    max_tokens=max_tokens or 1024,
+                )
+                for chunk in response:
+                    delta = chunk.choices[0].delta if chunk.choices else None
+                    content = delta.content if delta else None
+                    if content:
+                        json_buf += content
+                        complete = _extract_complete_suggestions(json_buf)
+                        while len(complete) > last_yielded:
+                            s = complete[last_yielded]
+                            logger.debug(
+                                f"Stream yielding suggestion [{last_yielded}]: {s[:80]!r}"
+                            )
+                            yield Suggestion(text=s, index=last_yielded)
+                            last_yielded += 1
+
+            if last_yielded == 0:
+                logger.warning(
+                    "Stream produced no suggestions, falling back to blocking"
+                )
+                results = self._call_llm(
+                    system, user_msg, temperature=temperature, max_tokens=max_tokens,
+                )
+                for suggestion in results:
+                    yield suggestion
+
+        except Exception as exc:
+            if self._is_rate_limit_error(exc):
+                self._handle_rate_limit()
+                yield Suggestion(text="Rate limited — try again later", index=0)
+                return
+            logger.warning(
+                "Raw streaming failed, falling back to blocking", exc_info=True,
             )
-            yield suggestion
+            try:
+                results = self._call_llm(
+                    system, user_msg, temperature=temperature, max_tokens=max_tokens,
+                )
+                for suggestion in results:
+                    yield suggestion
+            except Exception as fallback_exc:
+                if self._is_rate_limit_error(fallback_exc):
+                    self._handle_rate_limit()
+                    yield Suggestion(text="Rate limited — try again later", index=0)
+                else:
+                    logger.exception("Blocking fallback also failed")
+                    yield Suggestion(text="LLM error — try again", index=0)
 
 
 # ---- Mode detection (module-level for reuse) ----
@@ -411,3 +730,72 @@ def adjust_temperature(base_temp: float, accept_rate: float) -> float:
     else:
         temp = base_temp
     return max(0.1, min(1.0, temp))
+
+
+def _extract_complete_suggestions(json_buf: str) -> list[str]:
+    """Extract complete suggestion texts from a growing JSON buffer.
+
+    Scans for complete ``{"text": "..."}`` objects inside the
+    ``"suggestions"`` array.  Incomplete objects (still being streamed)
+    are skipped, so only fully-received suggestions are returned.
+    """
+    marker = '"suggestions"'
+    idx = json_buf.find(marker)
+    if idx == -1:
+        return []
+
+    bracket_idx = json_buf.find("[", idx + len(marker))
+    if bracket_idx == -1:
+        return []
+
+    texts: list[str] = []
+    pos = bracket_idx + 1
+
+    while pos < len(json_buf):
+        # Skip whitespace and commas
+        while pos < len(json_buf) and json_buf[pos] in " \t\n\r,":
+            pos += 1
+        if pos >= len(json_buf) or json_buf[pos] == "]":
+            break
+        if json_buf[pos] != "{":
+            break
+
+        # Find matching closing brace
+        depth = 0
+        in_string = False
+        escape_next = False
+        obj_end = -1
+        for i in range(pos, len(json_buf)):
+            c = json_buf[i]
+            if escape_next:
+                escape_next = False
+                continue
+            if c == "\\" and in_string:
+                escape_next = True
+                continue
+            if c == '"':
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    obj_end = i
+                    break
+
+        if obj_end == -1:
+            break  # Incomplete object — still streaming
+
+        obj_str = json_buf[pos : obj_end + 1]
+        try:
+            obj = json.loads(obj_str)
+            if isinstance(obj, dict) and "text" in obj:
+                texts.append(obj["text"])
+        except json.JSONDecodeError:
+            pass
+        pos = obj_end + 1
+
+    return texts

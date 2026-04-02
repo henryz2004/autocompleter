@@ -18,6 +18,60 @@ from .input_observer import VisibleContent
 # Default cap on how much visible text to store per snapshot.
 DEFAULT_TEXT_SUMMARY_CHARS = 500
 
+# Short UI chrome strings to filter from visible text summaries.
+# These appear in sidebar, toolbar, and status areas of various apps
+# and add no conversational value when used as cross-app context.
+_UI_CHROME_PATTERNS = frozenset({
+    # Discord
+    "send gif", "send a gif", "send sticker", "unmute", "mute",
+    "do not disturb", "set status", "user status and settings",
+    "manage profile and status", "deafen", "undeafen",
+    "open user settings", "direct messages", "find or start a conversation",
+    "create dm", "add friends to dm", "hide user profile",
+    "show user profile", "start voice call", "start video call",
+    "pinned messages", "add friends", "notification settings",
+    "thread panel", "member list", "search", "inbox",
+    # iMessage
+    "new message", "details",
+    # Common
+    "send", "attach", "emoji",
+})
+
+# Substrings — if any of these appear in a line (case-insensitive),
+# the line is filtered.
+_UI_CHROME_SUBSTRINGS = (
+    "icon, button",        # VoiceOver button descriptions
+    "status and settings", # Discord status bar
+    "unread message",      # Discord unread badge
+    "new unreads",         # Discord new unreads separator
+)
+
+
+def _filter_ui_chrome(text: str) -> str:
+    """Remove short UI chrome lines from a visible text summary.
+
+    Preserves substantive content (messages, docs, code) while stripping
+    toolbar buttons, sidebar labels, and status indicators.
+    """
+    lines = text.split("\n")
+    filtered: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        lower = stripped.lower()
+        # Exact match against known chrome strings
+        if lower in _UI_CHROME_PATTERNS:
+            continue
+        # Substring match
+        if any(sub in lower for sub in _UI_CHROME_SUBSTRINGS):
+            continue
+        # Very short lines (<=3 chars) that are just icons/separators
+        if len(stripped) <= 3:
+            continue
+        filtered.append(line)
+    return "\n".join(filtered)
+
 
 @dataclass
 class AppSnapshot:
@@ -109,13 +163,30 @@ class ContextTrail:
         self._trail.append(snapshot)
 
     def _build_text_summary(self, content: VisibleContent) -> str:
-        """Build a truncated text summary from visible content."""
+        """Build a truncated text summary from visible content.
+
+        Filters out UI chrome (buttons, sidebar labels, status indicators)
+        to keep cross-app context focused on substantive content.
+        """
         if not content.text_elements:
             return ""
         combined = "\n".join(content.text_elements)
+        combined = _filter_ui_chrome(combined)
         if len(combined) > self._text_summary_chars:
             combined = combined[: self._text_summary_chars]
         return combined
+
+    # Apps whose cross-app snapshots are typically notification previews
+    # or system-level UI rather than substantive content the user was reading.
+    _NOISY_CROSS_APP_SOURCES = frozenset({
+        "Notification Center",
+        "NotificationCenter",
+        "UserNotificationCenter",
+        "Control Center",
+        "SystemUIServer",
+        "Spotlight",
+        "loginwindow",
+    })
 
     def get_recent_cross_app_context(
         self,
@@ -126,7 +197,7 @@ class ContextTrail:
         """Return recent snapshots from apps other than current_app.
 
         Returns most-recent-first, limited to max_entries, excluding
-        entries older than max_age_seconds.
+        entries older than max_age_seconds and known noisy sources.
         """
         now = time.time()
         cutoff = now - max_age_seconds
@@ -139,6 +210,12 @@ class ContextTrail:
             if snapshot.timestamp < cutoff:
                 continue
             if snapshot.app_name == current_app:
+                continue
+            # Skip noisy system-level apps
+            if snapshot.app_name in self._NOISY_CROSS_APP_SOURCES:
+                continue
+            # Skip snapshots with no substantive content after filtering
+            if not snapshot.text_summary.strip():
                 continue
             results.append(snapshot)
 

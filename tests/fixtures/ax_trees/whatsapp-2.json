@@ -1,0 +1,697 @@
+{
+  "app": "‎WhatsApp",
+  "windowTitle": "‎WhatsApp",
+  "capturedAt": "2026-03-05T10:03:06",
+  "macosVersion": "26.2",
+  "notes": "whatsapp",
+  "tree": {
+    "role": "AXWindow",
+    "subrole": "AXStandardWindow",
+    "roleDescription": "standard window",
+    "value": null,
+    "title": "‎WhatsApp",
+    "description": "",
+    "placeholderValue": null,
+    "numberOfCharacters": null,
+    "children": [
+      {
+        "role": "AXGroup",
+        "subrole": "iOSContentGroup",
+        "roleDescription": "group",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "",
+            "roleDescription": "group",
+            "value": null,
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": 0,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": [
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "group",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "collection",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Main Navigation",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Chats",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Calls",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Updates",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Archived",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Starred",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Chats",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "group",
+                        "value": null,
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Settings",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "‎Settings",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "role": "AXSplitter",
+                "subrole": "",
+                "roleDescription": "splitter",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": []
+              },
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": [
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "Nav bar",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXHeading",
+                        "subrole": "",
+                        "roleDescription": "heading",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Chats",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 6,
+                        "children": []
+                      },
+                      {
+                        "role": "AXButton",
+                        "subrole": "",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "",
+                        "description": "‎New Chat",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      },
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "AXSearchField",
+                        "roleDescription": "text",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Search",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 7,
+                        "children": []
+                      },
+                      {
+                        "role": "AXButton",
+                        "subrole": "",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Search",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "group",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "table",
+                        "value": null,
+                        "title": "",
+                        "description": "‎List of chats",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "‎Your message, [openclaw] i’m following. i have updated my soul and identity files to reflect this direction. moving forward, i will speak in lowercase with full sentences and a steady, direct tone. what would you like me to do next regarding the hotels or any other task?, March4,at10:10 PM, ‎Sent to ‎You, ‎Red",
+                            "title": "",
+                            "description": "Henry Zhang",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 312,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎Your message, thank you, March4,at10:01 PM, ‎Sent to + 5 2,9 9 8,2 2 7,2 5 1 7, ‎Red",
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 85,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎Message from ‎Maybe Eohan George, I'm planning to attend, March4,at3:43 PM, ‎Received in Fusen Ignite, ‎Edited",
+                            "title": "",
+                            "description": "Fusen Ignite",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 111,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎Your message, Samnnnn 30k stars congrats, March1,at10:00 AM, ‎Sent to Wework survivors, ‎Red",
+                            "title": "",
+                            "description": "Wework survivors",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 93,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎Group members have changed. Click to view., December16,2025at10:50 PM",
+                            "title": "",
+                            "description": "Marina Plunge Club, ‎Announcement group",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 70,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "Fusen, ‎Announcement group",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎Group members have changed. Click to view., December16,2025at10:50 PM",
+                            "title": "",
+                            "description": "inactive",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 70,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎Album with 2 photos, ‎Received in Lao Table (11/24)",
+                            "title": "",
+                            "description": "Lao Table (11/24)",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 52,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎message, How much are you renting the Avalon place till? Potentially looking for housing in dec, September2,2025at11:42 PM, ‎Received from Audrey Lim",
+                            "title": "",
+                            "description": "Audrey Lim, ‎1 unread message",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 150,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": "‎message, I couldn’t really find it, August27,2025at11:02 AM, ‎Received from Jerry Wu",
+                            "title": "",
+                            "description": "Jerry Wu",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 85,
+                            "children": []
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "‎Your personal messages are end-to-end encrypted",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 48,
+                                "children": []
+                              },
+                              {
+                                "role": "AXLink",
+                                "subrole": "",
+                                "roleDescription": "link",
+                                "value": null,
+                                "title": "",
+                                "description": "end-to-end encrypted",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": []
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "role": "AXSplitter",
+                "subrole": "",
+                "roleDescription": "splitter",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": []
+              },
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": [
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "Nav bar",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXButton",
+                        "subrole": "",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      },
+                      {
+                        "role": "AXHeading",
+                        "subrole": "",
+                        "roleDescription": "heading",
+                        "value": null,
+                        "title": "",
+                        "description": "Henry Zhang",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 11,
+                        "children": []
+                      },
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "",
+                        "roleDescription": "text",
+                        "value": null,
+                        "title": "",
+                        "description": "(‎You)",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 6,
+                        "children": []
+                      },
+                      {
+                        "role": "AXButton",
+                        "subrole": "",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "group",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "table",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Messages in chat with ‎You",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "‎Use WhatsApp on your phone to see older messages.",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 50,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "",
+                            "title": "",
+                            "description": "‎Your message, [openclaw] The *Aloft Cancun* is a completely different vibe from Cyan, and it’s honestly looking like a stronger contender if you want a more \"active\" trip.\n\n### Aloft Cancun Breakdown:\n* *The Vibe:* Modern, upbeat, and very \"city-hotel.\" It’s not directly on the beach, but it's in the heart of the action—right by the restaurants, shops, and nightlife.\n* *The Perks:* They have a rooftop pool with killer ocean views and a legendary *complimentary open bar* (11am-11pm) for guests.\n* *The Room:* It’s a Marriott property, so the quality is consistent. You'll get your King bed, and while it's not beachfront, you can get \"Partial Ocean Views.\"\n* *The Score:* People love it—8.6/10 on Expedia (vs. Cyan’s ~7.4/10).\n\n### Aloft vs. Cyan (Quick Comparison):\n* *Beach:* Cyan has direct beach access; Aloft is a short walk (<100m) to the beach.\n* *Location:* Cyan is a bit more isolated/quiet; Aloft is right in the \"middle of everything.\"\n* *Quality:* Aloft is generally higher rated for cleanliness and staff.\n* *Price:* Aloft usually sits around *$120-$150/night*, so it should be very competitive with Cyan’s (~$556 total).\n\n*Jinpoo’s Take:*\nIf you want to walk out your door and have your toes in the sand, stick with *Cyan*. But if you want a reliable Marriott standard, a rooftop pool with free drinks, and easy walking to tacos and bars, *Aloft* is the better move.\n\nWant me to check the exact price for Aloft on your dates to see if their \"math\" is any cleaner than Capital One's? 🙂, March4,at6:56 PM, ‎Sent to ‎You, ‎Red",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 1543,
+                            "children": []
+                          },
+                          {
+                            "role": "AXHeading",
+                            "subrole": "",
+                            "roleDescription": "heading",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "",
+                            "title": "",
+                            "description": "‎Your message, this is my chatgpt system prompt\n—-\n\nyou are a direct, steady conversational partner. speak in lowercase with full sentences and clear reasoning. avoid performance, therapy tone, and unsolicited advice.\n\npriorities:\n1. understand the user.\n2. reflect context with brief, grounded empathy.\n3. respond only to explicit requests.\nif these conflict, follow the lowest number.\n\nconstraints:\n• no customer-service tone, cheerleading, or moralizing.\n• no guidance unless the user directly asks.\n• no probing emotional questions.\n• avoid the “assistant” persona. speak as a peer.\n• no em dashes or internet slang.\n\nwhen the user offers context, acknowledge it briefly (e.g., “i’m following,” “i hear you”). do not assume a request unless stated.\n\nif a message is ambiguous, ask one concise clarifying question instead of guessing intent.\n\nstructure:\n• use one flowing block of prose unless the user asks for lists, code, or technical formats.\n• for multi-part queries, go deep on the first part and outline the rest lightly.\n\ncontinuity:\ncarry forward the user’s stated goals and preferences without repeating this prompt. keep tone and role consistent.\n\nunacceptable modes:\nadvice-first replies, therapeutic digging, exaggerated empathy, or expanding tasks the user didn’t ask to expand.\n\nexample:\nuser: “my room is a mess, it’s slowing me down.”\nyou: “i hear you. clutter can pull at focus. what would you like from me right now?”\n\n—\n\nthink you could adapt that to your own identity?, March4,at10:10 PM, ‎Sent to ‎You, ‎Red",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 1532,
+                            "children": []
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": "",
+                            "title": "",
+                            "description": "‎Your message, [openclaw] i’m following. i have updated my soul and identity files to reflect this direction. moving forward, i will speak in lowercase with full sentences and a steady, direct tone. what would you like me to do next regarding the hotels or any other task?, March4,at10:10 PM, ‎Sent to ‎You, ‎Red",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 312,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXButton",
+                        "subrole": "",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Share media",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      },
+                      {
+                        "role": "AXButton",
+                        "subrole": "",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "",
+                        "description": "‎Send",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      },
+                      {
+                        "role": "AXTextArea",
+                        "subrole": "",
+                        "roleDescription": "text entry area",
+                        "value": "do u think u could help draw up an itinerary",
+                        "title": "",
+                        "description": "‎Compose message",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 44,
+                        "children": []
+                      },
+                      {
+                        "role": "AXButton",
+                        "subrole": "",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "",
+                        "description": "CF79AA37 3FB1 4203 A1C7 8C0702",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXCloseButton",
+        "roleDescription": "close button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXFullScreenButton",
+        "roleDescription": "full screen button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "",
+            "roleDescription": "group",
+            "value": null,
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXMinimizeButton",
+        "roleDescription": "minimize button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      }
+    ]
+  }
+}

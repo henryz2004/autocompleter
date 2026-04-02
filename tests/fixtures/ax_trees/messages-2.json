@@ -1,0 +1,1264 @@
+{
+  "app": "Messages",
+  "windowTitle": "Emma Zhang",
+  "capturedAt": "2026-03-30T17:14:42",
+  "macosVersion": "26.2",
+  "notes": "",
+  "tree": {
+    "role": "AXWindow",
+    "subrole": "AXStandardWindow",
+    "roleDescription": "standard window",
+    "value": null,
+    "title": "Emma Zhang",
+    "description": "",
+    "placeholderValue": null,
+    "numberOfCharacters": null,
+    "children": [
+      {
+        "role": "AXGroup",
+        "subrole": "iOSContentGroup",
+        "roleDescription": "group",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "",
+            "roleDescription": "group",
+            "value": null,
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": 0,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": [
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "group",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "collection",
+                        "value": null,
+                        "title": "",
+                        "description": "Messages",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "Your iMessage, I flew, 5:28 AM",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "Your iMessage, I flew, 5:28 AM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXTextArea",
+                                    "subrole": "",
+                                    "roleDescription": "text entry area",
+                                    "value": "I flew",
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 6,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "Your iMessage, I dk *, 5:28 AM",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "Your iMessage, I dk *, 5:28 AM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXTextArea",
+                                    "subrole": "",
+                                    "roleDescription": "text entry area",
+                                    "value": "I dk *",
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 6,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Mon, Mar 23 at 9:04 AM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 22,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "Emma Zhang, bruh what is itt, 9:04 AM",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "Emma Zhang, bruh what is itt, 9:04 AM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXTextArea",
+                                    "subrole": "",
+                                    "roleDescription": "text entry area",
+                                    "value": "bruh what is itt",
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 16,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Mon, Mar 23 at 10:37 AM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 23,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "Emma Zhang, what os cards and pool, 10:37 AM",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "Emma Zhang, what os cards and pool, 10:37 AM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXTextArea",
+                                    "subrole": "",
+                                    "roleDescription": "text entry area",
+                                    "value": "what os cards and pool",
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 22,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Tuesday 4:16 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 15,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "Emma Zhang, hellooooo answer my question , 4:16 PM",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "Emma Zhang, hellooooo answer my question , 4:16 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXTextArea",
+                                    "subrole": "",
+                                    "roleDescription": "text entry area",
+                                    "value": "hellooooo answer my question ",
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 29,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Tuesday 6:06 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 15,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "Your iMessage, Idkkkkkk, 6:06 PM",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "Your iMessage, Idkkkkkk, 6:06 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXTextArea",
+                                    "subrole": "",
+                                    "roleDescription": "text entry area",
+                                    "value": "Idkkkkkk",
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 8,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "Emma Zhang, bruhhhhh, 6:17 PM",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "Emma Zhang, bruhhhhh, 6:17 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXTextArea",
+                                    "subrole": "",
+                                    "roleDescription": "text entry area",
+                                    "value": "bruhhhhh",
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 8,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "Emma Zhang, why are u in coloradooooo, 6:17 PM",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "Emma Zhang, why are u in coloradooooo, 6:17 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXTextArea",
+                                    "subrole": "",
+                                    "roleDescription": "text entry area",
+                                    "value": "why are u in coloradooooo",
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 25,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXButton",
+                                "subrole": "",
+                                "roleDescription": "button",
+                                "value": null,
+                                "title": "",
+                                "description": "‎1 Reply",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Wednesday 2:01 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 17,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "",
+                            "roleDescription": "text",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "Emma Zhang, i got my kip the other day, You loved this, 2:01 PM",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "Emma Zhang, i got my kip the other day, You loved this, 2:01 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXTextArea",
+                                    "subrole": "",
+                                    "roleDescription": "text entry area",
+                                    "value": "i got my kip the other day",
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 26,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "Your iMessage, Yesss!!!!, 2:12 PM",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "Your iMessage, Yesss!!!!, 2:12 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXTextArea",
+                                    "subrole": "",
+                                    "roleDescription": "text entry area",
+                                    "value": "Yesss!!!!",
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 9,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "Your iMessage, O goood, 2:13 PM",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "Your iMessage, O goood, 2:13 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXTextArea",
+                                    "subrole": "",
+                                    "roleDescription": "text entry area",
+                                    "value": "O goood",
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 7,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "Emma Zhang, Reply Preview, why are u in coloradooooo, 6:17 PM",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "Emma Zhang, Reply Preview, why are u in coloradooooo, 6:17 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "Your iMessage, Reply, Layover, 2:13 PM",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "Your iMessage, Reply, Layover, 2:13 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXTextArea",
+                                    "subrole": "",
+                                    "roleDescription": "text entry area",
+                                    "value": "Layover",
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 7,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Wednesday 4:22 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 17,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "Emma Zhang, bruh, 4:22 PM",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "Emma Zhang, bruh, 4:22 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXTextArea",
+                                    "subrole": "",
+                                    "roleDescription": "text entry area",
+                                    "value": "bruh",
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 4,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Saturday 2:13 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 16,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "Emma Zhang, wait did u get into northeastern, 2:13 PM",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "Emma Zhang, wait did u get into northeastern, 2:13 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXTextArea",
+                                    "subrole": "",
+                                    "roleDescription": "text entry area",
+                                    "value": "wait did u get into northeastern",
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 32,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Saturday 5:33 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 16,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "Your iMessage, Ye, 5:33 PM",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "Your iMessage, Ye, 5:33 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXTextArea",
+                                    "subrole": "",
+                                    "roleDescription": "text entry area",
+                                    "value": "Ye",
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 2,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "‎Read Yesterday",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 15,
+                                "children": []
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "group",
+                        "value": null,
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "add",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXTextField",
+                            "subrole": "",
+                            "roleDescription": "text field",
+                            "value": null,
+                            "title": "",
+                            "description": "Message",
+                            "placeholderValue": "iMessage",
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "Record audio",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "Emoji picker",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": [
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "Nav bar",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXTextField",
+                        "subrole": "AXSearchField",
+                        "roleDescription": "search text field",
+                        "value": "",
+                        "title": "",
+                        "description": "Search",
+                        "placeholderValue": "Search",
+                        "numberOfCharacters": 0,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "group",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "group",
+                        "value": null,
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "collection",
+                            "value": null,
+                            "title": "",
+                            "description": "Conversations",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Emma, Pinned",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 12,
+                                "children": []
+                              },
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Jinpaaaa 💗, Muted, Pinned",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 26,
+                                "children": []
+                              },
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "77989, Muted, Unread, FragranceNet: Pack light, smell great! Travel sprays are the ultimate adventure companion: https://fragrancenet.attn.tv/aeNh__D4zFbL ., 12:03 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 166,
+                                "children": []
+                              },
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Poke 🌴, it's time to join your video visit with neema shayo\n\n🤝 join-meeting.cx/h4ZhP6naMqe, 9:26 AM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 101,
+                                "children": []
+                              },
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "85638, Sutter Health: Henry, join your video visit now using the following link.\r\nhttps://mchrt.io/TKIUc2PZYH3zErb4aOY, 9:25 AM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 127,
+                                "children": []
+                              },
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Jinpaaaa 💗,  Khuyen & Malaika, Hahahaha, Yesterday ",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 52,
+                                "children": []
+                              },
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "+1 (919) 259-3085, Henry, is your email address as henryz2004@gmail.com, Saturday ",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 82,
+                                "children": []
+                              },
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "+1 (919) 265-8161, Summary, ￼ Asks if deposited; requests SFA eligibility spent in 2025 copies; search order history by “SFA”., Thursday ",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 137,
+                                "children": []
+                              },
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Jinpaaaa 💗 & Choezing, dropped the keys at the front desk, left the trash out, washed the sheets (most are on the bed two are in the dryer), didn’t eat the hummus but ate two ramens lol sorry i got hungry, we used your guys, Tuesday ",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 234,
+                                "children": []
+                              },
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Patrick Li, i’m prob headed to roblox in san mateo this august so will b very close to u , 3/22/26 ",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 99,
+                                "children": []
+                              },
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Josh Chen, Josh laughed at “lmaoooo”, 3/21/26 ",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 46,
+                                "children": []
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "role": "AXButton",
+                "subrole": "",
+                "roleDescription": "button",
+                "value": null,
+                "title": "",
+                "description": "Emma",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXToolbar",
+        "subrole": "",
+        "roleDescription": "toolbar",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXMenuButton",
+            "subrole": "",
+            "roleDescription": "menu button",
+            "value": null,
+            "title": "",
+            "description": "filter",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXMenuButton",
+                "subrole": "",
+                "roleDescription": "menu button",
+                "value": null,
+                "title": "",
+                "description": "filter",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              },
+              {
+                "role": "AXStaticText",
+                "subrole": "",
+                "roleDescription": "text",
+                "value": "7",
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 1,
+                "children": []
+              }
+            ]
+          },
+          {
+            "role": "AXButton",
+            "subrole": "",
+            "roleDescription": "button",
+            "value": null,
+            "title": "",
+            "description": "compose",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": []
+          },
+          {
+            "role": "AXMenuButton",
+            "subrole": "",
+            "roleDescription": "menu button",
+            "value": null,
+            "title": "",
+            "description": "Start FaceTime",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXMenuButton",
+                "subrole": "",
+                "roleDescription": "menu button",
+                "value": null,
+                "title": "",
+                "description": "Start FaceTime",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXCloseButton",
+        "roleDescription": "close button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXFullScreenButton",
+        "roleDescription": "full screen button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "",
+            "roleDescription": "group",
+            "value": null,
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXMinimizeButton",
+        "roleDescription": "minimize button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      }
+    ]
+  }
+}

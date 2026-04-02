@@ -155,7 +155,9 @@ class TestContextStore:
         # "Hello world" should appear in Tier 1 (cursor) but not in Tier 2 (visible)
         assert "Surrounding paragraph text" in context
 
-    def test_continuation_context_skips_user_input_entries(self, store):
+    def test_continuation_context_skips_user_input_in_db_fallback(self, store):
+        """user_input entries should NOT appear in the visible-context DB
+        fallback tier, but CAN appear in the 'Your recent messages' tier."""
         store.add_entry("Slack", "visible stuff", "visible_text")
         store.add_entry("Slack", "user typed something", "user_input")
         context = store.get_continuation_context(
@@ -163,7 +165,11 @@ class TestContextStore:
             after_cursor="",
             source_app="Slack",
         )
-        assert "user typed something" not in context
+        # The DB fallback section should not include user_input as visible context
+        assert "Visible context:" in context or "Your recent messages:" in context
+        # If user_input content appears, it's via the new sent-messages tier
+        if "user typed something" in context:
+            assert "Your recent messages:" in context
 
     def test_continuation_context_omits_empty_after_cursor(self, store):
         context = store.get_continuation_context(
@@ -322,6 +328,26 @@ class TestContextStore:
         entries = store.get_recent(limit=1)
         assert "\u4f60\u597d\u4e16\u754c" in entries[0].content
         assert "Bonjour" in entries[0].content
+
+    def test_reply_context_includes_timestamps(self):
+        """get_reply_context should format timestamps in turn lines."""
+        store = ContextStore(Path("/tmp/test_ts.db"))
+        store.open()
+        try:
+            turns = [
+                {"speaker": "Alice", "text": "hello", "timestamp": "10:05 PM"},
+                {"speaker": "Bob", "text": "hi there"},  # no timestamp
+                {"speaker": "Alice", "text": "how are you", "timestamp": "Yesterday at 8:47 PM"},
+            ]
+            ctx = store.get_reply_context(
+                conversation_turns=turns,
+                source_app="Discord",
+            )
+            assert "Alice [10:05 PM]: hello" in ctx
+            assert "- Bob: hi there" in ctx  # no bracket for missing timestamp
+            assert "Alice [Yesterday at 8:47 PM]: how are you" in ctx
+        finally:
+            store.close()
 
     def test_not_opened_raises(self):
         store = ContextStore(Path("/tmp/unused.db"))

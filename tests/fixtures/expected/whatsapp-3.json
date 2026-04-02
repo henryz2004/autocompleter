@@ -1,0 +1,55 @@
+{
+  "extractor": "WhatsAppExtractor",
+  "app": "\u200eWhatsApp",
+  "notes": "1:1 chat with Bahia Tolok Hotel Boutique - mix of sent and received",
+  "turns": [
+    {
+      "speaker": "Me",
+      "text": "yes i would love to book those dates!"
+    },
+    {
+      "speaker": "Bah\u00eda Tolok Hotel Boutique",
+      "text": "Sure, please provide your full name, email, and phone number to make your reservation."
+    },
+    {
+      "speaker": "Me",
+      "text": "Hengyuan Zhang"
+    },
+    {
+      "speaker": "Me",
+      "text": "henryz2004@gmail.com"
+    },
+    {
+      "speaker": "Me",
+      "text": "+1 508-335-9713"
+    },
+    {
+      "speaker": "Bah\u00eda Tolok Hotel Boutique",
+      "text": "OK, would that be the days from March 17th to 20th?"
+    },
+    {
+      "speaker": "Bah\u00eda Tolok Hotel Boutique",
+      "text": "it\u00b4s correct?"
+    },
+    {
+      "speaker": "Me",
+      "text": "yes"
+    },
+    {
+      "speaker": "Bah\u00eda Tolok Hotel Boutique",
+      "text": "OK, your reservation is ready"
+    },
+    {
+      "speaker": "Me",
+      "text": "can i please have a confirmation email?"
+    },
+    {
+      "speaker": "Bah\u00eda Tolok Hotel Boutique",
+      "text": "Ready"
+    },
+    {
+      "speaker": "Me",
+      "text": "thank you"
+    }
+  ]
+}

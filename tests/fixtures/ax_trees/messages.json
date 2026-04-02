@@ -1,0 +1,842 @@
+{
+  "app": "Messages",
+  "windowTitle": "Jinpaaaa 💗 Girlfrienddddddd",
+  "capturedAt": "2026-03-30T17:14:39",
+  "macosVersion": "26.2",
+  "notes": "",
+  "tree": {
+    "role": "AXWindow",
+    "subrole": "AXStandardWindow",
+    "roleDescription": "standard window",
+    "value": null,
+    "title": "Jinpaaaa 💗 Girlfrienddddddd",
+    "description": "",
+    "placeholderValue": null,
+    "numberOfCharacters": null,
+    "children": [
+      {
+        "role": "AXGroup",
+        "subrole": "iOSContentGroup",
+        "roleDescription": "group",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "",
+            "roleDescription": "group",
+            "value": null,
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": 0,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": [
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "group",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "group",
+                        "value": null,
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "group",
+                        "value": null,
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "group",
+                        "value": null,
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXButton",
+                        "subrole": "",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "",
+                        "description": "Scroll to first unread message",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      },
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "collection",
+                        "value": null,
+                        "title": "",
+                        "description": "Messages",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Delivered",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 9,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Yesterday 10:47 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 18,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "Jinpaaaa 💗 Girlfrienddddddd, laooaoaa, 10:47 PM",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "Jinpaaaa 💗 Girlfrienddddddd, laooaoaa, 10:47 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXTextArea",
+                                    "subrole": "",
+                                    "roleDescription": "text entry area",
+                                    "value": "laooaoaa",
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 8,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Today 1:12 AM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 13,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "Jinpaaaa 💗 Girlfrienddddddd, 18th works?prayyy , 1:12 AM",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "Jinpaaaa 💗 Girlfrienddddddd, 18th works?prayyy , 1:12 AM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXTextArea",
+                                    "subrole": "",
+                                    "roleDescription": "text entry area",
+                                    "value": "18th works?prayyy ",
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 18,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Today 7:00 AM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 13,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "Jinpaaaa 💗 Girlfrienddddddd, Hoppers at AMC Metreon 16 on 3/31 at 7:30 pm., amctheatres.com, 1 image, 7:00 AM",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXLink",
+                                "subrole": "",
+                                "roleDescription": "link",
+                                "value": "",
+                                "title": "",
+                                "description": "Jinpaaaa 💗 Girlfrienddddddd, Hoppers at AMC Metreon 16 on 3/31 at 7:30 pm., amctheatres.com, 1 image, 7:00 AM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXImage",
+                                    "subrole": "",
+                                    "roleDescription": "image",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 0,
+                                    "children": []
+                                  },
+                                  {
+                                    "role": "AXGenericElement",
+                                    "subrole": "",
+                                    "roleDescription": "",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "Hoppers at AMC Metreon 16 on 3/31 at 7:30 pm.",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 0,
+                                    "children": []
+                                  },
+                                  {
+                                    "role": "AXGenericElement",
+                                    "subrole": "",
+                                    "roleDescription": "",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "amctheatres.com",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 0,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Today 12:50 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 14,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "",
+                            "description": "Jinpaaaa 💗 Girlfrienddddddd, MOVING SALE PICKUP BY 10/31 \n\nReclining White Office Chair, facebook.com, Image caption: MOVING SALE PICKUP BY 10/31 \n\nReclining White Office Chair, 1 image, 12:50 PM",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXLink",
+                                "subrole": "",
+                                "roleDescription": "link",
+                                "value": "",
+                                "title": "",
+                                "description": "Jinpaaaa 💗 Girlfrienddddddd, MOVING SALE PICKUP BY 10/31 \n\nReclining White Office Chair, facebook.com, Image caption: MOVING SALE PICKUP BY 10/31 \n\nReclining White Office Chair, 1 image, 12:50 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXImage",
+                                    "subrole": "",
+                                    "roleDescription": "image",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "MOVING SALE PICKUP BY 10/31 \n\nReclining White Office Chair",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 0,
+                                    "children": []
+                                  },
+                                  {
+                                    "role": "AXGenericElement",
+                                    "subrole": "",
+                                    "roleDescription": "",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "MOVING SALE PICKUP BY 10/31 \n\nReclining White Office Chair",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 0,
+                                    "children": []
+                                  },
+                                  {
+                                    "role": "AXGenericElement",
+                                    "subrole": "",
+                                    "roleDescription": "",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "facebook.com",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 0,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "group",
+                        "value": null,
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "add",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXTextField",
+                            "subrole": "",
+                            "roleDescription": "text field",
+                            "value": null,
+                            "title": "",
+                            "description": "Message",
+                            "placeholderValue": "iMessage",
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "Record audio",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "",
+                            "description": "Emoji picker",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": [
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "Nav bar",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXTextField",
+                        "subrole": "AXSearchField",
+                        "roleDescription": "search text field",
+                        "value": "",
+                        "title": "",
+                        "description": "Search",
+                        "placeholderValue": "Search",
+                        "numberOfCharacters": 0,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "role": "AXGroup",
+                    "subrole": "",
+                    "roleDescription": "group",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXGroup",
+                        "subrole": "",
+                        "roleDescription": "group",
+                        "value": null,
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXGroup",
+                            "subrole": "",
+                            "roleDescription": "collection",
+                            "value": null,
+                            "title": "",
+                            "description": "Conversations",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Emma, Pinned",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 12,
+                                "children": []
+                              },
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Jinpaaaa 💗, Muted, Pinned",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 26,
+                                "children": []
+                              },
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "77989, Muted, Unread, FragranceNet: Pack light, smell great! Travel sprays are the ultimate adventure companion: https://fragrancenet.attn.tv/aeNh__D4zFbL ., 12:03 PM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 166,
+                                "children": []
+                              },
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Poke 🌴, it's time to join your video visit with neema shayo\n\n🤝 join-meeting.cx/h4ZhP6naMqe, 9:26 AM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 101,
+                                "children": []
+                              },
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "85638, Sutter Health: Henry, join your video visit now using the following link.\r\nhttps://mchrt.io/TKIUc2PZYH3zErb4aOY, 9:25 AM",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 127,
+                                "children": []
+                              },
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Jinpaaaa 💗,  Khuyen & Malaika, Hahahaha, Yesterday ",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 52,
+                                "children": []
+                              },
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "+1 (919) 259-3085, Henry, is your email address as henryz2004@gmail.com, Saturday ",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 82,
+                                "children": []
+                              },
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "+1 (919) 265-8161, Summary, ￼ Asks if deposited; requests SFA eligibility spent in 2025 copies; search order history by “SFA”., Thursday ",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 137,
+                                "children": []
+                              },
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Jinpaaaa 💗 & Choezing, dropped the keys at the front desk, left the trash out, washed the sheets (most are on the bed two are in the dryer), didn’t eat the hummus but ate two ramens lol sorry i got hungry, we used your guys, Tuesday ",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 234,
+                                "children": []
+                              },
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Patrick Li, i’m prob headed to roblox in san mateo this august so will b very close to u , 3/22/26 ",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 99,
+                                "children": []
+                              },
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "",
+                                "description": "Josh Chen, Josh laughed at “lmaoooo”, 3/21/26 ",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 46,
+                                "children": []
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "role": "AXButton",
+                "subrole": "",
+                "roleDescription": "button",
+                "value": null,
+                "title": "",
+                "description": "Jinpaaaa 💗, San Francisco, CA",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXToolbar",
+        "subrole": "",
+        "roleDescription": "toolbar",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXMenuButton",
+            "subrole": "",
+            "roleDescription": "menu button",
+            "value": null,
+            "title": "",
+            "description": "filter",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXMenuButton",
+                "subrole": "",
+                "roleDescription": "menu button",
+                "value": null,
+                "title": "",
+                "description": "filter",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              },
+              {
+                "role": "AXStaticText",
+                "subrole": "",
+                "roleDescription": "text",
+                "value": "7",
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 1,
+                "children": []
+              }
+            ]
+          },
+          {
+            "role": "AXButton",
+            "subrole": "",
+            "roleDescription": "button",
+            "value": null,
+            "title": "",
+            "description": "compose",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": []
+          },
+          {
+            "role": "AXMenuButton",
+            "subrole": "",
+            "roleDescription": "menu button",
+            "value": null,
+            "title": "",
+            "description": "Start FaceTime",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXMenuButton",
+                "subrole": "",
+                "roleDescription": "menu button",
+                "value": null,
+                "title": "",
+                "description": "Start FaceTime",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXCloseButton",
+        "roleDescription": "close button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXFullScreenButton",
+        "roleDescription": "full screen button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "",
+            "roleDescription": "group",
+            "value": null,
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": []
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXMinimizeButton",
+        "roleDescription": "minimize button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      }
+    ]
+  }
+}

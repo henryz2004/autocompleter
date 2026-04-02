@@ -87,6 +87,7 @@ class HotkeyListener:
 
     def __init__(self):
         self._callbacks: dict[tuple[int, int], HotkeyCallback] = {}
+        self._on_unhandled_key: HotkeyCallback | None = None
         self._running = False
         self._thread: threading.Thread | None = None
         self._tap = None
@@ -100,6 +101,13 @@ class HotkeyListener:
         keycode, flags = parse_hotkey(hotkey_str)
         self._callbacks[(keycode, flags)] = callback
         logger.info(f"Registered hotkey: {hotkey_str} (code={keycode}, flags=0x{flags:x})")
+
+    def set_unhandled_key_callback(self, callback: HotkeyCallback) -> None:
+        """Register a callback for any keydown not handled by a registered hotkey.
+
+        Useful for dismissing overlays when the user starts typing.
+        """
+        self._on_unhandled_key = callback
 
     def start(self) -> None:
         """Start listening for hotkey events in a background thread."""
@@ -142,7 +150,21 @@ class HotkeyListener:
                     event, Quartz.kCGKeyboardEventKeycode
                 )
                 flags = Quartz.CGEventGetFlags(event)
-                for (reg_keycode, reg_flags), cb in self._callbacks.items():
+                # Sort by flag specificity (most modifiers first) so that
+                # e.g. shift+ctrl+space is matched before ctrl+space when
+                # both Shift and Ctrl are held.
+                modifier_mask = (
+                    Quartz.kCGEventFlagMaskControl
+                    | Quartz.kCGEventFlagMaskCommand
+                    | Quartz.kCGEventFlagMaskAlternate
+                    | Quartz.kCGEventFlagMaskShift
+                )
+                sorted_entries = sorted(
+                    self._callbacks.items(),
+                    key=lambda item: bin(item[0][1]).count("1"),
+                    reverse=True,
+                )
+                for (reg_keycode, reg_flags), cb in sorted_entries:
                     # For hotkeys with modifiers: match keycode and
                     # require the modifier flags to be present.
                     # For hotkeys without modifiers (reg_flags == 0):
@@ -153,16 +175,16 @@ class HotkeyListener:
 
                     if reg_flags != 0:
                         # Modifier hotkey: check required flags are present
+                        # AND no extra modifier keys are held beyond what's
+                        # registered, to avoid ctrl+space matching when
+                        # shift+ctrl+space is pressed.
                         if (flags & reg_flags) != reg_flags:
+                            continue
+                        extra = flags & modifier_mask & ~reg_flags
+                        if extra:
                             continue
                     else:
                         # Plain key: only match if no modifier keys held
-                        modifier_mask = (
-                            Quartz.kCGEventFlagMaskControl
-                            | Quartz.kCGEventFlagMaskCommand
-                            | Quartz.kCGEventFlagMaskAlternate
-                            | Quartz.kCGEventFlagMaskShift
-                        )
                         if flags & modifier_mask:
                             continue
 
@@ -179,6 +201,14 @@ class HotkeyListener:
                             )
                     except Exception:
                         logger.exception("Error in hotkey callback")
+                    break  # Handled by a registered hotkey
+                else:
+                    # No registered hotkey matched — fire the unhandled key callback
+                    if self._on_unhandled_key is not None:
+                        try:
+                            self._on_unhandled_key()
+                        except Exception:
+                            logger.exception("Error in unhandled key callback")
 
             return event
 

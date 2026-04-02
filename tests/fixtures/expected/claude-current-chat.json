@@ -1,0 +1,14 @@
+{
+  "extractor": "ClaudeDesktopExtractor",
+  "app": "Claude",
+  "turns": [
+    {
+      "speaker": "User",
+      "text": "government bonds vs corporate bonds risk and return?"
+    },
+    {
+      "speaker": "Claude",
+      "text": "Here's a concise comparison:\n(e.g., U.S. Treasuries) are considered the lowest-risk fixed-income investment. They're backed by the full faith and credit of the issuing government, so default risk is essentially zero for countries like the U.S. The tradeoff is lower yields — as of recent periods, Treasury bills and short-term notes have offered roughly 4–5% depending on maturity and rate environment.\ncarry additional credit risk because they depend on the issuing company's ability to repay. To compensate, they offer higher yields. The spread over Treasuries varies by credit quality:\nGiven your conservative corporate cash strategy with the $25K allocation across T-bills, money market funds, and short-term corporate bonds, you're already balancing this well — capturing a bit of extra yield from the corporate allocation while keeping most of the portfolio in near-zero-risk instruments. For a startup's operating cash, that's a solid approach since preserving capital matters more than chasing yield."
+    }
+  ]
+}

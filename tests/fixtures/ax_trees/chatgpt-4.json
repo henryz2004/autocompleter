@@ -1,0 +1,1563 @@
+{
+  "app": "ChatGPT",
+  "windowTitle": "ChatGPT",
+  "capturedAt": "2026-02-28T23:06:47",
+  "macosVersion": "26.2",
+  "notes": "",
+  "tree": {
+    "role": "AXWindow",
+    "subrole": "AXStandardWindow",
+    "roleDescription": "standard window",
+    "value": null,
+    "title": "ChatGPT",
+    "description": "",
+    "placeholderValue": null,
+    "numberOfCharacters": null,
+    "children": [
+      {
+        "role": "AXGroup",
+        "subrole": "AXHostingView",
+        "roleDescription": "group",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXSplitGroup",
+            "subrole": "",
+            "roleDescription": "split group",
+            "value": null,
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "AXHostingView",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": [
+                  {
+                    "role": "AXGroup",
+                    "subrole": "AXHostingView",
+                    "roleDescription": "group",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": [
+                      {
+                        "role": "AXTextField",
+                        "subrole": "AXSearchField",
+                        "roleDescription": "search text field",
+                        "value": null,
+                        "title": "",
+                        "description": "Search",
+                        "placeholderValue": null,
+                        "numberOfCharacters": null,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "role": "AXScrollArea",
+                    "subrole": "",
+                    "roleDescription": "scroll area",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": [
+                      {
+                        "role": "AXList",
+                        "subrole": "AXCollectionList",
+                        "roleDescription": "collection",
+                        "value": null,
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": null,
+                        "children": [
+                          {
+                            "role": "AXList",
+                            "subrole": "AXSectionList",
+                            "roleDescription": "section",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": []
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": [
+                                      {
+                                        "role": "AXButton",
+                                        "subrole": "",
+                                        "roleDescription": "button",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "ChatGPT",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": null,
+                                        "children": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": [
+                                      {
+                                        "role": "AXButton",
+                                        "subrole": "",
+                                        "roleDescription": "button",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "GPTs",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": null,
+                                        "children": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXList",
+                            "subrole": "AXSectionList",
+                            "roleDescription": "section",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": []
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": []
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": [
+                                      {
+                                        "role": "AXButton",
+                                        "subrole": "",
+                                        "roleDescription": "button",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "New project",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": null,
+                                        "children": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": [
+                                      {
+                                        "role": "AXButton",
+                                        "subrole": "",
+                                        "roleDescription": "button",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "twitter",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": null,
+                                        "children": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXList",
+                            "subrole": "AXSectionList",
+                            "roleDescription": "section",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": []
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": []
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": [
+                                      {
+                                        "role": "AXButton",
+                                        "subrole": "",
+                                        "roleDescription": "button",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "Task tracking for founders",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": null,
+                                        "children": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": [
+                                      {
+                                        "role": "AXButton",
+                                        "subrole": "",
+                                        "roleDescription": "button",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "Using Claude with OpenRouter",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": null,
+                                        "children": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": [
+                                      {
+                                        "role": "AXButton",
+                                        "subrole": "",
+                                        "roleDescription": "button",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "Conversation start",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": null,
+                                        "children": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": [
+                                      {
+                                        "role": "AXButton",
+                                        "subrole": "",
+                                        "roleDescription": "button",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "Farmers Carry on Treadmill",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": null,
+                                        "children": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": [
+                                      {
+                                        "role": "AXButton",
+                                        "subrole": "",
+                                        "roleDescription": "button",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "Cosmic Expansion Dynamics",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": null,
+                                        "children": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": [
+                                      {
+                                        "role": "AXButton",
+                                        "subrole": "",
+                                        "roleDescription": "button",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "Clubbing in Cancun Tips",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": null,
+                                        "children": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": [
+                                      {
+                                        "role": "AXButton",
+                                        "subrole": "",
+                                        "roleDescription": "button",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "Y Chromosome Inheritance",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": null,
+                                        "children": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": [
+                                      {
+                                        "role": "AXButton",
+                                        "subrole": "",
+                                        "roleDescription": "button",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "Branch · Investment Strategy Implementation Guide",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": null,
+                                        "children": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": [
+                                      {
+                                        "role": "AXButton",
+                                        "subrole": "",
+                                        "roleDescription": "button",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "Testing Stripe Paywall",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": null,
+                                        "children": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": [
+                                      {
+                                        "role": "AXButton",
+                                        "subrole": "",
+                                        "roleDescription": "button",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "Reading in the AI Age",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": null,
+                                        "children": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": [
+                                      {
+                                        "role": "AXButton",
+                                        "subrole": "",
+                                        "roleDescription": "button",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "Water Intake Averages",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": null,
+                                        "children": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": [
+                                      {
+                                        "role": "AXButton",
+                                        "subrole": "",
+                                        "roleDescription": "button",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "Streaming Structured Output in Python",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": null,
+                                        "children": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": [
+                                      {
+                                        "role": "AXButton",
+                                        "subrole": "",
+                                        "roleDescription": "button",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "Office Writeoffs Tax Discussion",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": null,
+                                        "children": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": [
+                                      {
+                                        "role": "AXButton",
+                                        "subrole": "",
+                                        "roleDescription": "button",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "Payroll Discussion Recap",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": null,
+                                        "children": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": [
+                                      {
+                                        "role": "AXButton",
+                                        "subrole": "",
+                                        "roleDescription": "button",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "Staggered Formation Rules",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": null,
+                                        "children": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": [
+                                      {
+                                        "role": "AXButton",
+                                        "subrole": "",
+                                        "roleDescription": "button",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "Clear Terminal Screen",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": null,
+                                        "children": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": [
+                                      {
+                                        "role": "AXButton",
+                                        "subrole": "",
+                                        "roleDescription": "button",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "Investment Strategy Implementation Guide",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": null,
+                                        "children": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": []
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXScrollBar",
+                        "subrole": "",
+                        "roleDescription": "scroll bar",
+                        "value": null,
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": null,
+                        "children": [
+                          {
+                            "role": "AXValueIndicator",
+                            "subrole": "",
+                            "roleDescription": "value indicator",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": null,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "AXIncrementArrow",
+                            "roleDescription": "increment arrow button",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": null,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "AXDecrementArrow",
+                            "roleDescription": "decrement arrow button",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": null,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "AXIncrementPage",
+                            "roleDescription": "increment page button",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": null,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "AXDecrementPage",
+                            "roleDescription": "decrement page button",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": null,
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "role": "AXMenuButton",
+                    "subrole": "",
+                    "roleDescription": "menu button",
+                    "value": null,
+                    "title": "",
+                    "description": "Henry Zhang",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "role": "AXSplitter",
+                "subrole": "",
+                "roleDescription": "splitter",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": []
+              },
+              {
+                "role": "AXGroup",
+                "subrole": "AXHostingView",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": [
+                  {
+                    "role": "AXScrollArea",
+                    "subrole": "",
+                    "roleDescription": "scroll area",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": [
+                      {
+                        "role": "AXList",
+                        "subrole": "AXCollectionList",
+                        "roleDescription": "collection",
+                        "value": null,
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": null,
+                        "children": [
+                          {
+                            "role": "AXList",
+                            "subrole": "AXSectionList",
+                            "roleDescription": "section",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": []
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "AXHostingView",
+                                    "roleDescription": "group",
+                                    "value": null,
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": null,
+                                    "children": [
+                                      {
+                                        "role": "AXStaticText",
+                                        "subrole": "",
+                                        "roleDescription": "text",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "for an autocomplete UI that feels instant, you want to cut the time to first useful suggestion as much as possible. with cloud llm providers (anthropic, openai, etc.) you can’t avoid some network + model latency, so real-time tricks matter more than chasing a few ms of model fps. here’s what actually moves the needle for this kind of task:  ￼\n\nuse a lighter model or smaller endpoint\npick the fastest model that gives acceptable quality. smaller models finish faster per token, and for autocomplete you don’t need deep reasoning — you just need plausible next tokens. smaller models can be 2-5× faster than big ones.  ￼\n\nstream partial suggestions and render them as soon as they arrive\neven if you can’t produce fully structured lists mid-stream, start showing the first tokens/text chunks immediately with the streaming API (e.g., anthropric/claude messages.stream). that shifts perceived latency drastically because the user sees suggestions while the model is still generating.  ￼\n\nlimit the amount the model needs to generate\nconstrain max tokens aggressively, and frame your prompt so the output is as short as possible (for example, “return three comma-separated suggestions without extra text”). less text = fewer tokens = less time.  ￼\n\ncache/“warm up” repeated contexts\nif you expect many similar queries (like in an editor or chat UI), either cache recent completions or reuse prepended context so the model doesn’t need to re-read long histories. for some workloads computing prompt state once and reusing cached embeddings or hidden states can cut latency.  ￼\n\nthink about semantic caching of whole completions\nif the user patterns are predictable (e.g., common code snippets), you can keep a small semantic index of old queries + replies and serve them instantly if the new input is close enough. this can avoid llm calls entirely for a lot of autocomplete traffic.  ￼\n\npre-compute responses for expected prefixes\nif you can anticipate common hotkey patterns (like next word after certain tokens), pre-generate suggestions while the user types (in a background worker). that spreads latency out so when they hit the hotkey, you already have something to show.\n\nkeep networking tight\nrun your backend as close to your users as possible, use persistent connections, and tune HTTP keep-alive — the round-trip overhead often dwarfs the actual token generation in cloud APIs.\n\nin practice for a 3-item suggestion feature:\n• call the model with streaming turned on so you can append tokens live.\n• set prompt + stops so generation is minimal (just the list).\n• choose the fastest model that still works for your domain.\n• cache similar prefixes and reuse those completions when possible.\n\nthat combo will give you the lowest perceived latency for hotkey autocomplete. real instant (<50 ms) usually means some component runs locally or via a tiny distilled model, but for cloud APIs these steps get you as close as you can without custom inference hardware.  ￼",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": 0,
+                                        "children": []
+                                      },
+                                      {
+                                        "role": "AXButton",
+                                        "subrole": "",
+                                        "roleDescription": "button",
+                                        "value": null,
+                                        "title": "",
+                                        "description": "Sources",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": null,
+                                        "children": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "",
+                                "roleDescription": "group",
+                                "value": null,
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": []
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXScrollBar",
+                        "subrole": "",
+                        "roleDescription": "scroll bar",
+                        "value": null,
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": null,
+                        "children": [
+                          {
+                            "role": "AXValueIndicator",
+                            "subrole": "",
+                            "roleDescription": "value indicator",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": null,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "AXIncrementArrow",
+                            "roleDescription": "increment arrow button",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": null,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "AXDecrementArrow",
+                            "roleDescription": "decrement arrow button",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": null,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "AXIncrementPage",
+                            "roleDescription": "increment page button",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": null,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "AXDecrementPage",
+                            "roleDescription": "decrement page button",
+                            "value": null,
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": null,
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "role": "AXScrollArea",
+                    "subrole": "",
+                    "roleDescription": "scroll area",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": [
+                      {
+                        "role": "AXTextArea",
+                        "subrole": "",
+                        "roleDescription": "text entry area",
+                        "value": "",
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "",
+                    "roleDescription": "button",
+                    "value": null,
+                    "title": "",
+                    "description": "Attach",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "",
+                    "roleDescription": "button",
+                    "value": null,
+                    "title": "",
+                    "description": "Search",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "",
+                    "roleDescription": "button",
+                    "value": null,
+                    "title": "",
+                    "description": "Agent",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "",
+                    "roleDescription": "button",
+                    "value": null,
+                    "title": "",
+                    "description": "Work with Apps",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "",
+                    "roleDescription": "button",
+                    "value": "5.2",
+                    "title": "",
+                    "description": "Options",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "",
+                    "roleDescription": "button",
+                    "value": null,
+                    "title": "",
+                    "description": "Record meeting",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "",
+                    "roleDescription": "button",
+                    "value": null,
+                    "title": "",
+                    "description": "Dictation",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "",
+                    "roleDescription": "button",
+                    "value": null,
+                    "title": "",
+                    "description": "Send",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXScrollArea",
+                    "subrole": "",
+                    "roleDescription": "scroll area",
+                    "value": null,
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXToolbar",
+        "subrole": "",
+        "roleDescription": "toolbar",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXButton",
+            "subrole": "",
+            "roleDescription": "button",
+            "value": null,
+            "title": "",
+            "description": "Toggle Sidebar",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXButton",
+                "subrole": "",
+                "roleDescription": "button",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          },
+          {
+            "role": "AXButton",
+            "subrole": "",
+            "roleDescription": "button",
+            "value": null,
+            "title": "",
+            "description": "New chat",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXButton",
+                "subrole": "",
+                "roleDescription": "button",
+                "value": null,
+                "title": "",
+                "description": "New chat",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          },
+          {
+            "role": "AXButton",
+            "subrole": "",
+            "roleDescription": "button",
+            "value": null,
+            "title": "",
+            "description": "ChatGPT 5.2",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXButton",
+                "subrole": "",
+                "roleDescription": "button",
+                "value": null,
+                "title": "",
+                "description": "ChatGPT 5.2",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          },
+          {
+            "role": "AXButton",
+            "subrole": "",
+            "roleDescription": "button",
+            "value": null,
+            "title": "",
+            "description": "Share",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXButton",
+                "subrole": "",
+                "roleDescription": "button",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          },
+          {
+            "role": "AXButton",
+            "subrole": "",
+            "roleDescription": "button",
+            "value": null,
+            "title": "",
+            "description": "Move to new window",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXButton",
+                "subrole": "",
+                "roleDescription": "button",
+                "value": null,
+                "title": "",
+                "description": "Move to new window",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXCloseButton",
+        "roleDescription": "close button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXFullScreenButton",
+        "roleDescription": "full screen button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "",
+            "roleDescription": "group",
+            "value": null,
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": null,
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXMinimizeButton",
+        "roleDescription": "minimize button",
+        "value": null,
+        "title": "",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      }
+    ]
+  }
+}
