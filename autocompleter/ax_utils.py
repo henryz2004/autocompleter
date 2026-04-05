@@ -15,6 +15,7 @@ try:
     from ApplicationServices import (
         AXUIElementGetPid,
         AXValueGetValue,
+        kAXValueTypeCFRange,
         kAXValueTypeCGPoint,
         kAXValueTypeCGSize,
     )
@@ -33,6 +34,153 @@ def ax_get_attribute(element, attribute: str):
     )
     if err == 0:
         return value
+    return None
+
+
+# Sentinel for missing attributes in batch results
+_AX_MISSING = object()
+
+# Common attribute sets used by tree walks
+_TREE_ATTRS = [
+    "AXRole", "AXSubrole", "AXRoleDescription", "AXValue",
+    "AXTitle", "AXDescription", "AXPlaceholderValue",
+    "AXNumberOfCharacters", "AXVisibleChildren",
+]
+# Fallback when AXVisibleChildren is not supported
+_TREE_ATTRS_FALLBACK = [
+    "AXRole", "AXSubrole", "AXRoleDescription", "AXValue",
+    "AXTitle", "AXDescription", "AXPlaceholderValue",
+    "AXNumberOfCharacters", "AXChildren",
+]
+
+
+def ax_get_multiple_attributes(
+    element, attributes: list[str]
+) -> dict[str, object]:
+    """Batch-fetch multiple attributes in a single IPC call.
+
+    Returns a dict mapping attribute names to values.  Attributes that
+    are not supported or have errors map to ``None``.
+
+    Uses ``AXUIElementCopyMultipleAttributeValues`` which makes one
+    cross-process round-trip instead of N, dramatically reducing latency
+    for tree walks (9 calls per node → 1).
+    """
+    if not HAS_ACCESSIBILITY:
+        return {a: None for a in attributes}
+    try:
+        err, values = ApplicationServices.AXUIElementCopyMultipleAttributeValues(
+            element, attributes, 0, None
+        )
+        if err == 0 and values is not None:
+            result = {}
+            for i, attr in enumerate(attributes):
+                if i < len(values):
+                    v = values[i]
+                    # pyobjc wraps missing/error values as NSNull or similar
+                    if v is None or type(v).__name__ == "NSNull":
+                        result[attr] = None
+                    else:
+                        result[attr] = v
+                else:
+                    result[attr] = None
+            return result
+    except Exception:
+        logger.debug("Batch attribute fetch failed, falling back to individual calls", exc_info=True)
+    # Fallback: fetch individually (shouldn't normally happen)
+    return {a: ax_get_attribute(element, a) for a in attributes}
+
+
+def ax_get_tree_attrs(element) -> dict[str, object]:
+    """Fetch the standard set of tree-walk attributes in one IPC call.
+
+    Prefers ``AXVisibleChildren`` (only on-screen elements) and falls
+    back to ``AXChildren`` if the element doesn't support it.
+
+    Returns a dict with keys: AXRole, AXSubrole, AXRoleDescription,
+    AXValue, AXTitle, AXDescription, AXPlaceholderValue,
+    AXNumberOfCharacters, and either AXVisibleChildren or AXChildren
+    (stored under the key ``"children"`` for convenience).
+    """
+    attrs = ax_get_multiple_attributes(element, _TREE_ATTRS)
+    children = attrs.get("AXVisibleChildren")
+    # AXVisibleChildren may return an AXValueRef or other non-list type
+    # on some elements — only trust it if it's a usable sequence.
+    if not _is_ax_list(children) or len(children) == 0:
+        # AXVisibleChildren not supported or empty — try AXChildren
+        fallback_children = ax_get_attribute(element, "AXChildren")
+        if _is_ax_list(fallback_children) and len(fallback_children) > 0:
+            children = list(fallback_children)
+        else:
+            children = []
+    else:
+        children = list(children)
+    attrs["children"] = children
+    return attrs
+
+
+def _is_ax_list(obj) -> bool:
+    """Check if an AX return value is a usable list of elements.
+
+    pyobjc may return ``NSArray`` (or ``NSCFArray``) which is iterable
+    and supports ``len()`` but fails ``isinstance(obj, list)``.  We
+    accept anything that looks like a sequence of AX elements while
+    rejecting scalar wrappers like ``AXValueRef``.
+    """
+    if obj is None:
+        return False
+    if isinstance(obj, (list, tuple)):
+        return True
+    # pyobjc NSArray: has __len__ and __getitem__ but is not list/tuple.
+    # AXValueRef does NOT have __len__, so this distinguishes them.
+    return hasattr(obj, "__len__") and hasattr(obj, "__getitem__") and not isinstance(obj, (str, bytes))
+
+
+def ax_get_children(element) -> list:
+    """Get children of an AX element, preferring visible-only children.
+
+    Tries ``AXVisibleChildren`` first (returns only on-screen elements,
+    dramatically reducing node count for scrollable containers).  Falls
+    back to ``AXChildren`` if the element doesn't support visible children.
+    """
+    children = ax_get_attribute(element, "AXVisibleChildren")
+    if _is_ax_list(children) and len(children) > 0:
+        return list(children)
+    children = ax_get_attribute(element, "AXChildren")
+    if _is_ax_list(children):
+        return list(children)
+    return []
+
+
+def ax_get_visible_text(element) -> str | None:
+    """Get the visible text of a text element using AXVisibleCharacterRange.
+
+    Uses ``AXVisibleCharacterRange`` to determine which characters are
+    on-screen, then ``AXStringForRange`` (a parameterized attribute) to
+    fetch just that text.  Returns the visible text string, or ``None``
+    if the element doesn't support these attributes.
+
+    This is far more efficient than walking child elements for text
+    areas, editors, and similar elements with large text content.
+    """
+    if not HAS_ACCESSIBILITY:
+        return None
+    try:
+        vis_range = ax_get_attribute(element, "AXVisibleCharacterRange")
+        if vis_range is None:
+            return None
+        # vis_range is an AXValueRef wrapping a CFRange
+        ok, cf_range = AXValueGetValue(vis_range, kAXValueTypeCFRange, None)
+        if not ok:
+            return None
+        # Use parameterized attribute AXStringForRange
+        err, text = ApplicationServices.AXUIElementCopyParameterizedAttributeValue(
+            element, "AXStringForRange", vis_range, None
+        )
+        if err == 0 and isinstance(text, str):
+            return text
+    except Exception:
+        logger.debug("Failed to get visible text via AXStringForRange", exc_info=True)
     return None
 
 
@@ -114,20 +262,22 @@ def dump_ax_tree(
 
     Writes a human-readable representation to *out* (any object with a
     ``write`` method — a file, ``sys.stdout``, or ``io.StringIO``).
+    Uses batch attribute fetching for performance.
     """
     if depth > max_depth:
         out.write(f"{'  ' * depth}... (depth limit {max_depth})\n")
         return
 
-    role = ax_get_attribute(element, "AXRole") or "?"
-    subrole = ax_get_attribute(element, "AXSubrole")
-    value = ax_get_attribute(element, "AXValue")
-    title = ax_get_attribute(element, "AXTitle")
-    desc = ax_get_attribute(element, "AXDescription")
-    role_desc = ax_get_attribute(element, "AXRoleDescription")
-    placeholder = ax_get_attribute(element, "AXPlaceholderValue")
-    num_chars = ax_get_attribute(element, "AXNumberOfCharacters")
-    children = ax_get_attribute(element, "AXChildren") or []
+    a = ax_get_tree_attrs(element)
+    role = a.get("AXRole") or "?"
+    subrole = a.get("AXSubrole")
+    value = a.get("AXValue")
+    title = a.get("AXTitle")
+    desc = a.get("AXDescription")
+    role_desc = a.get("AXRoleDescription")
+    placeholder = a.get("AXPlaceholderValue")
+    num_chars = a.get("AXNumberOfCharacters")
+    children = a.get("children") or []
     n_children = len(children) if children else 0
 
     attrs: list[str] = []
@@ -185,15 +335,16 @@ def serialize_ax_tree(
     if depth > max_depth:
         return None
 
-    role = ax_get_attribute(element, "AXRole") or ""
-    subrole = ax_get_attribute(element, "AXSubrole") or ""
-    role_desc = ax_get_attribute(element, "AXRoleDescription") or ""
-    value = ax_get_attribute(element, "AXValue")
-    title = ax_get_attribute(element, "AXTitle") or ""
-    desc = ax_get_attribute(element, "AXDescription") or ""
-    placeholder = ax_get_attribute(element, "AXPlaceholderValue")
-    num_chars = ax_get_attribute(element, "AXNumberOfCharacters")
-    children = ax_get_attribute(element, "AXChildren") or []
+    a = ax_get_tree_attrs(element)
+    role = a.get("AXRole") or ""
+    subrole = a.get("AXSubrole") or ""
+    role_desc = a.get("AXRoleDescription") or ""
+    value = a.get("AXValue")
+    title = a.get("AXTitle") or ""
+    desc = a.get("AXDescription") or ""
+    placeholder = a.get("AXPlaceholderValue")
+    num_chars = a.get("AXNumberOfCharacters")
+    children = a.get("children") or []
 
     node: dict = {
         "role": role,
@@ -225,7 +376,7 @@ def serialize_ax_tree(
                 sel_range = ax_get_attribute(element, "AXSelectedTextRange")
                 if sel_range is not None:
                     ok, cf_range = AXValueGetValue(
-                        sel_range, 4, None  # 4 = kAXValueTypeCFRange
+                        sel_range, kAXValueTypeCFRange, None
                     )
                     if ok:
                         node["cursorPosition"] = cf_range.location

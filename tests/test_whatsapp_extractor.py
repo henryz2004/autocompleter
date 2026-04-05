@@ -24,6 +24,14 @@ def _ax_dispatch(element, attribute):
     return None
 
 
+def _ax_children_dispatch(element):
+    """Mock ax_get_children using _ax_attrs dict."""
+    attrs = getattr(element, "_ax_attrs", None)
+    if attrs is not None:
+        return attrs.get("AXChildren") or []
+    return []
+
+
 def make_ax(role="", subrole="", rdesc="", value=None, title="",
             desc="", children=None):
     """Build a MagicMock AX element with the given attributes."""
@@ -270,6 +278,9 @@ class TestWhatsAppFullExtraction:
         with patch(
             "autocompleter.conversation_extractors.ax_get_attribute",
             side_effect=_ax_dispatch,
+        ), patch(
+            "autocompleter.conversation_extractors.ax_get_children",
+            side_effect=_ax_children_dispatch,
         ):
             turns = ext.extract(window)
 
@@ -292,6 +303,9 @@ class TestWhatsAppFullExtraction:
         with patch(
             "autocompleter.conversation_extractors.ax_get_attribute",
             side_effect=_ax_dispatch,
+        ), patch(
+            "autocompleter.conversation_extractors.ax_get_children",
+            side_effect=_ax_children_dispatch,
         ):
             turns = ext.extract(window)
 
@@ -312,6 +326,9 @@ class TestWhatsAppFullExtraction:
         with patch(
             "autocompleter.conversation_extractors.ax_get_attribute",
             side_effect=_ax_dispatch,
+        ), patch(
+            "autocompleter.conversation_extractors.ax_get_children",
+            side_effect=_ax_children_dispatch,
         ):
             turns = ext.extract(window)
 
@@ -332,6 +349,9 @@ class TestWhatsAppFullExtraction:
         with patch(
             "autocompleter.conversation_extractors.ax_get_attribute",
             side_effect=_ax_dispatch,
+        ), patch(
+            "autocompleter.conversation_extractors.ax_get_children",
+            side_effect=_ax_children_dispatch,
         ):
             turns = ext.extract(window)
 
@@ -348,6 +368,9 @@ class TestWhatsAppFullExtraction:
         with patch(
             "autocompleter.conversation_extractors.ax_get_attribute",
             side_effect=_ax_dispatch,
+        ), patch(
+            "autocompleter.conversation_extractors.ax_get_children",
+            side_effect=_ax_children_dispatch,
         ):
             turns = ext.extract(window, max_turns=5)
 
@@ -361,6 +384,9 @@ class TestWhatsAppFullExtraction:
         with patch(
             "autocompleter.conversation_extractors.ax_get_attribute",
             side_effect=_ax_dispatch,
+        ), patch(
+            "autocompleter.conversation_extractors.ax_get_children",
+            side_effect=_ax_children_dispatch,
         ):
             assert ext.extract(window) is None
 
@@ -377,6 +403,9 @@ class TestWhatsAppFullExtraction:
         with patch(
             "autocompleter.conversation_extractors.ax_get_attribute",
             side_effect=_ax_dispatch,
+        ), patch(
+            "autocompleter.conversation_extractors.ax_get_children",
+            side_effect=_ax_children_dispatch,
         ):
             turns = ext.extract(window)
 

@@ -22,7 +22,7 @@ try:
 except ImportError:
     HAS_ACCESSIBILITY = False
 
-from .ax_utils import ax_get_attribute, ax_get_pid, ax_get_position, ax_get_size, dump_ax_tree
+from .ax_utils import ax_get_attribute, ax_get_children, ax_get_pid, ax_get_position, ax_get_size, ax_get_visible_text, dump_ax_tree
 from .conversation_extractors import (
     ConversationTurn,
     _collect_child_text,
@@ -551,11 +551,18 @@ class InputObserver:
         # Extract text only from content-bearing roles
         node_text: str | None = None  # the text extracted from this node
         if role in self._CONTENT_ROLES:
-            value = ax_get_attribute(element, "AXValue")
+            # For text areas, try AXVisibleCharacterRange first (2 IPC calls
+            # vs walking all children) — gives us exactly the on-screen text.
             text: str | None = None
-            if isinstance(value, str) and value.strip():
-                text = value.strip()
-            else:
+            if role in {"AXTextArea", "AXTextField"}:
+                vis = ax_get_visible_text(element)
+                if vis and vis.strip():
+                    text = vis.strip()
+            if text is None:
+                value = ax_get_attribute(element, "AXValue")
+                if isinstance(value, str) and value.strip():
+                    text = value.strip()
+            if text is None:
                 # Fallback: many Electron apps (ChatGPT, Slack) put message
                 # text in AXDescription instead of AXValue.
                 desc = ax_get_attribute(element, "AXDescription")
@@ -605,7 +612,7 @@ class InputObserver:
                 desc_for_children = node_text
 
         # Recurse into children (capped per node to avoid wide-tree blowup)
-        children = ax_get_attribute(element, "AXChildren")
+        children = ax_get_children(element)
         if children:
             # Claude Desktop thinking blocks: AXGroup with >=3 children
             # whose first child is an AXButton titled "Thought...".
@@ -700,7 +707,7 @@ class InputObserver:
         if el_role == role:
             return element
 
-        children = ax_get_attribute(element, "AXChildren")
+        children = ax_get_children(element)
         if children:
             for child in children[:self._MAX_CHILDREN_PER_NODE]:
                 result = self._find_element_by_role(
@@ -733,7 +740,7 @@ class InputObserver:
             # would be children of this one anyway.
             return _results
 
-        children = ax_get_attribute(element, "AXChildren")
+        children = ax_get_children(element)
         if children:
             for child in children[:self._MAX_CHILDREN_PER_NODE]:
                 self._find_all_elements_by_role(

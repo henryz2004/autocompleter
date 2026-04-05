@@ -66,12 +66,23 @@ def _ax_get_attribute_dispatcher(element, attribute):
     return None
 
 
+def _ax_get_children_dispatcher(element):
+    """Dispatcher for patched ax_get_children using mock _ax_attrs."""
+    attrs = getattr(element, "_ax_attrs", None)
+    if attrs is not None:
+        return attrs.get("AXChildren") or []
+    return []
+
+
 @pytest.fixture(autouse=True)
 def patch_ax():
-    """Patch ax_get_attribute for all tests in this module."""
+    """Patch ax_get_attribute and ax_get_children for all tests in this module."""
     with patch(
         "autocompleter.conversation_extractors.ax_get_attribute",
         side_effect=_ax_get_attribute_dispatcher,
+    ), patch(
+        "autocompleter.conversation_extractors.ax_get_children",
+        side_effect=_ax_get_children_dispatcher,
     ):
         yield
 

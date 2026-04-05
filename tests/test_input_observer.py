@@ -250,6 +250,14 @@ def _ax_dispatch(element, attribute):
     return None
 
 
+def _ax_children_dispatch(element):
+    """Mock ax_get_children: return AXChildren from mock attrs."""
+    attrs = getattr(element, "_attrs", None)
+    if attrs is not None:
+        return attrs.get("AXChildren") or []
+    return []
+
+
 class TestCollectText:
     def _collect(self, root, max_depth=20, max_items=100):
         observer = InputObserver.__new__(InputObserver)
@@ -257,7 +265,8 @@ class TestCollectText:
         results = []
         stats = {"visited": 0, "max_depth_hit": 0, "skipped_chrome": 0,
                  "no_value": 0, "too_short": 0, "placeholder": 0, "from_desc": 0}
-        with patch("autocompleter.input_observer.ax_get_attribute", side_effect=_ax_dispatch):
+        with patch("autocompleter.input_observer.ax_get_attribute", side_effect=_ax_dispatch), \
+             patch("autocompleter.input_observer.ax_get_children", side_effect=_ax_children_dispatch):
             observer._collect_text(root, results, max_depth, max_items, _stats=stats)
         return results, stats
 
@@ -384,7 +393,11 @@ class TestGetBrowserUrl:
                 return "https://google.com"
             return None
 
-        with patch("autocompleter.input_observer.ax_get_attribute", side_effect=fake_ax):
+        def fake_children(element):
+            return fake_ax(element, "AXChildren") or []
+
+        with patch("autocompleter.input_observer.ax_get_attribute", side_effect=fake_ax), \
+             patch("autocompleter.input_observer.ax_get_children", side_effect=fake_children):
             url = observer._get_browser_url(app_el, "Google Chrome")
         assert url == "https://google.com"
 
@@ -438,7 +451,8 @@ class TestCollectTextSectionMarkers:
         results = []
         stats = {"visited": 0, "max_depth_hit": 0, "skipped_chrome": 0,
                  "no_value": 0, "too_short": 0, "placeholder": 0, "from_desc": 0}
-        with patch("autocompleter.input_observer.ax_get_attribute", side_effect=_ax_dispatch):
+        with patch("autocompleter.input_observer.ax_get_attribute", side_effect=_ax_dispatch), \
+             patch("autocompleter.input_observer.ax_get_children", side_effect=_ax_children_dispatch):
             observer._collect_text(root, results, max_depth, max_items, _stats=stats)
         return results, stats
 
@@ -542,7 +556,8 @@ class TestCollectTextChromeSubroleFiltering:
         results = []
         stats = {"visited": 0, "max_depth_hit": 0, "skipped_chrome": 0,
                  "no_value": 0, "too_short": 0, "placeholder": 0, "from_desc": 0}
-        with patch("autocompleter.input_observer.ax_get_attribute", side_effect=_ax_dispatch):
+        with patch("autocompleter.input_observer.ax_get_attribute", side_effect=_ax_dispatch), \
+             patch("autocompleter.input_observer.ax_get_children", side_effect=_ax_children_dispatch):
             observer._collect_text(root, results, max_depth, max_items, _stats=stats)
         return results, stats
 
@@ -659,7 +674,8 @@ class TestCollectTextParentDescDedup:
         results = []
         stats = {"visited": 0, "max_depth_hit": 0, "skipped_chrome": 0,
                  "no_value": 0, "too_short": 0, "placeholder": 0, "from_desc": 0}
-        with patch("autocompleter.input_observer.ax_get_attribute", side_effect=_ax_dispatch):
+        with patch("autocompleter.input_observer.ax_get_attribute", side_effect=_ax_dispatch), \
+             patch("autocompleter.input_observer.ax_get_children", side_effect=_ax_children_dispatch):
             observer._collect_text(root, results, max_depth, max_items, _stats=stats)
         return results, stats
 

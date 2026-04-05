@@ -52,6 +52,14 @@ def _ax_get_attribute_dispatcher(element, attribute):
     return None
 
 
+def _ax_get_children_dispatcher(element):
+    """Dispatcher for patched ax_get_children using mock _ax_attrs."""
+    attrs = getattr(element, "_ax_attrs", None)
+    if attrs is not None:
+        return attrs.get("AXChildren") or []
+    return []
+
+
 def _mock_collect_child_text(element, max_depth=5, max_chars=2000, depth=0):
     """Mock of _collect_child_text that mirrors real behavior.
 
@@ -128,6 +136,10 @@ def test_extractor_regression(fixture_name: str):
         patch(
             "autocompleter.conversation_extractors.ax_get_attribute",
             side_effect=_ax_get_attribute_dispatcher,
+        ),
+        patch(
+            "autocompleter.conversation_extractors.ax_get_children",
+            side_effect=_ax_get_children_dispatcher,
         ),
         patch(
             "autocompleter.conversation_extractors._collect_child_text",

@@ -18,7 +18,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional
 
-from .ax_utils import ax_get_attribute
+from .ax_utils import ax_get_attribute, ax_get_children
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,7 @@ def _collect_child_text(
 
     parts: list[str] = []
     total = 0
-    children = ax_get_attribute(element, "AXChildren")
+    children = ax_get_children(element)
     if children:
         # Buffer adjacent AXStaticText values to concatenate fragments
         text_buffer: list[str] = []
@@ -208,7 +208,7 @@ class GenericExtractor(ConversationExtractor):
                 if len(turns) >= max_turns:
                     return turns
 
-        children = ax_get_attribute(element, "AXChildren")
+        children = ax_get_children(element)
         if children:
             for child in children[: self._MAX_CHILDREN_PER_NODE]:
                 if len(turns) >= max_turns:
@@ -227,7 +227,7 @@ class GenericExtractor(ConversationExtractor):
         is short (likely a speaker name, <= 40 chars) and another is longer
         (likely the message body, > 5 chars).
         """
-        children = ax_get_attribute(element, "AXChildren")
+        children = ax_get_children(element)
         if not children or len(children) < 2:
             return None
 
@@ -317,7 +317,7 @@ class GeminiExtractor(ConversationExtractor):
             role_desc = ax_get_attribute(element, "AXRoleDescription") or ""
             if role_desc == "main":
                 return element
-        children = ax_get_attribute(element, "AXChildren")
+        children = ax_get_children(element)
         if children:
             for child in children[:50]:
                 result = self._find_landmark_main(child, max_depth, depth + 1)
@@ -336,7 +336,7 @@ class GeminiExtractor(ConversationExtractor):
         if depth > max_depth:
             return None
 
-        children = ax_get_attribute(element, "AXChildren")
+        children = ax_get_children(element)
         if not children:
             return None
 
@@ -374,7 +374,7 @@ class GeminiExtractor(ConversationExtractor):
 
         Falls back to index-based alternation if no speaker headings are found.
         """
-        children = ax_get_attribute(container, "AXChildren")
+        children = ax_get_children(container)
         if not children:
             return []
 
@@ -386,7 +386,7 @@ class GeminiExtractor(ConversationExtractor):
         for child in children[:50]:
             role = ax_get_attribute(child, "AXRole") or ""
             if role in {"AXGroup", "AXList"}:
-                grandchildren = ax_get_attribute(child, "AXChildren")
+                grandchildren = ax_get_children(child)
                 count = len(grandchildren) if grandchildren else 0
                 candidate = child
                 # Unwrap single-child wrapper
@@ -394,7 +394,7 @@ class GeminiExtractor(ConversationExtractor):
                     inner = grandchildren[0]
                     inner_role = ax_get_attribute(inner, "AXRole") or ""
                     if inner_role in {"AXGroup", "AXList"}:
-                        inner_children = ax_get_attribute(inner, "AXChildren")
+                        inner_children = ax_get_children(inner)
                         inner_count = len(inner_children) if inner_children else 0
                         if inner_count > count:
                             candidate = inner
@@ -406,7 +406,7 @@ class GeminiExtractor(ConversationExtractor):
         if best_group is None or best_count == 0:
             return []
 
-        msg_children = ax_get_attribute(best_group, "AXChildren")
+        msg_children = ax_get_children(best_group)
         if not msg_children:
             return []
 
@@ -472,7 +472,7 @@ class GeminiExtractor(ConversationExtractor):
         if _visits[0] > 200 or depth > max_depth:
             return
 
-        children = ax_get_attribute(element, "AXChildren")
+        children = ax_get_children(element)
         if not children:
             return
 
@@ -499,7 +499,7 @@ class GeminiExtractor(ConversationExtractor):
         over the title-derived text (which may be single-line).
         """
         # Try to get text from the AXGroup child (skipping the "You said" AXStaticText)
-        children = ax_get_attribute(heading, "AXChildren") or []
+        children = ax_get_children(heading) or []
         for child in children:
             child_role = ax_get_attribute(child, "AXRole") or ""
             if child_role == "AXGroup":
@@ -518,7 +518,7 @@ class GeminiExtractor(ConversationExtractor):
     @staticmethod
     def _extract_response_after_heading(heading, parent) -> str:
         """Extract Gemini response text from siblings following a 'Gemini said' heading."""
-        parent_children = ax_get_attribute(parent, "AXChildren") or []
+        parent_children = ax_get_children(parent) or []
 
         # Find the heading's position among siblings
         heading_idx = None
@@ -604,7 +604,7 @@ class SlackExtractor(ConversationExtractor):
                 if len(turns) >= max_turns:
                     return turns
 
-        children = ax_get_attribute(element, "AXChildren")
+        children = ax_get_children(element)
         if children:
             for child in children[:50]:
                 if len(turns) >= max_turns:
@@ -623,7 +623,7 @@ class SlackExtractor(ConversationExtractor):
         - A child with the sender's name (short text, often a button or static text)
         - A child group containing the message body
         """
-        children = ax_get_attribute(element, "AXChildren")
+        children = ax_get_children(element)
         if not children:
             return None
 
@@ -742,14 +742,14 @@ class ChatGPTExtractor(ConversationExtractor):
         ChatGPT responses typically contain extra child elements like
         "Sources" buttons alongside the text, while user messages don't.
         """
-        children = ax_get_attribute(container, "AXChildren") or []
+        children = ax_get_children(container) or []
         for child in children[:10]:
             child_role = ax_get_attribute(child, "AXRole") or ""
             if child_role == "AXButton":
                 return True
             # Also check grandchildren (common in ChatGPT 5.x: AXGroup > AXButton)
             if child_role == "AXGroup":
-                grandchildren = ax_get_attribute(child, "AXChildren") or []
+                grandchildren = ax_get_children(child) or []
                 for gc in grandchildren[:10]:
                     gc_role = ax_get_attribute(gc, "AXRole") or ""
                     if gc_role == "AXButton":
@@ -781,7 +781,7 @@ class ChatGPTExtractor(ConversationExtractor):
             articles.append(element)
             return articles  # Don't recurse into articles
 
-        children = ax_get_attribute(element, "AXChildren")
+        children = ax_get_children(element)
         if children:
             for child in children[:50]:
                 child_articles = self._find_articles(
@@ -821,19 +821,19 @@ class ChatGPTExtractor(ConversationExtractor):
 
         if role == "AXList" and subrole == "AXSectionList":
             # Found a section list — check if it has text content
-            children = ax_get_attribute(element, "AXChildren") or []
+            children = ax_get_children(element) or []
             groups = []
             for child in children[:100]:
                 child_role = ax_get_attribute(child, "AXRole") or ""
                 if child_role == "AXGroup":
-                    grandchildren = ax_get_attribute(child, "AXChildren") or []
+                    grandchildren = ax_get_children(child) or []
                     if grandchildren and self._has_static_text(child, max_depth=3):
                         groups.append(child)
             if groups:
                 return groups
             # No text content — this is likely a sidebar list, keep searching
 
-        children = ax_get_attribute(element, "AXChildren")
+        children = ax_get_children(element)
         if children:
             for child in children[:50]:
                 result = self._find_section_list_messages(
@@ -849,7 +849,7 @@ class ChatGPTExtractor(ConversationExtractor):
         """Check if an element has any AXStaticText descendants."""
         if depth > max_depth:
             return False
-        children = ax_get_attribute(element, "AXChildren") or []
+        children = ax_get_children(element) or []
         for child in children[:20]:
             child_role = ax_get_attribute(child, "AXRole") or ""
             if child_role == "AXStaticText":
@@ -910,7 +910,7 @@ class ClaudeDesktopExtractor(ConversationExtractor):
         if _visits[0] > self._MAX_VISITS or depth > 15:
             return None
 
-        children = ax_get_attribute(element, "AXChildren") or []
+        children = ax_get_children(element) or []
         for child in children[:50]:
             subrole = ax_get_attribute(child, "AXSubrole") or ""
             desc = ax_get_attribute(child, "AXDescription") or ""
@@ -929,7 +929,7 @@ class ClaudeDesktopExtractor(ConversationExtractor):
         self, container, max_turns: int
     ) -> Optional[list[ConversationTurn]]:
         """Walk the container's children, grouping content by 'Message actions' delimiters."""
-        children = ax_get_attribute(container, "AXChildren") or []
+        children = ax_get_children(container) or []
         turns: list[ConversationTurn] = []
         pending: list = []  # content groups for the current message
 
@@ -956,11 +956,11 @@ class ClaudeDesktopExtractor(ConversationExtractor):
     @staticmethod
     def _actions_have_feedback(actions_group) -> bool:
         """Return True if the 'Message actions' group contains feedback buttons."""
-        for child in ax_get_attribute(actions_group, "AXChildren") or []:
+        for child in ax_get_children(actions_group) or []:
             child_desc = ax_get_attribute(child, "AXDescription") or ""
             if "feedback" in child_desc.lower():
                 return True
-            for gc in ax_get_attribute(child, "AXChildren") or []:
+            for gc in ax_get_children(child) or []:
                 gc_desc = ax_get_attribute(gc, "AXDescription") or ""
                 if "feedback" in gc_desc.lower():
                     return True
@@ -985,13 +985,13 @@ class ClaudeDesktopExtractor(ConversationExtractor):
     @staticmethod
     def _extract_assistant_response(group) -> str:
         """Extract the response portion of an assistant message, skipping thinking."""
-        children = ax_get_attribute(group, "AXChildren") or []
+        children = ax_get_children(group) or []
         if not children:
             return _collect_child_text(group, max_depth=6, max_chars=1500)
 
         # Unwrap single-child wrapper
         inner = children[0] if len(children) == 1 else group
-        inner_children = ax_get_attribute(inner, "AXChildren") or []
+        inner_children = ax_get_children(inner) or []
 
         # Detect whether this group contains a "Thought process" section
         has_thinking = False
@@ -1019,7 +1019,7 @@ class ClaudeDesktopExtractor(ConversationExtractor):
                 # Still inside the thinking section — look for "Done" marker.
                 # Check sub-children individually since "Done" may be nested
                 # alongside thinking text in the same group.
-                sub_children = ax_get_attribute(child, "AXChildren") or []
+                sub_children = ax_get_children(child) or []
                 for sc in sub_children:
                     sc_text = _collect_child_text(sc, max_depth=2, max_chars=50)
                     if sc_text.strip() == "Done":
@@ -1106,7 +1106,7 @@ class ActionDelimitedExtractor(ConversationExtractor):
         if _visits[0] > self._MAX_VISITS or depth > 15:
             return None
 
-        children = ax_get_attribute(element, "AXChildren") or []
+        children = ax_get_children(element) or []
 
         action_count = 0
         for child in children[:60]:
@@ -1143,7 +1143,7 @@ class ActionDelimitedExtractor(ConversationExtractor):
         """Check if element contains buttons with action-like descriptions."""
         if depth > max_depth:
             return False
-        children = ax_get_attribute(element, "AXChildren") or []
+        children = ax_get_children(element) or []
         for child in children[:10]:
             role = ax_get_attribute(child, "AXRole") or ""
             if role == "AXButton":
@@ -1160,7 +1160,7 @@ class ActionDelimitedExtractor(ConversationExtractor):
         self, container, max_turns: int
     ) -> Optional[list[ConversationTurn]]:
         """Group children by action-group delimiters into conversation turns."""
-        children = ax_get_attribute(container, "AXChildren") or []
+        children = ax_get_children(container) or []
         turns: list[ConversationTurn] = []
         pending: list = []
 
@@ -1195,7 +1195,7 @@ class ActionDelimitedExtractor(ConversationExtractor):
         desc = (ax_get_attribute(element, "AXDescription") or "").lower()
         if any(kw in desc for kw in self._ASSISTANT_KEYWORDS):
             return True
-        children = ax_get_attribute(element, "AXChildren") or []
+        children = ax_get_children(element) or []
         for child in children[:10]:
             if self._has_assistant_indicators(child, max_depth, depth + 1):
                 return True
@@ -1285,7 +1285,7 @@ class IMessageExtractor(ConversationExtractor):
                 if desc == "Messages":
                     return element
 
-        children = ax_get_attribute(element, "AXChildren")
+        children = ax_get_children(element)
         if children:
             for child in children[:50]:
                 result = self._find_messages_collection(
@@ -1299,7 +1299,7 @@ class IMessageExtractor(ConversationExtractor):
         self, messages_collection, max_turns: int
     ) -> list[ConversationTurn]:
         """Extract turns from the Messages collection's direct children."""
-        children = ax_get_attribute(messages_collection, "AXChildren")
+        children = ax_get_children(messages_collection)
         if not children:
             return []
 
@@ -1318,7 +1318,7 @@ class IMessageExtractor(ConversationExtractor):
 
             # Skip separator/timestamp rows: their first child is
             # AXStaticText (e.g. "Today 10:09 PM", "Delivered").
-            child_children = ax_get_attribute(child, "AXChildren")
+            child_children = ax_get_children(child)
             if child_children:
                 first_child_role = ax_get_attribute(child_children[0], "AXRole") or ""
                 if first_child_role == "AXStaticText":
@@ -1357,7 +1357,7 @@ class IMessageExtractor(ConversationExtractor):
         """
         if depth > max_depth:
             return ""
-        children = ax_get_attribute(element, "AXChildren")
+        children = ax_get_children(element)
         if not children:
             return ""
         for child in children:
@@ -1472,7 +1472,7 @@ class WhatsAppExtractor(ConversationExtractor):
                 if desc.startswith("Messages in chat with"):
                     return element
 
-        children = ax_get_attribute(element, "AXChildren")
+        children = ax_get_children(element)
         if children:
             for child in children[:50]:
                 result = self._find_message_table(
@@ -1531,13 +1531,13 @@ class WhatsAppExtractor(ConversationExtractor):
 
         rdesc = ax_get_attribute(element, "AXRoleDescription") or ""
         if rdesc == "Nav bar":
-            children = ax_get_attribute(element, "AXChildren") or []
+            children = ax_get_children(element) or []
             for child in children:
                 if (ax_get_attribute(child, "AXRole") or "") == "AXHeading":
                     results.append(child)
             return  # Don't recurse into nav bars
 
-        children = ax_get_attribute(element, "AXChildren")
+        children = ax_get_children(element)
         if children:
             for child in children[:50]:
                 self._collect_nav_headings(
@@ -1550,7 +1550,7 @@ class WhatsAppExtractor(ConversationExtractor):
         self, table, max_turns: int, chat_name: str,
     ) -> list[ConversationTurn]:
         """Extract conversation turns from the message table's children."""
-        children = ax_get_attribute(table, "AXChildren")
+        children = ax_get_children(table)
         if not children:
             return []
 
@@ -1795,7 +1795,7 @@ class DiscordExtractor(ConversationExtractor):
                 if desc.startswith("Messages in"):
                     return element
 
-        children = ax_get_attribute(element, "AXChildren")
+        children = ax_get_children(element)
         if children:
             for child in children[:50]:
                 result = self._find_message_list(
@@ -1855,7 +1855,7 @@ class DiscordExtractor(ConversationExtractor):
             value = ax_get_attribute(element, "AXValue") or ""
             if value.strip():
                 _results.append(value.strip())
-        children = ax_get_attribute(element, "AXChildren") or []
+        children = ax_get_children(element) or []
         for child in children[:20]:
             if len(_results) >= max_results:
                 break
@@ -1885,7 +1885,7 @@ class DiscordExtractor(ConversationExtractor):
                     )
                     return element
 
-        children = ax_get_attribute(element, "AXChildren") or []
+        children = ax_get_children(element) or []
         for child in children[:50]:
             result = self._find_status_region(
                 child, max_depth, depth + 1, _visits,
@@ -1905,7 +1905,7 @@ class DiscordExtractor(ConversationExtractor):
             value = ax_get_attribute(element, "AXValue") or ""
             if value.strip():
                 return value.strip()
-        children = ax_get_attribute(element, "AXChildren") or []
+        children = ax_get_children(element) or []
         for child in children[:20]:
             val = self._first_static_text_value(child, max_depth, depth + 1)
             if val:
@@ -1921,7 +1921,7 @@ class DiscordExtractor(ConversationExtractor):
         containing an ``AXImage`` whose ``description`` is the contact name
         (e.g. ``"Bankim"``).  Returns the name, or ``""`` if not found.
         """
-        children = ax_get_attribute(msg_list, "AXChildren") or []
+        children = ax_get_children(msg_list) or []
         if not children:
             return ""
         header = children[0]
@@ -1938,7 +1938,7 @@ class DiscordExtractor(ConversationExtractor):
             desc = ax_get_attribute(element, "AXDescription") or ""
             if desc and len(desc) <= 50:
                 return desc
-        children = ax_get_attribute(element, "AXChildren") or []
+        children = ax_get_children(element) or []
         for child in children[:10]:
             name = self._find_header_image_name(child, max_depth, depth + 1)
             if name:
@@ -1972,7 +1972,7 @@ class DiscordExtractor(ConversationExtractor):
             "[Discord] _extract_turns: username=%r display_name=%r dm_target=%r",
             current_username, display_name, dm_target,
         )
-        children = ax_get_attribute(msg_list, "AXChildren") or []
+        children = ax_get_children(msg_list) or []
         turns: list[ConversationTurn] = []
 
         for child in children:
@@ -2015,7 +2015,7 @@ class DiscordExtractor(ConversationExtractor):
         """Find the AXDocumentArticle message element (may be nested 1 deep)."""
         if (ax_get_attribute(element, "AXRoleDescription") or "") == "message":
             return element
-        children = ax_get_attribute(element, "AXChildren") or []
+        children = ax_get_children(element) or []
         for child in children[:5]:
             if (ax_get_attribute(child, "AXRoleDescription") or "") == "message":
                 return child
@@ -2082,7 +2082,7 @@ class DiscordExtractor(ConversationExtractor):
         Looks for AXGroup children (skipping the AXHeading which has the
         speaker/timestamp) and collects text.
         """
-        children = ax_get_attribute(msg_el, "AXChildren") or []
+        children = ax_get_children(msg_el) or []
         parts: list[str] = []
         for child in children:
             role = ax_get_attribute(child, "AXRole") or ""

@@ -83,6 +83,9 @@ style precisely — word choice, punctuation, capitalization, everything.
 - Do not introduce new topics or tangents
 - Keep completions SHORT — a few words to half a sentence
 - Never generate more than ~15 words per completion
+- Start with a leading space if the text before the cursor does NOT end \
+with a space (so the words don't collide). Omit the leading space if the \
+cursor already follows a space.
 - Vary direction across suggestions: branch the thought in different \
 plausible ways (e.g. different word choices, different next clauses, \
 different emphasis)
@@ -146,6 +149,8 @@ will be spliced directly onto what they have already typed
 - Use the command history for context (e.g. repeat similar flags, \
 continue a workflow)
 - Match the user's shell style (aliases, flag styles, quoting conventions)
+- Start with a leading space if the text before the cursor does NOT end \
+with a space. Omit the leading space if the cursor already follows a space.
 - Never output explanations, comments, or prose — only shell syntax
 """
 
