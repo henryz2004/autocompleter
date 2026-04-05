@@ -209,6 +209,7 @@ class Autocompleter:
         self._latency_tracker = LatencyTracker()
         self._latency_store = LatencyStore(self.config.data_dir / "context.db")
         self._trigger_before_cursor: str = ""  # before_cursor at trigger time (for leading-space stripping)
+        self._trigger_after_cursor: str = ""   # after_cursor at trigger time (for trailing-space stripping)
 
         # Observer loop state
         self._observe_iteration: int = 0  # Counter for periodic pruning
@@ -691,8 +692,9 @@ class Autocompleter:
             )
             return True
 
-        # Remember before_cursor at trigger time for leading-space stripping on accept
+        # Remember cursor context at trigger time for space dedup on accept
         self._trigger_before_cursor = focused.before_cursor
+        self._trigger_after_cursor = focused.after_cursor
 
         # Remember whether the field has a baked-in placeholder so the
         # injector can skip AXValue setting (which bypasses the web app's
@@ -1286,6 +1288,7 @@ class Autocompleter:
 
         self._replace_on_inject = focused.placeholder_detected
         self._trigger_before_cursor = focused.before_cursor
+        self._trigger_after_cursor = focused.after_cursor
         self._trigger_time = time.time()
 
         mode = detect_mode(before_cursor=focused.before_cursor)
@@ -1411,9 +1414,14 @@ class Autocompleter:
             suggestion = self.overlay.accept_selection()
             if suggestion:
                 text = suggestion.text
-                # Strip leading space if user already typed a trailing space
+                # Strip trailing whitespace/newlines the LLM may have added
+                text = text.rstrip("\n\r")
+                # Strip exactly ONE leading space if user already typed a trailing space
                 if self._trigger_before_cursor.endswith(" ") and text.startswith(" "):
-                    text = text.lstrip(" ")
+                    text = text[1:]
+                # Strip exactly ONE trailing space if text after cursor starts with one
+                if self._trigger_after_cursor.startswith(" ") and text.endswith(" "):
+                    text = text[:-1]
                 success = self.injector.inject(
                     text,
                     replace=self._replace_on_inject,
@@ -1479,6 +1487,12 @@ class Autocompleter:
             suggestion = self.overlay.accept_selection()
             if suggestion:
                 partial_text = self._extract_first_segment(suggestion.text)
+                # Same space dedup as full accept
+                partial_text = partial_text.rstrip("\n\r")
+                if self._trigger_before_cursor.endswith(" ") and partial_text.startswith(" "):
+                    partial_text = partial_text[1:]
+                if self._trigger_after_cursor.startswith(" ") and partial_text.endswith(" "):
+                    partial_text = partial_text[:-1]
                 success = self.injector.inject(
                     partial_text, replace=self._replace_on_inject,
                 )
