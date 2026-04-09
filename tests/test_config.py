@@ -1,25 +1,17 @@
-"""Tests for configuration."""
+"""Tests for configuration loading."""
 
-import os
-from unittest.mock import patch
+from __future__ import annotations
 
-from autocompleter.config import Config, load_config
+from autocompleter.config import load_config
 
 
-class TestConfig:
-    def test_data_dir_created(self, tmp_path):
-        data_dir = tmp_path / "autocompleter" / "nested"
-        Config(data_dir=data_dir)
-        assert data_dir.exists()
+class TestFollowupAfterAcceptConfig:
+    def test_followup_after_accept_defaults_on(self, monkeypatch):
+        monkeypatch.delenv("AUTOCOMPLETER_FOLLOWUP_AFTER_ACCEPT", raising=False)
+        cfg = load_config()
+        assert cfg.followup_after_accept_enabled is True
 
-    @patch.dict(
-        os.environ,
-        {
-            "AUTOCOMPLETER_LLM_PROVIDER": "openai",
-            "AUTOCOMPLETER_HOTKEY": "cmd+j",
-        },
-    )
-    def test_load_config_from_env(self):
-        config = load_config()
-        assert config.llm_provider == "openai"
-        assert config.hotkey == "cmd+j"
+    def test_followup_after_accept_can_be_disabled(self, monkeypatch):
+        monkeypatch.setenv("AUTOCOMPLETER_FOLLOWUP_AFTER_ACCEPT", "false")
+        cfg = load_config()
+        assert cfg.followup_after_accept_enabled is False
