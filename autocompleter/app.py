@@ -1892,79 +1892,7 @@ class Autocompleter:
         if not self.overlay.is_visible:
             return False
 
-        def _accept():
-            # Capture the focused element once BEFORE injection so we know
-            # the current cursor position, app name, and PID. Reading it
-            # twice risks the user switching apps between reads.
-            focused = self.observer.get_focused_element()
-            cursor_pos = focused.insertion_point if focused else None
-            app_name = focused.app_name if focused else "Unknown"
-            app_pid = focused.app_pid if focused else 0
-
-            suggestion = self.overlay.accept_selection()
-            if suggestion:
-                text = suggestion.text
-                # Strip trailing newlines/carriage returns
-                text = text.rstrip("\n\r")
-                # Strip exactly one leading space if user already typed a trailing space
-                if self._trigger_before_cursor.endswith(" ") and text.startswith(" "):
-                    text = text[1:]
-                # Strip exactly one trailing space if text after cursor starts with space
-                if self._trigger_after_cursor.startswith(" ") and text.endswith(" "):
-                    text = text[:-1]
-                success = self.injector.inject(
-                    text,
-                    replace=self._replace_on_inject,
-                    insertion_point=cursor_pos,
-                    app_name=app_name,
-                    app_pid=app_pid,
-                )
-                if success:
-                    logger.info(f"Injected: {text[:60]}")
-                    self.context_store.add_entry(
-                        source_app=app_name,
-                        content=suggestion.text,
-                        entry_type="accepted_suggestion",
-                    )
-                    # Store in long-term memory (async, non-blocking).
-                    # Use fresh before_cursor from the focused element captured
-                    # at accept time (line 1339) — not the stale _trigger_before_cursor
-                    # which was set at trigger time and may be outdated.
-                    if self.memory.enabled:
-                        before_text = (
-                            focused.before_cursor if focused
-                            else self._trigger_before_cursor
-                        )
-                        logger.debug(
-                            f"[MEM] Storing accepted suggestion: {suggestion.text[:60]}"
-                        )
-                        self.memory.add_async(
-                            [
-                                {"role": "user", "content": before_text[-300:]},
-                                {"role": "assistant", "content": suggestion.text},
-                            ],
-                            metadata={"app": app_name, "mode": self._trigger_mode},
-                        )
-                    # Record accepted feedback
-                    latency_ms = None
-                    if self._trigger_time is not None:
-                        latency_ms = (time.time() - self._trigger_time) * 1000
-                    try:
-                        self.context_store.record_feedback(
-                            source_app=self._trigger_app,
-                            mode=self._trigger_mode,
-                            suggestion_text=suggestion.text,
-                            action="accepted",
-                            suggestion_index=suggestion.index,
-                            total_suggestions=len(self._current_suggestions),
-                            latency_ms=latency_ms,
-                        )
-                    except Exception:
-                        logger.debug("Failed to record accepted feedback", exc_info=True)
-                else:
-                    logger.warning("Failed to inject suggestion")
-
-        self._run_on_main(_accept)
+        self._run_on_main(self._accept_selected_suggestion)
         return True
 
     def _on_nav_accept_index(self, index: int) -> bool:
@@ -1979,68 +1907,7 @@ class Autocompleter:
         if index < 0 or index >= len(self._current_suggestions):
             return False
 
-        # Select the target suggestion and accept it
-        def _accept():
-            focused = self.observer.get_focused_element()
-            cursor_pos = focused.insertion_point if focused else None
-            app_name = focused.app_name if focused else "Unknown"
-            app_pid = focused.app_pid if focused else 0
-
-            # Set the selection to the target index
-            self.overlay._selected_index = index
-            suggestion = self.overlay.accept_selection()
-            if suggestion:
-                text = suggestion.text
-                text = text.rstrip("\n\r")
-                if self._trigger_before_cursor.endswith(" ") and text.startswith(" "):
-                    text = text[1:]
-                if self._trigger_after_cursor.startswith(" ") and text.endswith(" "):
-                    text = text[:-1]
-                success = self.injector.inject(
-                    text,
-                    replace=self._replace_on_inject,
-                    insertion_point=cursor_pos,
-                    app_name=app_name,
-                    app_pid=app_pid,
-                )
-                if success:
-                    logger.info(f"Injected [{index}]: {text[:60]}")
-                    self.context_store.add_entry(
-                        source_app=app_name,
-                        content=suggestion.text,
-                        entry_type="accepted_suggestion",
-                    )
-                    if self.memory.enabled:
-                        before_text = (
-                            focused.before_cursor if focused
-                            else self._trigger_before_cursor
-                        )
-                        self.memory.add_async(
-                            [
-                                {"role": "user", "content": before_text[-300:]},
-                                {"role": "assistant", "content": suggestion.text},
-                            ],
-                            metadata={"app": app_name, "mode": self._trigger_mode},
-                        )
-                    latency_ms = None
-                    if self._trigger_time is not None:
-                        latency_ms = (time.time() - self._trigger_time) * 1000
-                    try:
-                        self.context_store.record_feedback(
-                            source_app=self._trigger_app,
-                            mode=self._trigger_mode,
-                            suggestion_text=suggestion.text,
-                            action="accepted",
-                            suggestion_index=suggestion.index,
-                            total_suggestions=len(self._current_suggestions),
-                            latency_ms=latency_ms,
-                        )
-                    except Exception:
-                        logger.debug("Failed to record accepted feedback", exc_info=True)
-                else:
-                    logger.warning("Failed to inject suggestion")
-
-        self._run_on_main(_accept)
+        self._run_on_main(lambda: self._accept_selected_suggestion(index=index))
         return True
 
     @staticmethod
@@ -2063,6 +1930,266 @@ class Autocompleter:
         # Single sentence — return all
         return text
 
+    @staticmethod
+    def _prepare_injected_text(
+        suggestion_text: str,
+        before_cursor: str,
+        after_cursor: str,
+    ) -> str:
+        """Trim accepted suggestion text to avoid whitespace collisions."""
+        text = suggestion_text.rstrip("\n\r")
+        if before_cursor.endswith(" ") and text.startswith(" "):
+            text = text[1:]
+        if after_cursor.startswith(" ") and text.endswith(" "):
+            text = text[:-1]
+        return text
+
+    @staticmethod
+    def _compute_anchor_for_focused(
+        focused,
+    ) -> tuple[float, float, float]:
+        """Compute overlay anchor from current caret or element bounds."""
+        caret_pos = _get_caret_screen_position()
+        caret_height = 20.0
+        if caret_pos:
+            x, y, caret_height = caret_pos
+            if focused.position and focused.size:
+                elem_bottom = focused.position[1] + focused.size[1]
+                if y < elem_bottom:
+                    y = elem_bottom
+            return x, y, caret_height
+        if focused.position:
+            x, y = focused.position
+            if focused.size:
+                y += focused.size[1]
+            return x, y, caret_height
+        return 100.0, 100.0, caret_height
+
+    def _new_snapshot_for_focus(
+        self,
+        generation_id: int,
+        focused,
+        trigger_type: str,
+        mode: AutocompleteMode,
+        window_title: str,
+        source_url: str,
+        visible_text_elements: list[str] | None,
+        conversation_turns: list[dict[str, str]] | None,
+        visible_meta: dict[str, object] | None,
+    ) -> TriggerSnapshot | None:
+        """Build a trigger snapshot for a live generation when dumping is enabled."""
+        if not self._dumper:
+            return None
+
+        snapshot = self._dumper.new_snapshot(generation_id)
+        snapshot.app_name = focused.app_name
+        snapshot.window_title = window_title
+        snapshot.source_url = source_url
+        snapshot.trigger_type = trigger_type
+        snapshot.role = focused.role
+        snapshot.before_cursor = focused.before_cursor
+        snapshot.after_cursor = focused.after_cursor
+        snapshot.insertion_point = focused.insertion_point
+        snapshot.value_length = len(focused.value)
+        snapshot.placeholder_detected = focused.placeholder_detected
+        snapshot.mode = mode.value
+        snapshot.visible_source = str((visible_meta or {}).get("visible_source", ""))
+        snapshot.visible_cache_age_ms = (
+            float((visible_meta or {})["visible_cache_age_ms"])
+            if (visible_meta or {}).get("visible_cache_age_ms") is not None
+            else None
+        )
+        snapshot.visible_content_changed = (
+            bool((visible_meta or {})["visible_content_changed"])
+            if (visible_meta or {}).get("visible_content_changed") is not None
+            else None
+        )
+        snapshot.visible_text_elements = list(visible_text_elements or [])
+        snapshot.request["live_context_variant"] = (
+            LIVE_REPLY_VARIANT.name
+            if mode == AutocompleteMode.REPLY
+            else LIVE_CONTINUATION_VARIANT.name
+        )
+        if conversation_turns:
+            snapshot.conversation_turns = list(conversation_turns)
+            snapshot.has_conversation_turns = True
+            snapshot.conversation_turn_count = len(conversation_turns)
+        threading.Thread(
+            target=self._dumper.capture_ax_tree,
+            args=(snapshot,),
+            daemon=True,
+        ).start()
+        return snapshot
+
+    def _record_accepted_suggestion(
+        self,
+        suggestion: Suggestion,
+        app_name: str,
+        focused,
+    ) -> None:
+        """Persist accepted suggestion to context store, memory, and feedback."""
+        self.context_store.add_entry(
+            source_app=app_name,
+            content=suggestion.text,
+            entry_type="accepted_suggestion",
+        )
+        if self.memory.enabled:
+            before_text = (
+                focused.before_cursor if focused
+                else self._trigger_before_cursor
+            )
+            logger.debug(
+                f"[MEM] Storing accepted suggestion: {suggestion.text[:60]}"
+            )
+            self.memory.add_async(
+                [
+                    {"role": "user", "content": before_text[-300:]},
+                    {"role": "assistant", "content": suggestion.text},
+                ],
+                metadata={"app": app_name, "mode": self._trigger_mode},
+            )
+        latency_ms = None
+        if self._trigger_time is not None:
+            latency_ms = (time.time() - self._trigger_time) * 1000
+        try:
+            self.context_store.record_feedback(
+                source_app=self._trigger_app,
+                mode=self._trigger_mode,
+                suggestion_text=suggestion.text,
+                action="accepted",
+                suggestion_index=suggestion.index,
+                total_suggestions=len(self._current_suggestions),
+                latency_ms=latency_ms,
+            )
+        except Exception:
+            logger.debug("Failed to record accepted feedback", exc_info=True)
+
+    def _start_post_accept_followup(self) -> None:
+        """Launch a follow-up generation after a successful full accept."""
+        if not self.config.followup_after_accept_enabled:
+            return
+        if self._last_trigger_args is None:
+            return
+
+        focused = self.observer.get_focused_element()
+        if focused is None:
+            logger.debug("Post-accept follow-up skipped: no focused element")
+            return
+
+        self._trigger_time = time.time()
+        self._latency_tracker.start(generation_id=self._generation_id + 1)
+        self._latency_tracker.mark("trigger")
+        self._latency_tracker.mark("focused_ready")
+
+        mode = detect_mode(before_cursor=focused.before_cursor)
+        x, y, caret_height = self._compute_anchor_for_focused(focused)
+        self._latency_tracker.mark("caret_ready")
+
+        self._trigger_before_cursor = focused.before_cursor
+        self._trigger_after_cursor = focused.after_cursor
+        self._trigger_mode = mode.value
+        self._trigger_app = focused.app_name
+        self._replace_on_inject = focused.placeholder_detected
+        if is_shell_app(focused.app_name):
+            self._replace_on_inject = True
+
+        prev = self._last_trigger_args
+        self._generation_id += 1
+        gen_id = self._generation_id
+
+        snapshot = self._new_snapshot_for_focus(
+            generation_id=gen_id,
+            focused=focused,
+            trigger_type="post_accept",
+            mode=mode,
+            window_title=prev["window_title"],
+            source_url=prev["source_url"],
+            visible_text_elements=prev["visible_text_elements"],
+            conversation_turns=prev["conversation_turns"],
+            visible_meta=prev.get("visible_meta"),
+        )
+
+        self._last_trigger_args = dict(
+            focused=focused,
+            x=x,
+            y=y,
+            caret_height=caret_height,
+            mode=mode,
+            window_title=prev["window_title"],
+            source_url=prev["source_url"],
+            conversation_turns=prev["conversation_turns"],
+            visible_text_elements=prev["visible_text_elements"],
+            cross_app_context=prev["cross_app_context"],
+            subtree_context=prev["subtree_context"],
+            visible_meta=prev.get("visible_meta"),
+            trigger_type="post_accept",
+        )
+
+        self.overlay.show(
+            [Suggestion(text="Generating...", index=0)],
+            x,
+            y,
+            caret_height=caret_height,
+        )
+
+        threading.Thread(
+            target=self._generate_and_show_streaming,
+            args=(
+                focused,
+                x,
+                y,
+                caret_height,
+                mode,
+                prev["window_title"],
+                prev["source_url"],
+                prev["conversation_turns"],
+                prev["visible_text_elements"],
+                gen_id,
+                prev["cross_app_context"],
+                snapshot,
+                prev["subtree_context"],
+                0.0,
+                None,
+                prev.get("visible_meta"),
+                "post_accept",
+            ),
+            daemon=True,
+        ).start()
+
+    def _accept_selected_suggestion(self, index: int | None = None) -> None:
+        """Accept the current or specified suggestion, then optionally chain follow-up."""
+        focused = self.observer.get_focused_element()
+        cursor_pos = focused.insertion_point if focused else None
+        app_name = focused.app_name if focused else "Unknown"
+        app_pid = focused.app_pid if focused else 0
+
+        if index is not None:
+            self.overlay._selected_index = index
+
+        suggestion = self.overlay.accept_selection()
+        if not suggestion:
+            return
+
+        text = self._prepare_injected_text(
+            suggestion.text,
+            self._trigger_before_cursor,
+            self._trigger_after_cursor,
+        )
+        success = self.injector.inject(
+            text,
+            replace=self._replace_on_inject,
+            insertion_point=cursor_pos,
+            app_name=app_name,
+            app_pid=app_pid,
+        )
+        if not success:
+            logger.warning("Failed to inject suggestion")
+            return
+
+        logger.info(f"Injected: {text[:60]}")
+        self._record_accepted_suggestion(suggestion, app_name, focused)
+        self._start_post_accept_followup()
+
     def _on_partial_accept(self) -> bool:
         """Handle shift+tab — inject only the first sentence/line."""
         if not self.overlay.is_visible:
@@ -2072,11 +2199,11 @@ class Autocompleter:
             suggestion = self.overlay.accept_selection()
             if suggestion:
                 partial_text = self._extract_first_segment(suggestion.text)
-                partial_text = partial_text.rstrip("\n\r")
-                if self._trigger_before_cursor.endswith(" ") and partial_text.startswith(" "):
-                    partial_text = partial_text[1:]
-                if self._trigger_after_cursor.startswith(" ") and partial_text.endswith(" "):
-                    partial_text = partial_text[:-1]
+                partial_text = self._prepare_injected_text(
+                    partial_text,
+                    self._trigger_before_cursor,
+                    self._trigger_after_cursor,
+                )
                 success = self.injector.inject(
                     partial_text, replace=self._replace_on_inject,
                 )

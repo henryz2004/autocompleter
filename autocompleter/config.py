@@ -43,6 +43,7 @@ class Config:
     debounce_ms: int = 500
     hotkey: str = "ctrl+space"
     regenerate_hotkey: str = "ctrl+r"
+    followup_after_accept_enabled: bool = True
 
     # Context store
     max_context_age_hours: int = 72
@@ -148,6 +149,9 @@ def load_config() -> Config:
         )),
         hotkey=os.environ.get("AUTOCOMPLETER_HOTKEY", "ctrl+space"),
         regenerate_hotkey=os.environ.get("AUTOCOMPLETER_REGENERATE_HOTKEY", "ctrl+r"),
+        followup_after_accept_enabled=os.environ.get(
+            "AUTOCOMPLETER_FOLLOWUP_AFTER_ACCEPT", "1"
+        ).lower() in ("1", "true"),
         auto_trigger_enabled=os.environ.get(
             "AUTOCOMPLETER_AUTO_TRIGGER", ""
         ).lower() in ("1", "true"),
