@@ -373,6 +373,18 @@ def postprocess_suggestion_texts(
     ]
 
 
+def postprocess_suggestion_text(
+    text: str,
+    mode: AutocompleteMode,
+    before_cursor: str | None,
+    shell_mode: bool,
+    index: int,
+) -> str:
+    if mode != AutocompleteMode.CONTINUATION:
+        return text
+    return _postprocess_continuation_text(text, before_cursor, index, shell_mode)
+
+
 @dataclass
 class Suggestion:
     text: str
@@ -792,12 +804,13 @@ class SuggestionEngine:
                 event_callback=event_callback,
             ):
                 if prompt_placeholder_aware:
-                    suggestion.text = postprocess_suggestion_texts(
-                        [suggestion.text],
+                    suggestion.text = postprocess_suggestion_text(
+                        suggestion.text,
                         mode=mode,
                         before_cursor=before_cursor if before_cursor is not None else current_input,
                         shell_mode=_use_shell,
-                    )[0]
+                        index=suggestion.index,
+                    )
                 yield suggestion
         except Exception as exc:
             if self._is_rate_limit_error(exc):

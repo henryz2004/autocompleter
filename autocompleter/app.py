@@ -164,6 +164,9 @@ def _get_caret_screen_position() -> tuple[float, float, float] | None:
 class Autocompleter:
     """Main application class that orchestrates all components."""
 
+    _CACHE_REVALIDATE_APPS = frozenset({"Codex"})
+    _CACHE_REVALIDATE_AGE_MS = 150.0
+
     def __init__(self, config: Config | None = None, dump_dir: str | None = None):
         self.config = config or load_config()
         self._dumper: TriggerDumper | None = TriggerDumper(dump_dir) if dump_dir else None
@@ -461,6 +464,267 @@ class Autocompleter:
         self._latency_tracker.mark("visible_ready")
         return visible, metadata
 
+    @classmethod
+    def _should_revalidate_cached_visible_content(
+        cls,
+        app_name: str,
+        visible_meta: dict[str, object] | None,
+        conversation_turns: list[dict[str, str]] | None = None,
+    ) -> bool:
+        """Return True when cached visible content is risky enough to refresh."""
+        if not visible_meta:
+            return False
+        if visible_meta.get("visible_source") != "cache":
+            return False
+        if app_name not in cls._CACHE_REVALIDATE_APPS:
+            return False
+        if conversation_turns:
+            return False
+        cache_age_ms = visible_meta.get("visible_cache_age_ms")
+        if cache_age_ms is None:
+            return True
+        try:
+            return float(cache_age_ms) >= cls._CACHE_REVALIDATE_AGE_MS
+        except (TypeError, ValueError):
+            return False
+
+    def _maybe_refresh_visible_content_for_worker(
+        self,
+        focused,
+        window_title: str,
+        visible_text_elements: list[str] | None,
+        visible_meta: dict[str, object] | None,
+        conversation_turns: list[dict[str, str]] | None = None,
+        snapshot: TriggerSnapshot | None = None,
+    ) -> tuple[list[str] | None, dict[str, object] | None]:
+        """Revalidate cached visible content off the event-tap thread when needed."""
+        if not self._should_revalidate_cached_visible_content(
+            focused.app_name,
+            visible_meta,
+            conversation_turns,
+        ):
+            return visible_text_elements, visible_meta
+
+        try:
+            fresh = self.observer.get_visible_content()
+        except Exception:
+            logger.debug("[CTX] Worker refresh of visible content failed", exc_info=True)
+            return visible_text_elements, visible_meta
+
+        if fresh is None or fresh.app_name != focused.app_name:
+            return visible_text_elements, visible_meta
+        if window_title and fresh.window_title and fresh.window_title != window_title:
+            logger.debug(
+                "[CTX] Worker refresh window mismatch, keeping cached visible content "
+                "(trigger=%r fresh=%r)",
+                window_title,
+                fresh.window_title,
+            )
+            return visible_text_elements, visible_meta
+
+        cached_hash = self._visible_content_hash(self._last_visible_content)
+        fresh_hash = self._visible_content_hash(fresh)
+        changed = bool(cached_hash and fresh_hash and cached_hash != fresh_hash)
+
+        refreshed_meta = dict(visible_meta or {})
+        refreshed_meta["visible_content_changed"] = changed
+
+        if not changed:
+            logger.debug("[CTX] Worker refresh confirmed cached visible content is still current")
+            return visible_text_elements, refreshed_meta
+
+        refreshed_elements = list(fresh.text_elements or [])
+        if refreshed_elements:
+            filtered = _filter_ui_chrome("\n".join(refreshed_elements))
+            refreshed_elements = [
+                line for line in filtered.splitlines() if line.strip()
+            ]
+
+        refreshed_meta["visible_source"] = "worker_refresh"
+        refreshed_meta["visible_cache_age_ms"] = 0.0
+        self._last_visible_content = fresh
+        self._last_visible_content_time = time.time()
+
+        logger.info(
+            "[CTX] Refreshed cached visible content on worker for %r "
+            "(cached=%d fresh=%d elements)",
+            focused.app_name,
+            len(visible_text_elements or []),
+            len(refreshed_elements),
+        )
+
+        if snapshot is not None:
+            snapshot.visible_source = str(refreshed_meta.get("visible_source", ""))
+            snapshot.visible_cache_age_ms = 0.0
+            snapshot.visible_content_changed = True
+            snapshot.visible_text_elements = list(refreshed_elements)
+            if not snapshot.source_url and fresh.url:
+                snapshot.source_url = fresh.url
+
+        if self._last_trigger_args and self._last_trigger_args.get("focused") is focused:
+            self._last_trigger_args["visible_text_elements"] = list(refreshed_elements)
+            self._last_trigger_args["visible_meta"] = dict(refreshed_meta)
+
+        return refreshed_elements, refreshed_meta
+
+    def _filter_recent_user_inputs_from_visible_text(
+        self,
+        source_app: str,
+        visible_text_elements: list[str] | None,
+        focused,
+    ) -> list[str] | None:
+        """Remove lines that likely mirror the user's just-submitted prompt."""
+        if not visible_text_elements:
+            return visible_text_elements
+        if not focused.placeholder_detected or focused.before_cursor.strip():
+            return visible_text_elements
+
+        recent_inputs = [
+            entry.content.strip()
+            for entry in self.context_store.get_by_source(source_app, limit=12)
+            if entry.entry_type == "user_input" and entry.content.strip()
+        ]
+        if not recent_inputs:
+            return visible_text_elements
+
+        def _norm(text: str) -> str:
+            return " ".join(text.split()).strip().lower()
+
+        recent_norms = {_norm(text) for text in recent_inputs if len(_norm(text)) >= 12}
+        filtered: list[str] = []
+        removed = 0
+        for line in visible_text_elements:
+            norm = _norm(line)
+            if not norm:
+                continue
+            if any(
+                norm == recent
+                or (len(norm) >= 20 and len(recent) >= 20 and (norm in recent or recent in norm))
+                for recent in recent_norms
+            ):
+                removed += 1
+                continue
+            filtered.append(line)
+
+        if removed:
+            logger.info(
+                "[CTX] Filtered %d visible line(s) matching recent user input for %r reply mode",
+                removed,
+                source_app,
+            )
+        return filtered or visible_text_elements
+
+    def _capture_live_trigger_context(
+        self,
+        focused,
+        trigger_type: str,
+    ) -> tuple[
+        AutocompleteMode,
+        float,
+        float,
+        float,
+        str,
+        str,
+        list[dict[str, str]] | None,
+        list[str],
+        str,
+        str | None,
+        dict[str, object],
+    ]:
+        """Capture the live context payload used for a trigger/regenerate."""
+        mode = detect_mode(before_cursor=focused.before_cursor)
+        self._trigger_mode = mode.value
+        self._trigger_app = focused.app_name
+
+        caret_pos = _get_caret_screen_position()
+        caret_height = 20.0
+        if caret_pos:
+            x, y, caret_height = caret_pos
+            if focused.position and focused.size:
+                elem_bottom = focused.position[1] + focused.size[1]
+                if y < elem_bottom:
+                    y = elem_bottom
+        elif focused.position:
+            x, y = focused.position
+            if focused.size:
+                y += focused.size[1]
+        else:
+            x, y = 100.0, 100.0
+        self._latency_tracker.mark("caret_ready")
+
+        self._latency_tracker.mark("subtree_start")
+        subtree_context = self.observer.get_subtree_context(token_budget=500)
+        self._latency_tracker.mark("subtree_ready")
+
+        visible, visible_meta = self._resolve_visible_content(focused)
+        window_title = visible.window_title if visible else ""
+        source_url = visible.url if visible else ""
+        visible_text_elements: list[str] = []
+        conversation_turns = None
+        if visible:
+            visible_text_elements = visible.text_elements or []
+            if visible_text_elements:
+                filtered = _filter_ui_chrome("\n".join(visible_text_elements))
+                visible_text_elements = [
+                    line for line in filtered.split("\n") if line.strip()
+                ]
+            if visible.conversation_turns:
+                conversation_turns = [
+                    {"speaker": t.speaker, "text": t.text, "timestamp": t.timestamp}
+                    for t in visible.conversation_turns
+                ]
+
+            if visible.text_elements:
+                combined = "\n".join(visible.text_elements[:50])
+                if combined.strip():
+                    content_hash = self._hash_content(
+                        f"{visible.app_name}\0{visible.window_title}\0{visible.url}\0{combined}"
+                    )
+                    if content_hash != self._last_content_hash:
+                        self._last_content_hash = content_hash
+                        self.context_store.add_entry(
+                            source_app=visible.app_name,
+                            content=combined,
+                            entry_type="visible_text",
+                            source_url=visible.url,
+                            window_title=visible.window_title,
+                        )
+
+        if (
+            mode == AutocompleteMode.REPLY
+            and not conversation_turns
+            and not focused.before_cursor.strip()
+        ):
+            visible_text_elements = (
+                self._filter_recent_user_inputs_from_visible_text(
+                    focused.app_name,
+                    visible_text_elements,
+                    focused,
+                )
+                or []
+            )
+
+        cross_app_snapshots = self.context_trail.get_recent_cross_app_context(
+            current_app=focused.app_name,
+            max_age_seconds=60.0,
+            max_entries=3,
+        )
+        cross_app_context = ContextTrail.format_cross_app_context(cross_app_snapshots)
+
+        return (
+            mode,
+            x,
+            y,
+            caret_height,
+            window_title,
+            source_url,
+            conversation_turns,
+            visible_text_elements,
+            cross_app_context,
+            subtree_context,
+            visible_meta,
+        )
+
     # Cap stored content to avoid DB bloat from terminal scrollback buffers
     _MAX_STORE_CHARS = 4000
 
@@ -669,38 +933,20 @@ class Autocompleter:
 
         current_input = focused.value
 
-        # Detect mode early so the entire pipeline knows
-        mode = detect_mode(before_cursor=focused.before_cursor)
-        self._trigger_mode = mode.value
-        self._trigger_app = focused.app_name
+        (
+            mode,
+            x,
+            y,
+            caret_height,
+            window_title,
+            source_url,
+            conversation_turns,
+            visible_text_elements,
+            cross_app_context,
+            subtree_context,
+            visible_meta,
+        ) = self._capture_live_trigger_context(focused, trigger_type="manual")
         logger.info(f"Mode: {mode.value} (before_cursor len={len(focused.before_cursor.strip())})")
-
-        # Capture position now (while we're on the event tap thread with AX access)
-        caret_pos = _get_caret_screen_position()
-        caret_height = 20.0  # default fallback
-        if caret_pos:
-            x, y, caret_height = caret_pos
-            logger.debug(f"Using caret position: ({x:.0f}, {y:.0f}), caret_h={caret_height:.0f}")
-            # Sanity-check: some apps (Electron) report stale/shifted caret
-            # rects. If the caret bottom is above the element bottom, prefer
-            # the element bottom — it's more reliable across apps.
-            if focused.position and focused.size:
-                elem_bottom = focused.position[1] + focused.size[1]
-                if y < elem_bottom:
-                    logger.debug(
-                        f"Caret bottom ({y:.0f}) < element bottom ({elem_bottom:.0f}), "
-                        f"using element bottom instead"
-                    )
-                    y = elem_bottom
-        elif focused.position:
-            x, y = focused.position
-            if focused.size:
-                y += focused.size[1]
-            logger.debug(f"Using element position: ({x:.0f}, {y:.0f})")
-        else:
-            x, y = 100.0, 100.0
-            logger.debug("No position available, using default (100, 100)")
-        self._latency_tracker.mark("caret_ready")
 
         # Show loading indicator immediately
         self._run_on_main(lambda: self.overlay.show(
@@ -708,82 +954,23 @@ class Autocompleter:
             caret_height=caret_height,
         ))
 
-        # Fetch subtree context (XML from walking up from focused element).
-        # Done before visible content because it's fast and more reliable.
-        self._latency_tracker.mark("subtree_start")
-        subtree_context = self.observer.get_subtree_context(token_budget=500)
-        self._latency_tracker.mark("subtree_ready")
         if subtree_context:
             logger.info(
                 f"[CTX] Subtree context: {len(subtree_context)} chars "
                 f"(~{len(subtree_context) // 4} tokens)"
             )
 
-        visible, visible_meta = self._resolve_visible_content(focused)
-        window_title = visible.window_title if visible else ""
-        source_url = visible.url if visible else ""
-        visible_text_elements: list[str] = []
-        conversation_turns = None
-        if visible:
-            visible_text_elements = visible.text_elements or []
-            # Filter UI chrome (buttons, sidebar labels, status indicators) from
-            # visible text before it reaches the LLM context.
-            if visible_text_elements:
-                filtered = _filter_ui_chrome("\n".join(visible_text_elements))
-                visible_text_elements = [
-                    line for line in filtered.split("\n") if line.strip()
-                ]
-            logger.info(
-                f"[CTX] Window: {visible.window_title!r} | URL: {visible.url!r} | "
-                f"text_elements: {len(visible_text_elements)} | "
-                f"conversation_turns: {len(visible.conversation_turns) if visible.conversation_turns else 0}"
-            )
-            if visible.conversation_turns:
-                conversation_turns = [
-                    {"speaker": t.speaker, "text": t.text, "timestamp": t.timestamp}
-                    for t in visible.conversation_turns
-                ]
-                for i, t in enumerate(visible.conversation_turns):
-                    ts_info = f" [{t.timestamp}]" if t.timestamp else ""
-                    logger.debug(f"[CTX]   Turn [{i}]: {t.speaker}{ts_info}: {t.text[:100]!r}")
-            # Log a sample of visible text elements
-            for i, elem in enumerate(visible_text_elements[:10]):
-                logger.debug(f"[CTX]   Visible text [{i}]: {elem[:120]!r}")
-            if len(visible_text_elements) > 10:
-                logger.debug(f"[CTX]   ... and {len(visible_text_elements) - 10} more elements")
-
-            # Store fresh observation in context store so the worker thread
-            # sees up-to-date data (fixes stale context at trigger time).
-            if visible.text_elements:
-                combined = "\n".join(visible.text_elements[:50])
-                if combined.strip():
-                    content_hash = self._hash_content(
-                        f"{visible.app_name}\0{visible.window_title}\0{visible.url}\0{combined}"
-                    )
-                    if content_hash != self._last_content_hash:
-                        self._last_content_hash = content_hash
-                        self.context_store.add_entry(
-                            source_app=visible.app_name,
-                            content=combined,
-                            entry_type="visible_text",
-                            source_url=visible.url,
-                            window_title=visible.window_title,
-                        )
-        else:
-            logger.info("[CTX] No visible content captured")
-
-        # Fetch cross-app context from the trail
-        cross_app_snapshots = self.context_trail.get_recent_cross_app_context(
-            current_app=focused.app_name,
-            max_age_seconds=60.0,
-            max_entries=3,
+        logger.info(
+            f"[CTX] Window: {window_title!r} | URL: {source_url!r} | "
+            f"text_elements: {len(visible_text_elements)} | "
+            f"conversation_turns: {len(conversation_turns) if conversation_turns else 0}"
         )
-        cross_app_context = ContextTrail.format_cross_app_context(cross_app_snapshots)
+        for i, elem in enumerate(visible_text_elements[:10]):
+            logger.debug(f"[CTX]   Visible text [{i}]: {elem[:120]!r}")
+        if len(visible_text_elements) > 10:
+            logger.debug(f"[CTX]   ... and {len(visible_text_elements) - 10} more elements")
         if cross_app_context:
-            logger.info(
-                f"[CTX] Cross-app context ({len(cross_app_snapshots)} snapshots):\n"
-                + cross_app_context
-            )
+            logger.info(f"[CTX] Cross-app context:\n{cross_app_context}")
 
         # Bump generation counter — only the latest generation updates the overlay
         self._generation_id += 1
@@ -918,6 +1105,15 @@ class Autocompleter:
                     logger.info("[CTX] Terminal detected but not at shell prompt — using generic mode")
                     # Trim to tail to avoid sending 145K+ chars of terminal buffer
                     effective_before_cursor = focused.before_cursor[-_TUI_CONTEXT_TAIL_CHARS:]
+
+        if not use_shell and not use_tui:
+            visible_text_elements, _ = self._maybe_refresh_visible_content_for_worker(
+                focused=focused,
+                window_title=window_title,
+                visible_text_elements=visible_text_elements,
+                visible_meta=None,
+                conversation_turns=conversation_turns,
+            )
 
         # Messaging apps: force reply mode when structured conversation turns
         # were extracted.  The user is composing a message in a chat, not
@@ -1133,6 +1329,16 @@ class Autocompleter:
                     logger.info("[CTX] Terminal detected but not at shell prompt — using generic mode")
                     # Trim to tail to avoid sending 145K+ chars of terminal buffer
                     effective_before_cursor = focused.before_cursor[-_TUI_CONTEXT_TAIL_CHARS:]
+
+        if not use_shell and not use_tui:
+            visible_text_elements, visible_meta = self._maybe_refresh_visible_content_for_worker(
+                focused=focused,
+                window_title=window_title,
+                visible_text_elements=visible_text_elements,
+                visible_meta=visible_meta,
+                conversation_turns=conversation_turns,
+                snapshot=snapshot,
+            )
 
         # Messaging apps: force reply mode when structured conversation turns
         # were extracted.  The user is composing a message in a chat, not
@@ -1596,18 +1802,39 @@ class Autocompleter:
         self._latency_tracker.mark("trigger")
 
         args = self._last_trigger_args
+        self._trigger_before_cursor = focused.before_cursor
+        self._trigger_after_cursor = focused.after_cursor
+        self._replace_on_inject = focused.placeholder_detected
 
-        # Re-capture caret position so overlay tracks window scroll/resize
-        x, y, caret_height = args["x"], args["y"], args["caret_height"]
-        caret_pos = _get_caret_screen_position()
-        if caret_pos:
-            x, y, caret_height = caret_pos
-            # Apply same element-bottom clamp as _on_trigger
-            if focused.position and focused.size:
-                elem_bottom = focused.position[1] + focused.size[1]
-                if y < elem_bottom:
-                    y = elem_bottom
-        self._latency_tracker.mark("caret_ready")
+        (
+            mode,
+            x,
+            y,
+            caret_height,
+            window_title,
+            source_url,
+            conversation_turns,
+            visible_text_elements,
+            cross_app_context,
+            subtree_context,
+            visible_meta,
+        ) = self._capture_live_trigger_context(focused, trigger_type="regenerate")
+
+        self._last_trigger_args = dict(
+            focused=focused,
+            x=x,
+            y=y,
+            caret_height=caret_height,
+            mode=mode,
+            window_title=window_title,
+            source_url=source_url,
+            conversation_turns=conversation_turns,
+            visible_text_elements=visible_text_elements,
+            cross_app_context=cross_app_context,
+            subtree_context=subtree_context,
+            visible_meta=visible_meta,
+            trigger_type="regenerate",
+        )
 
         # Bump generation to discard any in-flight stream
         self._generation_id += 1
@@ -1628,17 +1855,17 @@ class Autocompleter:
         threading.Thread(
             target=self._generate_and_show_streaming,
             args=(
-                args["focused"], x, y, caret_height,
-                args["mode"], args["window_title"], args["source_url"],
-                args["conversation_turns"], args["visible_text_elements"],
-                gen_id, args["cross_app_context"],
+                focused, x, y, caret_height,
+                mode, window_title, source_url,
+                conversation_turns, visible_text_elements,
+                gen_id, cross_app_context,
                 None,  # snapshot — skip trigger dump on regenerate
-                args["subtree_context"],
+                subtree_context,
             ),
             kwargs={
                 "temperature_boost": 0.3,
                 "extra_negative_patterns": prev_texts,
-                "visible_meta": args.get("visible_meta"),
+                "visible_meta": visible_meta,
                 "trigger_type": "regenerate",
             },
             daemon=True,

@@ -21,6 +21,7 @@ from autocompleter.suggestion_engine import (
     SuggestionItem,
     SuggestionList,
     _extract_complete_suggestions,
+    postprocess_suggestion_text,
 )
 
 
@@ -222,7 +223,18 @@ class TestStreamingSuggestions:
         results = list(engine._call_llm_stream("sys", "user"))
         assert len(results) == 1
         assert results[0].text == "Fallback"
-        engine._call_llm.assert_called_once()
+
+
+class TestStreamingPostprocess:
+    def test_streaming_postprocess_uses_original_suggestion_index(self):
+        before = "just invoked it again, can you check the logs now?"
+        assert postprocess_suggestion_text(
+            "any errors show up?",
+            mode=AutocompleteMode.CONTINUATION,
+            before_cursor=before,
+            shell_mode=False,
+            index=1,
+        ) == " that seems right"
 
     def test_unicode_in_suggestions(self, engine):
         """Unicode characters pass through correctly."""

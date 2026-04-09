@@ -1,6 +1,8 @@
-"""Tests for pure functions in app.py — _extract_first_segment and _hash_content."""
+"""Tests for pure helpers in app.py."""
 
 from __future__ import annotations
+
+from unittest.mock import Mock
 
 import pytest
 
@@ -8,6 +10,8 @@ import pytest
 # We need to be careful because app.py imports heavy macOS deps, but
 # these are guarded by try/except, so the import should succeed.
 from autocompleter.app import Autocompleter
+from autocompleter.input_observer import VisibleContent
+from autocompleter.trigger_dump import TriggerSnapshot
 
 
 # ---------------------------------------------------------------------------
@@ -61,3 +65,131 @@ class TestHashContent:
         h = Autocompleter._hash_content("Bonjour le monde")
         assert isinstance(h, str)
         assert len(h) == 32  # MD5 hex digest length
+
+
+class _Focused:
+    def __init__(self, app_name: str, before_cursor: str = "", placeholder_detected: bool = False):
+        self.app_name = app_name
+        self.before_cursor = before_cursor
+        self.placeholder_detected = placeholder_detected
+
+
+class TestVisibleRefreshDecision:
+    def test_should_revalidate_cached_visible_content_for_codex(self):
+        assert Autocompleter._should_revalidate_cached_visible_content(
+            "Codex",
+            {"visible_source": "cache", "visible_cache_age_ms": 300.0},
+            conversation_turns=None,
+        )
+
+    def test_should_not_revalidate_non_codex_cache(self):
+        assert not Autocompleter._should_revalidate_cached_visible_content(
+            "Slack",
+            {"visible_source": "cache", "visible_cache_age_ms": 300.0},
+            conversation_turns=None,
+        )
+
+    def test_should_not_revalidate_fresh_source(self):
+        assert not Autocompleter._should_revalidate_cached_visible_content(
+            "Codex",
+            {"visible_source": "fresh", "visible_cache_age_ms": 300.0},
+            conversation_turns=None,
+        )
+
+
+class TestWorkerVisibleRefresh:
+    def test_worker_refresh_swaps_in_fresh_visible_content(self):
+        app = object.__new__(Autocompleter)
+        app.observer = Mock()
+        app._last_trigger_args = {}
+
+        cached = VisibleContent(
+            app_name="Codex",
+            app_pid=1,
+            window_title="Codex",
+            text_elements=["Old thread context", "Older message"],
+            url="",
+        )
+        fresh = VisibleContent(
+            app_name="Codex",
+            app_pid=1,
+            window_title="Codex",
+            text_elements=[
+                "New thread context from the current Codex chat",
+                "Latest visible message in the current thread",
+            ],
+            url="",
+        )
+        app._last_visible_content = cached
+        app._last_visible_content_time = 0.0
+        app.observer.get_visible_content.return_value = fresh
+
+        snapshot = TriggerSnapshot()
+        focused = _Focused("Codex")
+        refreshed, meta = app._maybe_refresh_visible_content_for_worker(
+            focused=focused,
+            window_title="Codex",
+            visible_text_elements=list(cached.text_elements),
+            visible_meta={"visible_source": "cache", "visible_cache_age_ms": 300.0},
+            conversation_turns=None,
+            snapshot=snapshot,
+        )
+
+        assert refreshed == fresh.text_elements
+        assert meta["visible_source"] == "worker_refresh"
+        assert meta["visible_content_changed"] is True
+        assert snapshot.visible_source == "worker_refresh"
+        assert snapshot.visible_text_elements == fresh.text_elements
+
+    def test_worker_refresh_keeps_cached_visible_content_when_unchanged(self):
+        app = object.__new__(Autocompleter)
+        app.observer = Mock()
+        app._last_trigger_args = {}
+
+        cached = VisibleContent(
+            app_name="Codex",
+            app_pid=1,
+            window_title="Codex",
+            text_elements=["Same thread context", "Same message"],
+            url="",
+        )
+        app._last_visible_content = cached
+        app._last_visible_content_time = 0.0
+        app.observer.get_visible_content.return_value = cached
+
+        focused = _Focused("Codex")
+        refreshed, meta = app._maybe_refresh_visible_content_for_worker(
+            focused=focused,
+            window_title="Codex",
+            visible_text_elements=list(cached.text_elements),
+            visible_meta={"visible_source": "cache", "visible_cache_age_ms": 300.0},
+            conversation_turns=None,
+        )
+
+        assert refreshed == cached.text_elements
+        assert meta["visible_source"] == "cache"
+        assert meta["visible_content_changed"] is False
+
+
+class TestReplyVisibleFiltering:
+    def test_filters_recent_user_prompt_from_visible_text(self):
+        app = object.__new__(Autocompleter)
+        app.context_store = Mock()
+        app.context_store.get_by_source.return_value = [
+            Mock(entry_type="user_input", content="just invoked it again, can you check the logs now?"),
+            Mock(entry_type="visible_text", content="other"),
+        ]
+        focused = _Focused("Codex", before_cursor="", placeholder_detected=True)
+
+        result = app._filter_recent_user_inputs_from_visible_text(
+            "Codex",
+            [
+                "just invoked it again, can you check the logs now?",
+                "let's fix. also make sure the testing logic exactly mirrors the live logic",
+            ],
+            focused,
+        )
+
+        assert result == [
+            "let's fix. also make sure the testing logic exactly mirrors the live logic",
+        ]
