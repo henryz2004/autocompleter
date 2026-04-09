@@ -300,3 +300,68 @@ class TestPostAcceptFollowup:
         assert captured["args"][10].startswith("[Recent activity")
         assert captured["args"][12] == "<context><TextArea>old</TextArea></context>"
         assert captured["args"][16] == "post_accept"
+
+
+class TestRegenerateDiversity:
+    def test_regenerate_uses_higher_temperature_boost(self, monkeypatch):
+        app = Autocompleter.__new__(Autocompleter)
+        focused = FocusedElement(
+            app_name="Codex",
+            app_pid=123,
+            role="AXTextArea",
+            value="hello world there",
+            selected_text="",
+            position=(50.0, 60.0),
+            size=(200.0, 20.0),
+            insertion_point=17,
+        )
+
+        captured = {}
+
+        class FakeThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None):
+                captured["target"] = target
+                captured["args"] = args
+                captured["kwargs"] = kwargs or {}
+
+            def start(self):
+                captured["started"] = True
+
+        monkeypatch.setattr(app_module.threading, "Thread", FakeThread)
+        app.overlay = SimpleNamespace(is_visible=True, show=lambda *args, **kwargs: None)
+        app.observer = SimpleNamespace(get_focused_element=lambda: focused)
+        def _fake_new_snapshot_for_focus(**kwargs):
+            captured["snapshot_kwargs"] = kwargs
+            return "snapshot"
+        app._new_snapshot_for_focus = _fake_new_snapshot_for_focus
+        app._last_trigger_args = {
+            "focused": focused,
+            "x": 1.0,
+            "y": 2.0,
+            "caret_height": 20.0,
+            "mode": app_module.AutocompleteMode.CONTINUATION,
+            "window_title": "Codex",
+            "source_url": "",
+            "conversation_turns": None,
+            "visible_text_elements": ["visible context"],
+            "cross_app_context": "",
+            "subtree_context": "<context></context>",
+            "visible_meta": {"visible_source": "cache"},
+            "trigger_type": "manual",
+        }
+        app._current_suggestions = [SimpleNamespace(text="old one"), SimpleNamespace(text="old two")]
+        app._generation_id = 0
+        app._run_on_main = lambda fn: None
+        app._auto_trigger_debouncer = SimpleNamespace(cancel=lambda: None)
+        app._latency_tracker = SimpleNamespace(start=lambda **kwargs: None, mark=lambda *args, **kwargs: None)
+        app._capture_live_trigger_context = lambda focused, trigger_type: (
+            app_module.AutocompleteMode.CONTINUATION,
+            10.0, 20.0, 20.0,
+            "Codex", "", None, ["visible"], "", "<context></context>", {"visible_source": "fresh"},
+        )
+
+        assert app._on_regenerate() is True
+        assert captured["kwargs"]["temperature_boost"] == 0.5
+        assert captured["args"][11] == "snapshot"
+        assert captured["snapshot_kwargs"]["trigger_type"] == "regenerate"
+        assert captured["snapshot_kwargs"]["generation_id"] == 1

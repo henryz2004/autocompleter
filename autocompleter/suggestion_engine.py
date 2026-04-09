@@ -190,10 +190,6 @@ to run next. Each suggestion should be a complete, runnable command.\
 
 
 MAX_PREVIEW_LENGTH = 80
-_SPECULATIVE_CONTINUATION_TERMS: tuple[str, ...] = (
-    "api", "endpoint", "env", "error", "errors", "fallback", "log", "logs",
-    "parser", "restart", "server", "timeout", "timed out",
-)
 
 
 def build_messages(
@@ -260,13 +256,6 @@ def build_messages(
     return system, user_msg
 
 
-def _has_strong_generic_prefix(before_cursor: str | None) -> bool:
-    if not before_cursor:
-        return False
-    stripped = before_cursor.strip()
-    return len(stripped) >= 24 or len(stripped.split()) >= 5
-
-
 def _normalize_continuation_spacing(before_cursor: str | None, text: str) -> str:
     stripped = text.strip()
     if not stripped:
@@ -274,6 +263,10 @@ def _normalize_continuation_spacing(before_cursor: str | None, text: str) -> str
     if before_cursor and not before_cursor.endswith(" "):
         return " " + stripped
     return stripped
+
+
+def _normalize_similarity_text(text: str) -> str:
+    return " ".join(text.lower().split()).strip()
 
 
 def _strip_repeated_prefix(text: str, before_cursor: str | None) -> str:
@@ -295,68 +288,16 @@ def _strip_repeated_prefix(text: str, before_cursor: str | None) -> str:
     return suggestion.strip()
 
 
-def _is_useful_continuation(text: str) -> bool:
-    words = [word for word in text.strip().split() if word]
-    return len(words) >= 2 and len(text.strip()) >= 8
-
-
-def _safe_generic_continuation(before_cursor: str | None, index: int) -> str:
-    prefix = (before_cursor or "").rstrip().lower()
-    if prefix.endswith("do you think"):
-        options = (
-            "it's good enough?",
-            "we should change it?",
-            "that makes sense?",
-        )
-    elif prefix.endswith("also,"):
-        options = (
-            "what do you think about that?",
-            "does that seem right to you?",
-            "can you take a quick look?",
-        )
-    elif prefix.endswith(","):
-        options = (
-            "so we can compare it now.",
-            "and it looks stable so far.",
-            "but I want to try again.",
-        )
-    else:
-        options = (
-            "it makes sense",
-            "that seems right",
-            "we should change it",
-        )
-    return _normalize_continuation_spacing(before_cursor, options[index % len(options)])
-
-
-def _introduces_speculative_detail(text: str, before_cursor: str | None) -> bool:
-    suggestion = text.lower()
-    draft = (before_cursor or "").lower()
-    return any(term in suggestion and term not in draft for term in _SPECULATIVE_CONTINUATION_TERMS)
-
-
 def _postprocess_continuation_text(
     text: str,
     before_cursor: str | None,
     index: int,
     shell_mode: bool,
+    avoid_texts: set[str] | None = None,
 ) -> str:
     stripped = _strip_repeated_prefix(text, before_cursor)
-    if shell_mode:
-        return _normalize_continuation_spacing(before_cursor, stripped or text)
-    if not _has_strong_generic_prefix(before_cursor):
-        if not stripped or not _is_useful_continuation(stripped):
-            return _safe_generic_continuation(before_cursor, index)
-        return _normalize_continuation_spacing(before_cursor, stripped)
-
-    if (
-        not stripped
-        or not _is_useful_continuation(stripped)
-        or _introduces_speculative_detail(stripped, before_cursor)
-    ):
-        return _safe_generic_continuation(before_cursor, index)
-
-    return _normalize_continuation_spacing(before_cursor, stripped)
+    del index, shell_mode, avoid_texts
+    return _normalize_continuation_spacing(before_cursor, stripped or text)
 
 
 def postprocess_suggestion_texts(
@@ -364,11 +305,17 @@ def postprocess_suggestion_texts(
     mode: AutocompleteMode,
     before_cursor: str | None,
     shell_mode: bool,
+    avoid_texts: list[str] | None = None,
 ) -> list[str]:
     if mode != AutocompleteMode.CONTINUATION:
         return texts
+    avoid = {
+        _normalize_similarity_text(text)
+        for text in (avoid_texts or [])
+        if _normalize_similarity_text(text)
+    }
     return [
-        _postprocess_continuation_text(text, before_cursor, i, shell_mode)
+        _postprocess_continuation_text(text, before_cursor, i, shell_mode, avoid)
         for i, text in enumerate(texts)
     ]
 
@@ -379,10 +326,16 @@ def postprocess_suggestion_text(
     before_cursor: str | None,
     shell_mode: bool,
     index: int,
+    avoid_texts: list[str] | None = None,
 ) -> str:
     if mode != AutocompleteMode.CONTINUATION:
         return text
-    return _postprocess_continuation_text(text, before_cursor, index, shell_mode)
+    avoid = {
+        _normalize_similarity_text(item)
+        for item in (avoid_texts or [])
+        if _normalize_similarity_text(item)
+    }
+    return _postprocess_continuation_text(text, before_cursor, index, shell_mode, avoid)
 
 
 @dataclass
@@ -625,6 +578,7 @@ class SuggestionEngine:
                     mode=mode,
                     before_cursor=before_cursor if before_cursor is not None else current_input,
                     shell_mode=_use_shell,
+                    avoid_texts=negative_patterns,
                 )
                 for suggestion, text in zip(results, processed):
                     suggestion.text = text
@@ -810,6 +764,7 @@ class SuggestionEngine:
                         before_cursor=before_cursor if before_cursor is not None else current_input,
                         shell_mode=_use_shell,
                         index=suggestion.index,
+                        avoid_texts=negative_patterns if temperature_boost > 0 else None,
                     )
                 yield suggestion
         except Exception as exc:

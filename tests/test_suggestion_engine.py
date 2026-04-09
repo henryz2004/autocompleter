@@ -128,29 +128,7 @@ class TestSuggestionEngine:
         assert result[0].text == "suggestion 1"
         mock_call.assert_called_once()
 
-    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
-    def test_continuation_postprocess_replaces_speculative_debugging(self, mock_call, engine):
-        mock_call.return_value = [
-            Suggestion(text="check the logs", index=0),
-            Suggestion(text="restart the server", index=1),
-            Suggestion(text="we should change it", index=2),
-        ]
-
-        result = engine.generate_suggestions(
-            current_input="just invoked it, can you check? also, do you think ",
-            context="Text before cursor:\njust invoked it, can you check? also, do you think ",
-            mode=AutocompleteMode.CONTINUATION,
-            before_cursor="just invoked it, can you check? also, do you think ",
-            prompt_placeholder_aware=True,
-        )
-
-        assert [s.text for s in result] == [
-            "it's good enough?",
-            "we should change it?",
-            "we should change it",
-        ]
-
-    def test_postprocess_removes_repeated_prefix_and_short_fragments(self):
+    def test_postprocess_strips_repeated_prefix_and_normalizes_spacing(self):
         result = postprocess_suggestion_texts(
             [
                 "just invoked it, so",
@@ -163,13 +141,28 @@ class TestSuggestionEngine:
         )
 
         assert result == [
-            "so we can compare it now.",
+            "so",
             "and it worked",
-            "but I want to try again.",
+            "but",
+        ]
+
+    def test_postprocess_no_longer_rewrites_avoided_texts(self):
+        result = postprocess_suggestion_texts(
+            ["it makes sense", "that seems right", "we should change it"],
+            mode=AutocompleteMode.CONTINUATION,
+            before_cursor="just invoked it again, can you check the logs now?",
+            shell_mode=False,
+            avoid_texts=["it makes sense", "that seems right"],
+        )
+
+        assert result == [
+            " it makes sense",
+            " that seems right",
+            " we should change it",
         ]
 
     @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
-    def test_continuation_postprocess_keeps_safe_literal_completion(self, mock_call, engine):
+    def test_continuation_postprocess_keeps_literal_completion(self, mock_call, engine):
         mock_call.return_value = [
             Suggestion(text="that makes sense?", index=0),
         ]

@@ -78,6 +78,7 @@ class TestPromptAwareness:
         assert "placeholder text" in system
         assert "strongest signal" in system
         assert "unfinished lead-in" in system
+        assert "generic fallback phrase" in system
 
     def test_default_build_messages_omits_extra_rules(self):
         system, _user = build_messages(

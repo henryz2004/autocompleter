@@ -138,6 +138,10 @@ def build_prompt_extra_rules(
             "- Do not invent debugging steps, logs, servers, APIs, env vars, deployments, or configuration issues unless the user already mentioned them explicitly.\n"
             "- When context is weak, stay close to the literal wording and syntax of the text before cursor instead of guessing a new topic.\n"
             "- Prefer relevant continuation over generic troubleshooting, task switching, or invented follow-up actions.\n"
+            "- Avoid repeating the exact words already typed before the cursor; continue from them instead.\n"
+            "- Even for very short drafts, prefer a natural literal continuation over canned filler or generic reassurance.\n"
+            "- If one possible continuation would merely acknowledge the situation or talk about testing, logs, fixes, or next steps, prefer the continuation that stays closest to the user's literal draft.\n"
+            "- If a continuation is weak or uncertain, still return the best literal continuation you can infer from the draft rather than switching to a generic fallback phrase.\n"
         )
     return (
         "\n\nAdditional context handling rules:\n"

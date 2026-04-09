@@ -234,7 +234,7 @@ class TestStreamingPostprocess:
             before_cursor=before,
             shell_mode=False,
             index=1,
-        ) == " that seems right"
+        ) == " any errors show up?"
 
     def test_unicode_in_suggestions(self, engine):
         """Unicode characters pass through correctly."""

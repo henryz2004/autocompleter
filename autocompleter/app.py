@@ -1840,6 +1840,18 @@ class Autocompleter:
         self._generation_id += 1
         gen_id = self._generation_id
 
+        snapshot = self._new_snapshot_for_focus(
+            generation_id=gen_id,
+            focused=focused,
+            trigger_type="regenerate",
+            mode=mode,
+            window_title=window_title,
+            source_url=source_url,
+            visible_text_elements=visible_text_elements,
+            conversation_turns=conversation_turns,
+            visible_meta=visible_meta,
+        )
+
         # Show loading indicator at the (updated) position
         self._run_on_main(lambda: self.overlay.show(
             [Suggestion(text="Regenerating...", index=0)],
@@ -1859,11 +1871,11 @@ class Autocompleter:
                 mode, window_title, source_url,
                 conversation_turns, visible_text_elements,
                 gen_id, cross_app_context,
-                None,  # snapshot — skip trigger dump on regenerate
+                snapshot,
                 subtree_context,
             ),
             kwargs={
-                "temperature_boost": 0.3,
+                "temperature_boost": 0.5,
                 "extra_negative_patterns": prev_texts,
                 "visible_meta": visible_meta,
                 "trigger_type": "regenerate",
