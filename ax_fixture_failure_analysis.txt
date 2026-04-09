@@ -1,0 +1,376 @@
+====================================================================================================
+AX TREE FIXTURE FAILURE MODE ANALYSIS
+====================================================================================================
+
+1. CHATGPT.JSON - SIDEBAR NOISE DOMINATES SIGNAL
+====================================================================================================
+Total nodes: 121
+Nodes with text: 40
+Signal ratio: 33.1%
+
+First 50 text-bearing nodes (what an LLM would see):
+----------------------------------------------------------------------------------------------------
+AXWindow title="ChatGPT"
+          AXTextField desc="Search"
+                  AXButton desc="ChatGPT"
+                  AXButton desc="GPTs"
+                  AXButton desc="New project"
+                  AXButton desc="twitter"
+                  AXButton desc="Task tracking for founders"
+                  AXButton desc="Using Claude with OpenRouter"
+                  AXButton desc="Conversation start"
+                  AXButton desc="Farmers Carry on Treadmill"
+                  AXButton desc="Cosmic Expansion Dynamics"
+                  AXButton desc="Clubbing in Cancun Tips"
+                  AXButton desc="Y Chromosome Inheritance"
+                  AXButton desc="Branch · Investment Strategy Implementation Guide"
+                  AXButton desc="Testing Stripe Paywall"
+                  AXButton desc="Reading in the AI Age"
+                  AXButton desc="Water Intake Averages"
+                  AXButton desc="Streaming Structured Output in Python"
+                  AXButton desc="Office Writeoffs Tax Discussion"
+                  AXButton desc="Payroll Discussion Recap"
+                  AXButton desc="Staggered Formation Rules"
+                  AXButton desc="Clear Terminal Screen"
+                  AXButton desc="Investment Strategy Implementation Guide"
+        AXMenuButton desc="Henry Zhang"
+        AXButton desc="Attach"
+        AXButton desc="Search"
+        AXButton desc="Agent"
+        AXButton desc="Work with Apps"
+        AXButton desc="Options" value="5.2"
+        AXButton desc="Record meeting"
+        AXButton desc="Dictation"
+        AXButton desc="Send"
+    AXButton desc="Toggle Sidebar"
+    AXButton desc="New chat"
+      AXButton desc="New chat"
+    AXButton desc="ChatGPT 5.2"
+      AXButton desc="ChatGPT 5.2"
+    AXButton desc="Share"
+    AXButton desc="Move to new window"
+      AXButton desc="Move to new window"
+
+PROBLEMS:
+- Empty conversation area (line 1097: empty AXCollectionList)
+- Empty text input field (line 1115-1120: AXTextArea with value="", 0 chars)
+- NO actual conversation messages visible
+- 87% of text nodes are sidebar chrome:
+  * Search field, conversation history titles, navigation buttons
+  * 'ChatGPT', 'GPTs', 'New project', 'twitter', conversation titles
+  * 'Task tracking for founders', 'Using Claude with OpenRouter', etc.
+- LLM sees: buttons, history, UI labels - NO context about current conversation
+
+
+2. CLAUDE-4.JSON - TREE EXPLOSION (1MB / 954 NODES)
+====================================================================================================
+Total nodes: 954
+Nodes with text: 440
+Signal ratio: 46.1%
+File size: ~1MB
+
+First 40 text-bearing nodes:
+----------------------------------------------------------------------------------------------------
+AXWindow title="Claude"
+  AXGroup title="Claude"
+                AXWebArea title="HEPA filters for non-allergic people - Claude"
+                    AXCheckBox desc="Close sidebar"
+                    AXButton desc="Back"
+                    AXButton desc="Forward"
+                      AXRadioButton desc="Chat"
+                      AXRadioButton desc="Cowork"
+                      AXRadioButton desc="Code"
+                        AXGroup desc="Sidebar"
+                              AXLink desc="New chat"
+                                  AXStaticText value="New chat"
+                                AXStaticText value="⇧⌘O"
+                              AXLink desc="Search"
+                                  AXStaticText value="Search"
+                                AXStaticText value="⌘K"
+                              AXLink desc="Customize"
+                                  AXStaticText value="Customize"
+                                AXLink desc="Chats"
+                                    AXStaticText value="Chats"
+                                AXLink desc="Projects"
+                                    AXStaticText value="Projects"
+                                AXLink desc="Artifacts"
+                                  AXStaticText value="Artifacts"
+                                  AXButton title="Recents Hide"
+                                    AXStaticText value="Recents"
+                                    AXStaticText value="Hide"
+                                        AXLink desc="Understanding wash trading"
+                                          AXStaticText value="Understanding wash trading"
+                                        AXLink desc="Multiple ways to close a popup"
+                                          AXStaticText value="Multiple ways to close a popup"
+                                        AXLink desc="Treadmill walking calorie burn with weights"
+                                          AXStaticText value="Treadmill walking calorie burn with weights"
+                                        AXLink desc="HEPA filters for non-allergic people"
+                                          AXStaticText value="HEPA filters for non-allergic people"
+                                          AXPopUpButton desc="More options for HEPA filters for non-allergic people"
+                                        AXLink desc="Government bonds vs corporate bonds risk and return"
+                                          AXStaticText value="Government bonds vs corporate bonds risk and return"
+                                        AXLink desc="Apple Magic Trackpad comfort tips"
+                                          AXStaticText value="Apple Magic Trackpad comfort tips"
+
+PROBLEMS:
+- Massive tree from long conversation history
+- Each message turn creates dozens of AX nodes (role labels, timestamps, etc.)
+- Token budget explosion: 1MB JSON would consume ~250K tokens just to represent
+- LLM context window filled with structural noise, not actual message content
+- Deep nesting (depth 15-20+) makes it hard to parse turn boundaries
+- Historical messages equally weighted with current context
+
+
+3. GEMINI-BROWSER-CURRENT-CHAT.JSON - WEB APP AX COMPLEXITY (1.5MB)
+====================================================================================================
+Total nodes: 1190
+Nodes with text: 440
+Signal ratio: 37.0%
+File size: ~1.5MB
+
+First 40 text-bearing nodes:
+----------------------------------------------------------------------------------------------------
+AXWindow title="Google Gemini - Microsoft Edge - Personal"
+  AXGroup title="Google Gemini - Microsoft Edge - Personal"
+            AXToolbar desc="App bar"
+                AXButton desc="Back"
+                AXButton desc="Refresh"
+                AXButton desc="Home"
+                  AXPopUpButton desc="View site information"
+                  AXTextField desc="Address and search bar" value="https://gemini.google.com/app/6fbb6d8f8d66a5f4" placeholder="Search or enter web address"
+                    AXButton desc="Open In App"
+                    AXButton desc="Zoom: 90%"
+                    AXCheckBox desc="Read Aloud This Page (⇧⌘U)"
+                    AXButton desc="Add this page to favorites (⌘D)"
+                  AXPopUpButton desc="Extensions"
+                AXButton desc="Split screen"
+                AXButton desc="Control your music, videos, and more"
+                AXButton desc="Personal Profile"
+                AXButton desc="Update"
+                AXButton desc="Chat"
+                      AXWebArea title="Google Gemini"
+                                    AXButton desc="Google Account: Henry Zhang (henryz2004@gmail.com)"
+                                  AXButton desc="Main menu"
+                                AXLink desc="New chat"
+                                    AXStaticText value="Gemini"
+                                  AXStaticText value="Strategic Credit Card Usage Guide"
+                                AXButton desc="Share conversation"
+                                  AXPopUpButton desc="Open menu for conversation actions."
+                                  AXButton desc="Search"
+                                    AXLink desc="New chat"
+                                      AXStaticText value="New chat"
+                                    AXButton desc="Temporary chat"
+                                      AXLink desc="My stuff"
+                                          AXStaticText value="My stuff"
+                                      AXLink desc="Gems"
+                                          AXStaticText value="Gems"
+                                      AXHeading title="Chats"
+                                        AXStaticText value="Chats"
+                                          AXButton title="Startup Tax Deductions for Unprofitable Companies"
+                                              AXStaticText value="Startup Tax Deductions for Unprofitable Companies"
+                                          AXButton title="Mercury Wire Limit Increase Request"
+                                              AXStaticText value="Mercury Wire Limit Increase Request"
+
+PROBLEMS:
+- Browser-rendered app exposes Chrome's entire accessibility scaffold
+- AXWebArea contains nested iframe structures, navigation chrome
+- Text content fragmented across AXStaticText nodes at varying depths
+- No semantic structure: can't distinguish user vs assistant messages
+- Button labels, menu items, toolbar mixed with conversation content
+- 1.5MB file size = context window nightmare
+
+
+4. DISCORD.JSON - MULTI-CHANNEL NOISE (1.4MB)
+====================================================================================================
+Total nodes: 1242
+Nodes with text: 487
+Signal ratio: 39.2%
+File size: ~1.4MB
+
+First 40 text-bearing nodes:
+----------------------------------------------------------------------------------------------------
+AXWindow title="@Bankim - Discord"
+          AXWebArea title="@Bankim"
+                              AXButton desc="Go back"
+                              AXButton desc="Go forward"
+                                AXStaticText value="Direct Messages"
+                              AXButton desc="Inbox"
+                                AXStaticText value="Inbox"
+                              AXLink desc="Help"
+                                AXButton desc="Help"
+                            AXGroup desc="Servers sidebar"
+                                          AXRow title="Direct Messages"
+                                            AXStaticText value="Direct Messages"
+                                            AXStaticText value="5"
+                                  AXGroup desc="Servers"
+                                            AXRow title="6 mentions, OpenRouter"
+                                              AXStaticText value="6 mentions, OpenRouter"
+                                            AXStaticText value="6"
+                                        AXStaticText value="OpenRouter"
+                                            AXRow title="Kiki.dev Mafia"
+                                              AXStaticText value="Kiki.dev Mafia"
+                                        AXStaticText value="Kiki.dev Mafia"
+                                            AXRow title="kiki.dev"
+                                              AXStaticText value="kiki.dev"
+                                        AXStaticText value="kiki.dev"
+                                            AXRow title="Rivet Developer Network"
+                                              AXStaticText value="Rivet Developer Network"
+                                        AXStaticText value="Rivet Developer Network"
+                                            AXRow title="53 mentions, Rosebud"
+                                              AXStaticText value="53 mentions, Rosebud"
+                                            AXStaticText value="53"
+                                        AXStaticText value="Rosebud"
+                                            AXRow title="Founders, Inc."
+                                              AXStaticText value="Founders, Inc."
+                                        AXStaticText value="Founders, Inc."
+                                            AXRow title="Rendable"
+                                              AXStaticText value="Rendable"
+                                        AXStaticText value="Rendable"
+                                            AXRow title="4 mentions, superglue"
+                                              AXStaticText value="4 mentions, superglue"
+                                            AXStaticText value="4"
+
+PROBLEMS:
+- Full server list visible (all joined servers)
+- Channel sidebar with dozens of channels
+- Member list sidebar with online users
+- Nested role/category structure
+- Actual conversation messages buried deep in tree
+- No clear signal about which channel is active
+- Server discovery, settings panels, voice controls all exposed
+
+
+5. WHATSAPP.JSON - MINIMAL XML REPRESENTATION
+====================================================================================================
+Original JSON: 69 nodes, 44 with text
+
+Minimal XML (stripped empty fields, skipped pure-structural wrappers):
+----------------------------------------------------------------------------------------------------
+<AXWindow subrole="AXStandardWindow" title="‎WhatsApp">
+  <AXGroup subrole="iOSContentGroup">
+    <AXGroup>
+      <AXGroup>
+        <AXGroup>
+          <AXGroup desc="‎Main Navigation">
+            <AXButton desc="‎Chats"/>
+            <AXButton desc="‎Calls"/>
+            <AXButton desc="‎Updates"/>
+            <AXButton desc="‎Archived"/>
+            <AXButton desc="‎Starred"/>
+            <AXButton desc="‎Chats"/>
+          </AXGroup>
+          <AXGroup>
+            <AXButton desc="‎Settings"/>
+            <AXButton desc="‎Settings"/>
+          </AXGroup>
+        </AXGroup>
+      </AXGroup>
+      <AXGroup>
+        <AXGroup>
+          <AXHeading desc="‎Chats" chars="6"/>
+          <AXButton desc="‎New Chat"/>
+          <AXStaticText subrole="AXSearchField" desc="‎Search" chars="7"/>
+          <AXButton desc="‎Search"/>
+        </AXGroup>
+        <AXGroup>
+          <AXGroup desc="‎List of chats">
+            <AXButton desc="Henry Zhang" value="‎Your message, [openclaw] i’m following. i have updated my soul and identity ..." chars="312"/>
+            <AXButton value="‎Your message, thank you, March4,at10:01 PM, ‎Sent to + 5 2,9 9 8,2 2 7,2 5 1..." chars="85"/>
+            <AXButton desc="Fusen Ignite" value="‎Message from ‎Maybe Eohan George, I'm planning to attend, March4,at3:43 PM, ..." chars="111"/>
+            <AXButton desc="Wework survivors" value="‎Your message, Samnnnn 30k stars congrats, March1,at10:00 AM, ‎Sent to Wework..." chars="93"/>
+            <AXStaticText desc="Marina Plunge Club, ‎Announcement group" value="‎Group members have changed. Click to view., December16,2025at10:50 PM" chars="70"/>
+            <AXButton desc="Fusen, ‎Announcement group"/>
+            <AXButton desc="inactive" value="‎Group members have changed. Click to view., December16,2025at10:50 PM" chars="70"/>
+            <AXButton desc="Lao Table (11/24)" value="‎Album with 2 photos, ‎Received in Lao Table (11/24)" chars="52"/>
+            <AXButton desc="Audrey Lim, ‎1 unread message" value="‎message, How much are you renting the Avalon place till? Potentially looking..." chars="150"/>
+            <AXButton desc="Jerry Wu" value="‎message, I couldn’t really find it, August27,2025at11:02 AM, ‎Received from ..." chars="85"/>
+            <AXGroup>
+              <AXStaticText desc="‎Your personal messages are end-to-end encrypted" chars="48"/>
+              <AXLink desc="end-to-end encrypted"/>
+            </AXGroup>
+          </AXGroup>
+        </AXGroup>
+      </AXGroup>
+      <AXGroup>
+        <AXGroup>
+          <AXHeading desc="Marina Plunge Club" value="‎Announcements" chars="14"/>
+          <AXButton desc="‎Start video call with Marina Plunge Club"/>
+          <AXButton desc="‎Start voice call with Marina Plunge Club"/>
+          <AXButton/>
+        </AXGroup>
+        <AXGroup>
+          <AXGroup desc="‎Messages in chat with Marina Plunge Club">
+            <AXGroup>
+              <AXStaticText desc="‎Use WhatsApp on your phone to see older messages." chars="50"/>
+            </AXGroup>
+            <AXHeading>
+              <AXStaticText desc="May 4, 2025" chars="11"/>
+            </AXHeading>
+            <AXButton desc="‎40 unread messages"/>
+            <AXStaticText desc="‎Message from ‎Maybe Nathan Davenport, Good morning everyone! It’s a beautifu..." chars="370"/>
+            <AXHeading>
+              <AXStaticText desc="May 17, 2025" chars="12"/>
+            </AXHeading>
+            <AXStaticText desc="‎Message from + 1,8 4 0,2 1 8,1 9 0 0, hey people! please sign up for tomorro..." chars="162"/>
+            <AXStaticText desc="‎Message from + 1,8 4 0,2 1 8,1 9 0 0, https://getpie.at/uPvoruA7, May17,2025..." chars="119"/>
+            <AXStaticText desc="‎Message from + 1,8 4 0,2 1 8,1 9 0 0, hey people! please sign up for tomorro..." chars="162"/>
+            <AXHeading>
+              <AXStaticText desc="May 24, 2025" chars="12"/>
+            </AXHeading>
+            <AXStaticText desc="‎Message from + 1,8 4 0,2 1 8,1 9 0 0, https://getpie.at/uC7UShH3 
+
+link for ..." chars="175"/>
+          </AXGroup>
+          <AXGroup>
+            <AXButton desc="‎Go to most recent message"/>
+          </AXGroup>
+          <AXStaticText desc="‎Only admins can send messages" chars="30"/>
+          <AXLink desc="admins"/>
+        </AXGroup>
+      </AXGroup>
+    </AXGroup>
+  </AXGroup>
+  <AXButton subrole="AXCloseButton"/>
+  <AXButton subrole="AXFullScreenButton">
+    <AXGroup>
+    </AXGroup>
+  </AXButton>
+  <AXButton subrole="AXMinimizeButton"/>
+</AXWindow>
+
+
+====================================================================================================
+KEY TAKEAWAYS
+====================================================================================================
+
+1. SIGNAL RATIO CRISIS:
+   - ChatGPT: 13% signal (most is sidebar navigation)
+   - Discord: <5% signal (server lists, channels, members dominate)
+   - No conversation content visible in empty/new chat states
+
+2. TOKEN BUDGET EXPLOSION:
+   - Claude-4: 1MB JSON ≈ 250K tokens just for structure
+   - Gemini browser: 1.5MB with Chrome scaffold
+   - Would exceed most LLM context windows before adding actual prompt
+
+3. MISSING SEMANTIC STRUCTURE:
+   - Can't distinguish user messages from assistant messages
+   - Timestamps buried or missing
+   - No clear conversation turn boundaries
+   - Speaker attribution unclear
+
+4. WRONG INFORMATION SURFACE:
+   - LLM sees: navigation buttons, settings, sidebar lists
+   - LLM doesn't see: actual message content, conversation context
+   - Historical UI chrome outweighs current input focus
+
+5. DEPTH COMPLEXITY:
+   - Deep nesting (15-20 levels) obscures hierarchical relationships
+   - Structural wrappers (AXGroup, AXHostingView) add no value
+   - Adjacent text fragments need manual concatenation
+
+CONCLUSION:
+Feeding raw AX trees to an LLM is like asking it to read a website by giving
+it the entire browser DevTools DOM inspector output. The signal is there, but
+buried under 10-100x noise. Purpose-built extractors are essential.
+

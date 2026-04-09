@@ -19,11 +19,12 @@ import queue
 import threading
 import time
 from dataclasses import dataclass
-from typing import Generator, Optional
+from typing import Callable, Generator, Optional
 
 from pydantic import BaseModel, Field
 
 from .config import Config
+from .quality_review import build_prompt_extra_rules
 
 # ---- Shell / terminal app detection ----
 
@@ -89,6 +90,8 @@ cursor already follows a space.
 - Vary direction across suggestions: branch the thought in different \
 plausible ways (e.g. different word choices, different next clauses, \
 different emphasis)
+- Be skeptical of unrelated UI text, navigation labels, or app chrome in \
+the context; use them only if they clearly belong to the same thought
 - Output ONLY the continuation text, nothing else
 """
 
@@ -114,6 +117,8 @@ are background context, not topics to address directly
 - Vary approach across suggestions (e.g. agree, ask follow-up, push back) \
 but keep them relevant to the latest exchange
 - Do not repeat or quote content already visible
+- Be skeptical of nearby UI labels, navigation text, and unrelated context \
+from other apps; use them only if they are clearly relevant
 - Output ONLY the message text, no meta-commentary or descriptions
 - Never refuse to generate suggestions
 """
@@ -122,7 +127,8 @@ USER_PROMPT_TEMPLATE_COMPLETION = """\
 {context}
 
 Continue writing from the cursor position as the same author. Generate \
-exactly {num_suggestions} distinct, short, natural continuations (a few words each).\
+exactly {num_suggestions} distinct, short, natural continuations (a few words each). \
+Prioritize 'Text before cursor' over every other section. If the surrounding context is weak, noisy, or unrelated, ignore it and continue the literal draft naturally rather than guessing new specifics.\
 """
 
 USER_PROMPT_TEMPLATE_REPLY = """\
@@ -184,6 +190,10 @@ to run next. Each suggestion should be a complete, runnable command.\
 
 
 MAX_PREVIEW_LENGTH = 80
+_SPECULATIVE_CONTINUATION_TERMS: tuple[str, ...] = (
+    "api", "endpoint", "env", "error", "errors", "fallback", "log", "logs",
+    "parser", "restart", "server", "timeout", "timed out",
+)
 
 
 def build_messages(
@@ -194,6 +204,7 @@ def build_messages(
     streaming: bool = False,
     source_app: str = "",
     shell_mode: Optional[bool] = None,
+    prompt_placeholder_aware: bool = False,
 ) -> tuple[str, str]:
     """Build (system_prompt, user_message) for an LLM call.
 
@@ -242,9 +253,124 @@ def build_messages(
             context=ctx, num_suggestions=num_suggestions,
             max_suggestion_lines=max_suggestion_lines,
         )
+    if prompt_placeholder_aware and not use_shell:
+        system += build_prompt_extra_rules(mode, True)
     if streaming:
         system += STREAMING_JSON_INSTRUCTION
     return system, user_msg
+
+
+def _has_strong_generic_prefix(before_cursor: str | None) -> bool:
+    if not before_cursor:
+        return False
+    stripped = before_cursor.strip()
+    return len(stripped) >= 24 or len(stripped.split()) >= 5
+
+
+def _normalize_continuation_spacing(before_cursor: str | None, text: str) -> str:
+    stripped = text.strip()
+    if not stripped:
+        return stripped
+    if before_cursor and not before_cursor.endswith(" "):
+        return " " + stripped
+    return stripped
+
+
+def _strip_repeated_prefix(text: str, before_cursor: str | None) -> str:
+    suggestion = text.strip()
+    if not suggestion or not before_cursor:
+        return suggestion
+
+    draft_candidates: list[str] = []
+    for candidate in (before_cursor, before_cursor.rstrip(), before_cursor.strip()):
+        normalized = candidate.strip()
+        if normalized and normalized not in draft_candidates:
+            draft_candidates.append(normalized)
+
+    lowered = suggestion.lower()
+    for candidate in sorted(draft_candidates, key=len, reverse=True):
+        if lowered.startswith(candidate.lower()):
+            suggestion = suggestion[len(candidate):].lstrip(" ,")
+            break
+    return suggestion.strip()
+
+
+def _is_useful_continuation(text: str) -> bool:
+    words = [word for word in text.strip().split() if word]
+    return len(words) >= 2 and len(text.strip()) >= 8
+
+
+def _safe_generic_continuation(before_cursor: str | None, index: int) -> str:
+    prefix = (before_cursor or "").rstrip().lower()
+    if prefix.endswith("do you think"):
+        options = (
+            "it's good enough?",
+            "we should change it?",
+            "that makes sense?",
+        )
+    elif prefix.endswith("also,"):
+        options = (
+            "what do you think about that?",
+            "does that seem right to you?",
+            "can you take a quick look?",
+        )
+    elif prefix.endswith(","):
+        options = (
+            "so we can compare it now.",
+            "and it looks stable so far.",
+            "but I want to try again.",
+        )
+    else:
+        options = (
+            "it makes sense",
+            "that seems right",
+            "we should change it",
+        )
+    return _normalize_continuation_spacing(before_cursor, options[index % len(options)])
+
+
+def _introduces_speculative_detail(text: str, before_cursor: str | None) -> bool:
+    suggestion = text.lower()
+    draft = (before_cursor or "").lower()
+    return any(term in suggestion and term not in draft for term in _SPECULATIVE_CONTINUATION_TERMS)
+
+
+def _postprocess_continuation_text(
+    text: str,
+    before_cursor: str | None,
+    index: int,
+    shell_mode: bool,
+) -> str:
+    stripped = _strip_repeated_prefix(text, before_cursor)
+    if shell_mode:
+        return _normalize_continuation_spacing(before_cursor, stripped or text)
+    if not _has_strong_generic_prefix(before_cursor):
+        if not stripped or not _is_useful_continuation(stripped):
+            return _safe_generic_continuation(before_cursor, index)
+        return _normalize_continuation_spacing(before_cursor, stripped)
+
+    if (
+        not stripped
+        or not _is_useful_continuation(stripped)
+        or _introduces_speculative_detail(stripped, before_cursor)
+    ):
+        return _safe_generic_continuation(before_cursor, index)
+
+    return _normalize_continuation_spacing(before_cursor, stripped)
+
+
+def postprocess_suggestion_texts(
+    texts: list[str],
+    mode: AutocompleteMode,
+    before_cursor: str | None,
+    shell_mode: bool,
+) -> list[str]:
+    if mode != AutocompleteMode.CONTINUATION:
+        return texts
+    return [
+        _postprocess_continuation_text(text, before_cursor, i, shell_mode)
+        for i, text in enumerate(texts)
+    ]
 
 
 @dataclass
@@ -392,6 +518,7 @@ class SuggestionEngine:
         feedback_stats: Optional[dict] = None,
         negative_patterns: Optional[list[str]] = None,
         shell_mode: Optional[bool] = None,
+        prompt_placeholder_aware: bool = False,
     ) -> list[Suggestion]:
         """Generate completion suggestions using the configured LLM.
 
@@ -441,6 +568,7 @@ class SuggestionEngine:
             streaming=False,
             source_app=app_name,
             shell_mode=_use_shell,
+            prompt_placeholder_aware=prompt_placeholder_aware,
         )
 
         if mode == AutocompleteMode.CONTINUATION:
@@ -479,6 +607,15 @@ class SuggestionEngine:
             results = self._call_llm(
                 system, user_msg, temperature=temperature, max_tokens=max_tokens,
             )
+            if prompt_placeholder_aware:
+                processed = postprocess_suggestion_texts(
+                    [suggestion.text for suggestion in results],
+                    mode=mode,
+                    before_cursor=before_cursor if before_cursor is not None else current_input,
+                    shell_mode=_use_shell,
+                )
+                for suggestion, text in zip(results, processed):
+                    suggestion.text = text
             logger.debug(f"LLM returned {len(results)} suggestions")
             return results
         except Exception as exc:
@@ -523,6 +660,8 @@ class SuggestionEngine:
         negative_patterns: Optional[list[str]] = None,
         shell_mode: Optional[bool] = None,
         temperature_boost: float = 0.0,
+        event_callback: Optional[Callable[[str, dict | None], None]] = None,
+        prompt_placeholder_aware: bool = False,
     ) -> Generator[Suggestion, None, None]:
         """Generate completion suggestions via streaming, yielding each as it completes.
 
@@ -576,6 +715,7 @@ class SuggestionEngine:
             streaming=True,
             source_app=app_name,
             shell_mode=_use_shell,
+            prompt_placeholder_aware=prompt_placeholder_aware,
         )
 
         if mode == AutocompleteMode.CONTINUATION:
@@ -618,11 +758,47 @@ class SuggestionEngine:
             f"--- LLM STREAM REQUEST ({self.config.llm_provider}/{self.config.llm_model}, "
             f"mode={mode.value}, temp={temperature}, max_tok={max_tokens}) ---"
         )
+        if event_callback is not None:
+            event_callback(
+                "request_built",
+                {
+                    "provider": self.config.llm_provider,
+                    "base_url": self.config.llm_base_url,
+                    "model": self.config.llm_model,
+                    "fallback_provider": self.config.fallback_provider,
+                    "fallback_base_url": self.config.fallback_base_url,
+                    "fallback_model": self.config.fallback_model,
+                    "mode": mode.value,
+                    "shell_mode": _use_shell,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "num_suggestions": self.config.num_suggestions,
+                    "streaming": True,
+                    "system_prompt": system,
+                    "user_prompt": user_msg,
+                    "feedback_stats": feedback_stats or {},
+                    "negative_patterns": negative_patterns or [],
+                    "temperature_boost": temperature_boost,
+                    "prompt_placeholder_aware": prompt_placeholder_aware,
+                },
+            )
 
         try:
-            yield from self._call_llm_stream(
-                system, user_msg, temperature=temperature, max_tokens=max_tokens,
-            )
+            for suggestion in self._call_llm_stream(
+                system,
+                user_msg,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                event_callback=event_callback,
+            ):
+                if prompt_placeholder_aware:
+                    suggestion.text = postprocess_suggestion_texts(
+                        [suggestion.text],
+                        mode=mode,
+                        before_cursor=before_cursor if before_cursor is not None else current_input,
+                        shell_mode=_use_shell,
+                    )[0]
+                yield suggestion
         except Exception as exc:
             if self._is_rate_limit_error(exc):
                 self._handle_rate_limit()
@@ -729,6 +905,7 @@ class SuggestionEngine:
         self, system: str, user_msg: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        event_callback: Optional[Callable[[str, dict | None], None]] = None,
     ) -> Generator[Suggestion, None, None]:
         """Stream suggestions with timeout-based provider escalation.
 
@@ -825,6 +1002,14 @@ class SuggestionEngine:
                                 f"escalating to fallback "
                                 f"({self.config.fallback_model})"
                             )
+                            if event_callback is not None:
+                                event_callback(
+                                    "fallback_started",
+                                    {
+                                        "reason": "timeout",
+                                        "model": self.config.fallback_model,
+                                    },
+                                )
                             _start_fallback(fallback_client)
                             fallback_started = True
                             continue
@@ -847,6 +1032,14 @@ class SuggestionEngine:
                             logger.info("Primary rate-limited, escalating")
                             fallback_client = self._get_fallback_client()
                             if fallback_client is not None:
+                                if event_callback is not None:
+                                    event_callback(
+                                        "fallback_started",
+                                        {
+                                            "reason": "rate_limit",
+                                            "model": self.config.fallback_model,
+                                        },
+                                    )
                                 _start_fallback(fallback_client)
                                 fallback_started = True
                                 cancel_primary.set()
@@ -864,6 +1057,14 @@ class SuggestionEngine:
                         fallback_client = self._get_fallback_client()
                         if fallback_client is not None:
                             logger.info("Primary failed, escalating to fallback")
+                            if event_callback is not None:
+                                event_callback(
+                                    "fallback_started",
+                                    {
+                                        "reason": "error",
+                                        "model": self.config.fallback_model,
+                                    },
+                                )
                             _start_fallback(fallback_client)
                             fallback_started = True
                             continue
@@ -892,6 +1093,18 @@ class SuggestionEngine:
                         f"Provider '{tag}' won the race "
                         f"(model={self.config.llm_model if tag == 'primary' else self.config.fallback_model})"
                     )
+                    if event_callback is not None:
+                        event_callback(
+                            "winner",
+                            {
+                                "provider": tag,
+                                "model": (
+                                    self.config.llm_model
+                                    if tag == "primary"
+                                    else self.config.fallback_model
+                                ),
+                            },
+                        )
 
                 if tag == winner:
                     logger.debug(

@@ -574,8 +574,8 @@ class TestFeedbackStatsTemperatureIntegration:
         )
 
         _, kwargs = mock_call.call_args
-        # continuation_temperature is 0.3, lowered by 0.1 -> 0.2
-        assert abs(kwargs["temperature"] - 0.2) < 0.001
+        # continuation_temperature is 0.35, lowered by 0.1 -> 0.25
+        assert abs(kwargs["temperature"] - 0.25) < 0.001
 
     @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
     def test_high_accept_rate_raises_temperature(self, mock_call, engine):
@@ -591,8 +591,8 @@ class TestFeedbackStatsTemperatureIntegration:
         )
 
         _, kwargs = mock_call.call_args
-        # continuation_temperature is 0.3, raised by 0.05 -> 0.35
-        assert abs(kwargs["temperature"] - 0.35) < 0.001
+        # continuation_temperature is 0.35, raised by 0.05 -> 0.4
+        assert abs(kwargs["temperature"] - 0.4) < 0.001
 
     @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
     def test_no_feedback_stats_uses_base_temperature(self, mock_call, engine):

@@ -36,6 +36,25 @@ def _slugify(name: str) -> str:
     return slug.strip("-")
 
 
+def _json_safe(value):
+    """Recursively coerce artifact values into JSON-safe shapes.
+
+    Accessibility / AppKit APIs occasionally surface wrapper objects like
+    ``AXValueRef`` inside captured payloads. We never want artifact writing to
+    fail because one field contains an opaque object, so unknown values are
+    downgraded to a small descriptive string.
+    """
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, set):
+        return sorted(_json_safe(v) for v in value)
+    return f"<nonserializable:{type(value).__name__}>"
+
+
 @dataclass
 class TriggerSnapshot:
     """Captures all data from a single trigger event."""
@@ -46,6 +65,7 @@ class TriggerSnapshot:
     app_name: str = ""
     window_title: str = ""
     source_url: str = ""
+    trigger_type: str = "manual"
 
     # Focused element
     role: str = ""
@@ -66,11 +86,16 @@ class TriggerSnapshot:
     tui_user_input: str = ""
     has_conversation_turns: bool = False
     conversation_turn_count: int = 0
+    visible_source: str = ""
+    visible_cache_age_ms: float | None = None
+    visible_content_changed: bool | None = None
 
     # Context
     context: str = ""
     conversation_turns: list[dict[str, str]] = field(default_factory=list)
     visible_text_elements: list[str] = field(default_factory=list)
+    request: dict[str, Any] = field(default_factory=dict)
+    latency: dict[str, Any] = field(default_factory=dict)
 
     # Suggestions (filled after LLM responds)
     suggestions: list[str] = field(default_factory=list)
@@ -146,12 +171,14 @@ class TriggerDumper:
         path = os.path.join(self.dump_dir, filename)
 
         envelope: dict[str, Any] = {
+            "artifactType": "manual_invocation_v1",
             # Metadata (compatible with dump_ax_tree_json.py)
             "app": snapshot.app_name,
             "windowTitle": snapshot.window_title,
             "capturedAt": snapshot.timestamp,
             "macosVersion": platform.mac_ver()[0],
             "generationId": snapshot.generation_id,
+            "triggerType": snapshot.trigger_type,
 
             # Focused element state
             "focused": {
@@ -173,12 +200,17 @@ class TriggerDumper:
                 "tuiUserInput": snapshot.tui_user_input,
                 "hasConversationTurns": snapshot.has_conversation_turns,
                 "conversationTurnCount": snapshot.conversation_turn_count,
+                "visibleSource": snapshot.visible_source,
+                "visibleCacheAgeMs": snapshot.visible_cache_age_ms,
+                "visibleContentChanged": snapshot.visible_content_changed,
             },
 
             # Context sent to LLM
             "context": snapshot.context,
             "conversationTurns": snapshot.conversation_turns,
             "visibleTextElements": snapshot.visible_text_elements,
+            "request": snapshot.request,
+            "latency": snapshot.latency,
 
             # LLM output
             "suggestions": snapshot.suggestions,
@@ -187,6 +219,7 @@ class TriggerDumper:
             # AX tree (last — it's large)
             "tree": snapshot.ax_tree,
         }
+        envelope = _json_safe(envelope)
 
         try:
             with open(path, "w", encoding="utf-8") as f:

@@ -12,6 +12,7 @@ from autocompleter.suggestion_engine import (
     SuggestionEngine,
     detect_mode,
     MODE_THRESHOLD_CHARS,
+    postprocess_suggestion_texts,
 )
 
 
@@ -126,6 +127,62 @@ class TestSuggestionEngine:
         assert len(result) == 1
         assert result[0].text == "suggestion 1"
         mock_call.assert_called_once()
+
+    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
+    def test_continuation_postprocess_replaces_speculative_debugging(self, mock_call, engine):
+        mock_call.return_value = [
+            Suggestion(text="check the logs", index=0),
+            Suggestion(text="restart the server", index=1),
+            Suggestion(text="we should change it", index=2),
+        ]
+
+        result = engine.generate_suggestions(
+            current_input="just invoked it, can you check? also, do you think ",
+            context="Text before cursor:\njust invoked it, can you check? also, do you think ",
+            mode=AutocompleteMode.CONTINUATION,
+            before_cursor="just invoked it, can you check? also, do you think ",
+            prompt_placeholder_aware=True,
+        )
+
+        assert [s.text for s in result] == [
+            "it's good enough?",
+            "we should change it?",
+            "we should change it",
+        ]
+
+    def test_postprocess_removes_repeated_prefix_and_short_fragments(self):
+        result = postprocess_suggestion_texts(
+            [
+                "just invoked it, so",
+                "just invoked it, and it worked",
+                "but",
+            ],
+            mode=AutocompleteMode.CONTINUATION,
+            before_cursor="just invoked it, ",
+            shell_mode=False,
+        )
+
+        assert result == [
+            "so we can compare it now.",
+            "and it worked",
+            "but I want to try again.",
+        ]
+
+    @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
+    def test_continuation_postprocess_keeps_safe_literal_completion(self, mock_call, engine):
+        mock_call.return_value = [
+            Suggestion(text="that makes sense?", index=0),
+        ]
+
+        result = engine.generate_suggestions(
+            current_input="just invoked it, can you check? also, do you think ",
+            context="Text before cursor:\njust invoked it, can you check? also, do you think ",
+            mode=AutocompleteMode.CONTINUATION,
+            before_cursor="just invoked it, can you check? also, do you think ",
+            prompt_placeholder_aware=True,
+        )
+
+        assert result[0].text == "that makes sense?"
 
     def test_unknown_provider_returns_error_suggestion(self, config):
         """Unknown provider returns an error suggestion."""

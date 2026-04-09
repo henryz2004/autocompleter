@@ -35,7 +35,7 @@ class Config:
     escalation_timeout_ms: int = 400  # ms to wait before firing fallback
 
     # Per-mode overrides (continuation = low entropy, reply = higher entropy)
-    continuation_temperature: float = 0.3
+    continuation_temperature: float = 0.35
     reply_temperature: float = 0.8
 
     # Suggestion behavior

@@ -3,13 +3,17 @@
 Records per-trigger timing breakdowns across pipeline stages and persists
 them to SQLite for trend analysis.
 
-Pipeline stages (in order):
-    trigger          — hotkey pressed
+Primary stages (in order):
+    trigger          — hotkey / auto-trigger / regenerate started
     context_ready    — context assembled and ready for LLM
     llm_start        — LLM API call initiated
     first_suggestion — first suggestion text available (streaming)
     llm_done         — all suggestions received from LLM
-    displayed        — suggestions shown in overlay
+    displayed        — final suggestions shown in overlay
+
+The tracker also supports finer-grained ad hoc markers (focused/caret/
+subtree/visible/context-build/overlay-first-show) so the app can measure
+the current critical path without changing behavior.
 """
 
 from __future__ import annotations
@@ -18,7 +22,8 @@ import logging
 import sqlite3
 import threading
 import time
-from dataclasses import dataclass, field
+from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -51,6 +56,26 @@ class LatencyRecord:
     llm_total_ms: float | None = None     # llm_start → llm_done
     e2e_first_ms: float | None = None     # trigger → first_suggestion
     e2e_total_ms: float | None = None     # trigger → displayed
+    # Fine-grained measurements
+    focus_ms: float | None = None
+    caret_ms: float | None = None
+    subtree_ms: float | None = None
+    visible_fetch_ms: float | None = None
+    context_build_ms: float | None = None
+    overlay_first_show_ms: float | None = None
+    overlay_final_show_ms: float | None = None
+    visible_cache_age_ms: float | None = None
+    # Trigger dimensions / diagnostics
+    trigger_type: str = ""
+    visible_source: str = ""
+    use_shell: bool = False
+    use_tui: bool = False
+    has_conversation_turns: bool = False
+    used_subtree_context: bool = False
+    used_semantic_context: bool = False
+    used_memory_context: bool = False
+    fallback_used: bool = False
+    visible_content_changed: bool | None = None
 
 
 class LatencyTracker:
@@ -106,6 +131,17 @@ class LatencyTracker:
         provider: str = "",
         model: str = "",
         suggestion_count: int = 0,
+        trigger_type: str = "",
+        visible_source: str = "",
+        use_shell: bool = False,
+        use_tui: bool = False,
+        has_conversation_turns: bool = False,
+        used_subtree_context: bool = False,
+        used_semantic_context: bool = False,
+        used_memory_context: bool = False,
+        fallback_used: bool = False,
+        visible_cache_age_ms: float | None = None,
+        visible_content_changed: bool | None = None,
     ) -> LatencyRecord:
         """Compute the latency record and log a summary line."""
         rec = LatencyRecord(
@@ -121,6 +157,24 @@ class LatencyTracker:
             llm_total_ms=self._delta_ms("llm_start", "llm_done"),
             e2e_first_ms=self._delta_ms("trigger", "first_suggestion"),
             e2e_total_ms=self._delta_ms("trigger", "displayed"),
+            focus_ms=self._delta_ms("trigger", "focused_ready"),
+            caret_ms=self._delta_ms("focused_ready", "caret_ready"),
+            subtree_ms=self._delta_ms("subtree_start", "subtree_ready"),
+            visible_fetch_ms=self._delta_ms("visible_start", "visible_ready"),
+            context_build_ms=self._delta_ms("context_build_start", "context_ready"),
+            overlay_first_show_ms=self._delta_ms("trigger", "overlay_first_show"),
+            overlay_final_show_ms=self._delta_ms("trigger", "displayed"),
+            visible_cache_age_ms=visible_cache_age_ms,
+            trigger_type=trigger_type,
+            visible_source=visible_source,
+            use_shell=use_shell,
+            use_tui=use_tui,
+            has_conversation_turns=has_conversation_turns,
+            used_subtree_context=used_subtree_context,
+            used_semantic_context=used_semantic_context,
+            used_memory_context=used_memory_context,
+            fallback_used=fallback_used,
+            visible_content_changed=visible_content_changed,
         )
 
         # Structured log line for easy grepping
@@ -135,9 +189,21 @@ class LatencyTracker:
             parts.append(f"e2e_first={rec.e2e_first_ms:.0f}ms")
         if rec.e2e_total_ms is not None:
             parts.append(f"e2e={rec.e2e_total_ms:.0f}ms")
+        if rec.focus_ms is not None:
+            parts.append(f"focus={rec.focus_ms:.0f}ms")
+        if rec.visible_fetch_ms is not None:
+            parts.append(f"visible={rec.visible_fetch_ms:.0f}ms")
+        if rec.context_build_ms is not None:
+            parts.append(f"build={rec.context_build_ms:.0f}ms")
         parts.append(f"n={rec.suggestion_count}")
         parts.append(f"app={rec.app_name}")
         parts.append(f"mode={rec.mode}")
+        if rec.trigger_type:
+            parts.append(f"trigger_type={rec.trigger_type}")
+        if rec.visible_source:
+            parts.append(f"visible_src={rec.visible_source}")
+        if rec.fallback_used:
+            parts.append("fallback=1")
 
         logger.info("[LATENCY] %s", " | ".join(parts))
         return rec
@@ -159,7 +225,25 @@ CREATE TABLE IF NOT EXISTS latency_metrics (
     llm_ttft_ms REAL,
     llm_total_ms REAL,
     e2e_first_ms REAL,
-    e2e_total_ms REAL
+    e2e_total_ms REAL,
+    focus_ms REAL,
+    caret_ms REAL,
+    subtree_ms REAL,
+    visible_fetch_ms REAL,
+    context_build_ms REAL,
+    overlay_first_show_ms REAL,
+    overlay_final_show_ms REAL,
+    visible_cache_age_ms REAL,
+    trigger_type TEXT DEFAULT '',
+    visible_source TEXT DEFAULT '',
+    use_shell INTEGER DEFAULT 0,
+    use_tui INTEGER DEFAULT 0,
+    has_conversation_turns INTEGER DEFAULT 0,
+    used_subtree_context INTEGER DEFAULT 0,
+    used_semantic_context INTEGER DEFAULT 0,
+    used_memory_context INTEGER DEFAULT 0,
+    fallback_used INTEGER DEFAULT 0,
+    visible_content_changed INTEGER
 )
 """
 
@@ -167,8 +251,13 @@ _INSERT = """\
 INSERT INTO latency_metrics
     (generation_id, timestamp, app_name, mode, provider, model,
      suggestion_count, context_ms, llm_ttft_ms, llm_total_ms,
-     e2e_first_ms, e2e_total_ms)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     e2e_first_ms, e2e_total_ms, focus_ms, caret_ms, subtree_ms,
+     visible_fetch_ms, context_build_ms, overlay_first_show_ms,
+     overlay_final_show_ms, visible_cache_age_ms, trigger_type,
+     visible_source, use_shell, use_tui, has_conversation_turns,
+     used_subtree_context, used_semantic_context, used_memory_context,
+     fallback_used, visible_content_changed)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 
@@ -188,9 +277,43 @@ class LatencyStore:
             conn = sqlite3.connect(str(self._db_path))
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute(_CREATE_TABLE)
+            self._migrate(conn)
             conn.commit()
             self._local.conn = conn
         return conn
+
+    @staticmethod
+    def _migrate(conn: sqlite3.Connection) -> None:
+        """Add newly introduced columns to existing DBs."""
+        columns = {
+            "focus_ms": "REAL",
+            "caret_ms": "REAL",
+            "subtree_ms": "REAL",
+            "visible_fetch_ms": "REAL",
+            "context_build_ms": "REAL",
+            "overlay_first_show_ms": "REAL",
+            "overlay_final_show_ms": "REAL",
+            "visible_cache_age_ms": "REAL",
+            "trigger_type": "TEXT DEFAULT ''",
+            "visible_source": "TEXT DEFAULT ''",
+            "use_shell": "INTEGER DEFAULT 0",
+            "use_tui": "INTEGER DEFAULT 0",
+            "has_conversation_turns": "INTEGER DEFAULT 0",
+            "used_subtree_context": "INTEGER DEFAULT 0",
+            "used_semantic_context": "INTEGER DEFAULT 0",
+            "used_memory_context": "INTEGER DEFAULT 0",
+            "fallback_used": "INTEGER DEFAULT 0",
+            "visible_content_changed": "INTEGER",
+        }
+        existing = {
+            row[1]
+            for row in conn.execute("PRAGMA table_info(latency_metrics)").fetchall()
+        }
+        for name, col_type in columns.items():
+            if name not in existing:
+                conn.execute(
+                    f"ALTER TABLE latency_metrics ADD COLUMN {name} {col_type}"
+                )
 
     def save(self, record: LatencyRecord) -> None:
         """Persist a latency record."""
@@ -208,6 +331,28 @@ class LatencyStore:
             record.llm_total_ms,
             record.e2e_first_ms,
             record.e2e_total_ms,
+            record.focus_ms,
+            record.caret_ms,
+            record.subtree_ms,
+            record.visible_fetch_ms,
+            record.context_build_ms,
+            record.overlay_first_show_ms,
+            record.overlay_final_show_ms,
+            record.visible_cache_age_ms,
+            record.trigger_type,
+            record.visible_source,
+            int(record.use_shell),
+            int(record.use_tui),
+            int(record.has_conversation_turns),
+            int(record.used_subtree_context),
+            int(record.used_semantic_context),
+            int(record.used_memory_context),
+            int(record.fallback_used),
+            (
+                None
+                if record.visible_content_changed is None
+                else int(record.visible_content_changed)
+            ),
         ))
         conn.commit()
 
@@ -240,8 +385,15 @@ class LatencyStore:
 
         query = f"""
             SELECT context_ms, llm_ttft_ms, llm_total_ms,
-                   e2e_first_ms, e2e_total_ms, suggestion_count,
-                   app_name, mode, provider, model
+                   e2e_first_ms, e2e_total_ms, focus_ms, caret_ms,
+                   subtree_ms, visible_fetch_ms, context_build_ms,
+                   overlay_first_show_ms, overlay_final_show_ms,
+                   visible_cache_age_ms, suggestion_count,
+                   app_name, mode, provider, model, trigger_type,
+                   visible_source, use_shell, use_tui,
+                   has_conversation_turns, used_subtree_context,
+                   used_semantic_context, used_memory_context,
+                   fallback_used, visible_content_changed
             FROM latency_metrics
             {where}
             {order}
@@ -257,6 +409,14 @@ class LatencyStore:
             "llm_total_ms": [],
             "e2e_first_ms": [],
             "e2e_total_ms": [],
+            "focus_ms": [],
+            "caret_ms": [],
+            "subtree_ms": [],
+            "visible_fetch_ms": [],
+            "context_build_ms": [],
+            "overlay_first_show_ms": [],
+            "overlay_final_show_ms": [],
+            "visible_cache_age_ms": [],
         }
         for row in rows:
             for i, key in enumerate(metrics):
@@ -280,11 +440,37 @@ class LatencyStore:
             }
 
         # Mode and app breakdown
-        from collections import Counter
-        result["apps"] = dict(Counter(r[6] for r in rows).most_common(10))
-        result["modes"] = dict(Counter(r[7] for r in rows).most_common())
-        result["providers"] = dict(Counter(r[8] for r in rows if r[8]).most_common())
-        result["models"] = dict(Counter(r[9] for r in rows if r[9]).most_common())
+        app_idx = len(metrics) + 1
+        mode_idx = len(metrics) + 2
+        provider_idx = len(metrics) + 3
+        model_idx = len(metrics) + 4
+        trigger_type_idx = len(metrics) + 5
+        visible_source_idx = len(metrics) + 6
+        use_shell_idx = len(metrics) + 7
+        use_tui_idx = len(metrics) + 8
+        has_turns_idx = len(metrics) + 9
+        used_subtree_idx = len(metrics) + 10
+        used_semantic_idx = len(metrics) + 11
+        used_memory_idx = len(metrics) + 12
+        fallback_idx = len(metrics) + 13
+        visible_changed_idx = len(metrics) + 14
+
+        result["apps"] = dict(Counter(r[app_idx] for r in rows).most_common(10))
+        result["modes"] = dict(Counter(r[mode_idx] for r in rows).most_common())
+        result["providers"] = dict(Counter(r[provider_idx] for r in rows if r[provider_idx]).most_common())
+        result["models"] = dict(Counter(r[model_idx] for r in rows if r[model_idx]).most_common())
+        result["trigger_types"] = dict(Counter(r[trigger_type_idx] for r in rows if r[trigger_type_idx]).most_common())
+        result["visible_sources"] = dict(Counter(r[visible_source_idx] for r in rows if r[visible_source_idx]).most_common())
+        result["shell_count"] = sum(1 for r in rows if r[use_shell_idx])
+        result["tui_count"] = sum(1 for r in rows if r[use_tui_idx])
+        result["conversation_turn_count"] = sum(1 for r in rows if r[has_turns_idx])
+        result["subtree_count"] = sum(1 for r in rows if r[used_subtree_idx])
+        result["semantic_count"] = sum(1 for r in rows if r[used_semantic_idx])
+        result["memory_count"] = sum(1 for r in rows if r[used_memory_idx])
+        result["fallback_count"] = sum(1 for r in rows if r[fallback_idx])
+        changed_rows = [r for r in rows if r[visible_changed_idx] is not None]
+        result["visible_changed_count"] = sum(1 for r in changed_rows if r[visible_changed_idx])
+        result["visible_changed_measured_count"] = len(changed_rows)
 
         return result
 
@@ -311,6 +497,14 @@ def print_stats(db_path: Path, last_n: int = 50, last_hours: float = 0) -> None:
         "llm_total_ms": "LLM total",
         "e2e_first_ms": "End-to-end (first suggestion)",
         "e2e_total_ms": "End-to-end (all suggestions)",
+        "focus_ms": "Focused element capture",
+        "caret_ms": "Caret lookup",
+        "subtree_ms": "Subtree context extraction",
+        "visible_fetch_ms": "Visible-content resolution",
+        "context_build_ms": "Context build only",
+        "overlay_first_show_ms": "Overlay first show",
+        "overlay_final_show_ms": "Overlay final show",
+        "visible_cache_age_ms": "Visible cache age",
     }
 
     for key, label in metric_labels.items():
@@ -331,8 +525,28 @@ def print_stats(db_path: Path, last_n: int = 50, last_hours: float = 0) -> None:
         print(f"  Apps:      {stats['apps']}")
     if stats.get("modes"):
         print(f"  Modes:     {stats['modes']}")
+    if stats.get("trigger_types"):
+        print(f"  Triggers:  {stats['trigger_types']}")
+    if stats.get("visible_sources"):
+        print(f"  Visible:   {stats['visible_sources']}")
     if stats.get("providers"):
         print(f"  Providers: {stats['providers']}")
     if stats.get("models"):
         print(f"  Models:    {stats['models']}")
+    print(
+        "  Flags:     "
+        f"shell={stats.get('shell_count', 0)} "
+        f"tui={stats.get('tui_count', 0)} "
+        f"turns={stats.get('conversation_turn_count', 0)} "
+        f"subtree={stats.get('subtree_count', 0)} "
+        f"semantic={stats.get('semantic_count', 0)} "
+        f"memory={stats.get('memory_count', 0)} "
+        f"fallback={stats.get('fallback_count', 0)}"
+    )
+    measured = stats.get("visible_changed_measured_count", 0)
+    if measured:
+        print(
+            "  Visible changed after fresh fetch: "
+            f"{stats.get('visible_changed_count', 0)}/{measured}"
+        )
     print()

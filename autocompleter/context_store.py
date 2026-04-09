@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
 import threading
 import time
@@ -21,6 +22,56 @@ if TYPE_CHECKING:
     from .shell_parser import ParsedTerminalBuffer
 
 logger = logging.getLogger(__name__)
+
+
+def _xmlish_text(text: str) -> str:
+    stripped = re.sub(r"<[^>]+>", " ", text)
+    return " ".join(stripped.split())
+
+
+def _score_subtree_signal(subtree_context: str) -> tuple[int, int]:
+    """Return (meaningful_line_count, total_chars) for subtree XML."""
+    meaningful = 0
+    total_chars = 0
+    for raw_line in subtree_context.splitlines():
+        line = raw_line.strip()
+        if not line or 'focused="true"' in line:
+            continue
+        text = _xmlish_text(line)
+        if len(text) < 20:
+            continue
+        meaningful += 1
+        total_chars += len(text)
+    return meaningful, total_chars
+
+
+def _score_visible_signal(visible_text: list[str] | None) -> tuple[int, int]:
+    """Return (meaningful_item_count, total_chars) for live visible text."""
+    if not visible_text:
+        return 0, 0
+    meaningful = 0
+    total_chars = 0
+    for item in visible_text:
+        text = " ".join(item.split())
+        if len(text) < 20:
+            continue
+        meaningful += 1
+        total_chars += len(text)
+    return meaningful, total_chars
+
+
+def _prefer_visible_text_over_subtree(
+    subtree_context: str | None,
+    visible_text: list[str] | None,
+) -> bool:
+    """Prefer broader live visible text when subtree XML is clearly low-signal."""
+    if not subtree_context or not visible_text:
+        return False
+    subtree_lines, subtree_chars = _score_subtree_signal(subtree_context)
+    visible_lines, visible_chars = _score_visible_signal(visible_text)
+    if visible_lines < 2 or visible_chars < 120:
+        return False
+    return subtree_lines < 2 or subtree_chars < 80
 
 
 @dataclass
@@ -300,10 +351,21 @@ class ContextStore:
         # Tier 2: structured subtree context (best), live visible text, or DB fallback
         local_chars = 0
         local_parts: list[str] = []
-        if subtree_context:
+        use_visible_text = _prefer_visible_text_over_subtree(
+            subtree_context,
+            visible_text,
+        )
+        if subtree_context and not use_visible_text:
             parts.append(f"Nearby content:\n{subtree_context}")
             local_chars = len(subtree_context)
         elif visible_text:
+            if subtree_context and use_visible_text:
+                logger.debug(
+                    "[CTX] Subtree context looked low-signal; preferring live visible text "
+                    "(subtree_chars=%d, visible_items=%d)",
+                    _score_subtree_signal(subtree_context)[1],
+                    _score_visible_signal(visible_text)[0],
+                )
             for element in visible_text:
                 snippet = element.strip()
                 if not snippet:
@@ -441,7 +503,38 @@ class ContextStore:
                 else:
                     turn_lines.append(f"- {speaker}: {text}")
             parts.append("Conversation:\n" + "\n".join(turn_lines))
-        elif subtree_context:
+
+            # If all turns are from the same speaker (e.g. Gemini only
+            # exposes "You said" headings — assistant responses are not
+            # in the AX tree), supplement with visible text so the LLM
+            # can see what the assistant actually said.
+            speakers = {t.get("speaker") for t in turns}
+            if len(speakers) <= 1 and visible_text:
+                supplement_parts: list[str] = []
+                supplement_total = 0
+                for element in visible_text:
+                    snippet = element.strip()
+                    if not snippet:
+                        continue
+                    if supplement_total + len(snippet) > 1500:
+                        break
+                    supplement_parts.append(snippet)
+                    supplement_total += len(snippet)
+                if supplement_parts:
+                    parts.append(
+                        "Additional visible content (assistant responses may be here):\n"
+                        + "\n".join(supplement_parts)
+                    )
+                    logger.debug(
+                        "[CTX] One-sided conversation (%d turns, speaker=%s) — "
+                        "supplementing with %d visible text elements",
+                        len(turns), speakers.pop() if speakers else "?",
+                        len(supplement_parts),
+                    )
+        elif subtree_context and not _prefer_visible_text_over_subtree(
+            subtree_context,
+            visible_text,
+        ):
             # Fallback: subtree context (when conversation extractors
             # couldn't identify structured turns — e.g. unknown app).
             parts.append(f"Nearby content:\n{subtree_context}")
@@ -449,6 +542,13 @@ class ContextStore:
             # Fallback 1: live visible text from the current window
             fallback_parts: list[str] = []
             total = 0
+            if subtree_context and _prefer_visible_text_over_subtree(
+                subtree_context,
+                visible_text,
+            ):
+                logger.debug(
+                    "[CTX] Reply fallback: subtree context looked low-signal; preferring live visible text"
+                )
             if visible_text:
                 for element in visible_text:
                     snippet = element.strip()

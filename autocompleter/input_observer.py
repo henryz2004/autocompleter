@@ -101,6 +101,11 @@ class InputObserver:
             self._system_wide = AXUIElementCreateSystemWide()
         self._last_value: str = ""
         self._last_change_time: float = 0.0
+        # Cache conversation extraction results (expensive for deep AX trees)
+        self._cached_conversation_key: str = ""  # app+window key
+        self._cached_conversation_turns: list | None = None
+        self._cached_conversation_time: float = 0.0
+        self._CONVERSATION_CACHE_TTL: float = 5.0  # seconds
 
     @staticmethod
     def check_accessibility_permissions() -> bool:
@@ -644,20 +649,39 @@ class InputObserver:
         Claude Desktop, iMessage). Falls back to a generic heuristic for
         unknown apps. For browsers, *window_title* is used to pick the
         right extractor.
+
+        Results are cached for ``_CONVERSATION_CACHE_TTL`` seconds to avoid
+        expensive AX tree traversals on every observer poll cycle.
         """
+        import time as _time
+
+        cache_key = f"{app_name}\0{window_title}"
+        now = _time.monotonic()
+        if (
+            cache_key == self._cached_conversation_key
+            and (now - self._cached_conversation_time) < self._CONVERSATION_CACHE_TTL
+        ):
+            return self._cached_conversation_turns
+
         extractor = get_extractor(app_name, window_title=window_title)
         logger.debug(
             "[CTX] Using %s for app %r",
             type(extractor).__name__, app_name,
         )
         try:
-            return extractor.extract(window, max_turns)
+            turns = extractor.extract(window, max_turns)
         except Exception:
             logger.debug(
                 "Conversation extraction failed with %s",
                 type(extractor).__name__, exc_info=True,
             )
-        return None
+            turns = None
+
+        # Cache the result
+        self._cached_conversation_key = cache_key
+        self._cached_conversation_turns = turns
+        self._cached_conversation_time = now
+        return turns
 
     def _get_browser_url(self, app_element, app_name: str) -> str:
         """Try to extract the current URL from a browser app."""

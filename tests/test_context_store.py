@@ -155,6 +155,27 @@ class TestContextStore:
         # "Hello world" should appear in Tier 1 (cursor) but not in Tier 2 (visible)
         assert "Surrounding paragraph text" in context
 
+    def test_continuation_prefers_visible_text_when_subtree_is_low_signal(self, store):
+        context = store.get_continuation_context(
+            before_cursor="just invoked it, can you check? also, do you think ",
+            after_cursor="",
+            source_app="Codex",
+            visible_text=[
+                "The placeholder heuristic is too aggressive for Codex chat inputs and is hurting suggestion quality.",
+                "The artifact pipeline is now working, but the model still sees too much UI chrome.",
+            ],
+            subtree_context=(
+                "<context>\n"
+                "  <Group><StaticText>Threads</StaticText></Group>\n"
+                "  <Group><StaticText>autocompleter</StaticText></Group>\n"
+                "  <input><TextArea focused=\"true\">just invoked it</TextArea></input>\n"
+                "</context>"
+            ),
+        )
+        assert "Visible context:" in context
+        assert "placeholder heuristic" in context
+        assert "Nearby content:" not in context
+
     def test_continuation_context_skips_user_input_entries(self, store):
         store.add_entry("Slack", "visible stuff", "visible_text")
         store.add_entry("Slack", "user typed something", "user_input")
@@ -287,6 +308,25 @@ class TestContextStore:
         assert "Nearby content:" in context
         assert subtree_xml in context
         assert "Conversation:" not in context
+
+    def test_reply_context_prefers_visible_text_when_subtree_is_low_signal(self, store):
+        context = store.get_reply_context(
+            conversation_turns=[],
+            source_app="Codex",
+            visible_text=[
+                "The dump save hit a traceback because a raw AX object slipped into the artifact.",
+                "The bigger product issue is that the placeholder heuristic is too aggressive.",
+            ],
+            subtree_context=(
+                "<context>\n"
+                "  <Group><StaticText>Threads</StaticText></Group>\n"
+                "  <Group><StaticText>autocompleter</StaticText></Group>\n"
+                "</context>"
+            ),
+        )
+        assert "Visible page content (no conversation detected):" in context
+        assert "placeholder heuristic" in context
+        assert "Nearby content:" not in context
 
     def test_reply_context_limits_turns(self, store):
         turns = [

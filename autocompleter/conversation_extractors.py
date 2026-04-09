@@ -440,10 +440,19 @@ class GeminiExtractor(ConversationExtractor):
         Recursively searches for AXHeading elements whose title starts with
         ``You said`` or ``Gemini said``, then extracts the appropriate text.
         """
-        headings: list[tuple] = []  # (heading, title, parent)
+        headings: list[tuple] = []  # (heading, title, parent, sibling_idx)
         self._find_speaker_headings(element, headings, max_depth=12)
 
-        for heading, title, parent in headings:
+        if headings:
+            user_count = sum(1 for _, t, _, _ in headings if t.startswith("You said"))
+            gemini_count = sum(1 for _, t, _, _ in headings if t.startswith("Gemini said"))
+            logger.debug(
+                "[Gemini] _extract_turns_from_pair: %d headings "
+                "(%d 'You said', %d 'Gemini said')",
+                len(headings), user_count, gemini_count,
+            )
+
+        for heading, title, parent, sibling_idx in headings:
             if len(turns) >= max_turns:
                 break
 
@@ -453,7 +462,7 @@ class GeminiExtractor(ConversationExtractor):
                     turns.append(ConversationTurn(speaker="User", text=text))
 
             elif title.startswith("Gemini said"):
-                text = self._extract_response_after_heading(heading, parent)
+                text = self._extract_response_after_heading(heading, parent, sibling_idx)
                 if text and not _is_ai_disclaimer(text):
                     turns.append(ConversationTurn(speaker="Gemini", text=text))
 
@@ -469,14 +478,14 @@ class GeminiExtractor(ConversationExtractor):
         if _visits is None:
             _visits = [0]
         _visits[0] += 1
-        if _visits[0] > 200 or depth > max_depth:
+        if _visits[0] > 300 or depth > max_depth:
             return
 
         children = ax_get_children(element)
         if not children:
             return
 
-        for child in children[:50]:
+        for i, child in enumerate(children[:50]):
             role = ax_get_attribute(child, "AXRole") or ""
             if role == "AXHeading":
                 title = (
@@ -485,7 +494,7 @@ class GeminiExtractor(ConversationExtractor):
                     or ""
                 ).strip()
                 if title.startswith("You said") or title.startswith("Gemini said"):
-                    results.append((child, title, element))
+                    results.append((child, title, element, i))
             else:
                 self._find_speaker_headings(
                     child, results, max_depth, depth + 1, _visits,
@@ -516,18 +525,23 @@ class GeminiExtractor(ConversationExtractor):
         return ""
 
     @staticmethod
-    def _extract_response_after_heading(heading, parent) -> str:
-        """Extract Gemini response text from siblings following a 'Gemini said' heading."""
+    def _extract_response_after_heading(heading, parent, heading_idx: int) -> str:
+        """Extract Gemini response text from siblings following a 'Gemini said' heading.
+
+        ``heading_idx`` is the heading's position within ``parent``'s child list,
+        captured by ``_find_speaker_headings`` at discovery time.  We cannot
+        rediscover it via ``child is heading`` because live AX API calls return
+        fresh Python wrapper objects each call, so identity comparison fails.
+        """
         parent_children = ax_get_children(parent) or []
 
-        # Find the heading's position among siblings
-        heading_idx = None
-        for i, child in enumerate(parent_children):
-            if child is heading:
-                heading_idx = i
-                break
-
-        if heading_idx is None:
+        # Sanity-check the index — children list should not have changed since
+        # discovery, but if it has, fall back gracefully rather than misattribute
+        # text to the wrong speaker.
+        if heading_idx >= len(parent_children):
+            return ""
+        anchor_role = ax_get_attribute(parent_children[heading_idx], "AXRole") or ""
+        if anchor_role != "AXHeading":
             return ""
 
         # Collect text from subsequent siblings until next heading or end

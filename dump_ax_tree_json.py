@@ -25,6 +25,17 @@ import re
 import sys
 import time
 
+
+class _SafeEncoder(json.JSONEncoder):
+    """JSON encoder that coerces non-serializable AX values to strings."""
+
+    def default(self, o):
+        # AXValueRef, NSArray, and other pyobjc types → str representation
+        try:
+            return str(o)
+        except Exception:
+            return f"<unserializable: {type(o).__name__}>"
+
 sys.path.insert(0, ".")
 
 import AppKit
@@ -174,7 +185,7 @@ def on_trigger(out_path: str | None, out_dir: str | None, max_depth: int, notes:
 
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(envelope, f, indent=2, ensure_ascii=False)
+        json.dump(envelope, f, indent=2, ensure_ascii=False, cls=_SafeEncoder)
 
     print(f"Saved -> {path}")
     return True

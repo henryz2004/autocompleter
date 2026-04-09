@@ -36,6 +36,11 @@ from .hotkey import HotkeyListener
 from .input_observer import InputObserver, VisibleContent
 from .latency_tracker import LatencyStore, LatencyTracker
 from .overlay import OverlayConfig, SuggestionOverlay
+from .quality_review import (
+    LIVE_CONTINUATION_VARIANT,
+    LIVE_REPLY_VARIANT,
+    apply_quality_variant_to_context,
+)
 from .shell_parser import parse_terminal_buffer, parse_tui_buffer
 from .suggestion_engine import AutocompleteMode, Suggestion, SuggestionEngine, detect_mode, is_shell_app
 from .memory import MemoryStore
@@ -396,6 +401,66 @@ class Autocompleter:
         """Fast content hash for dedup."""
         return hashlib.md5(text.encode("utf-8", errors="replace")).hexdigest()
 
+    def _visible_content_hash(self, visible: VisibleContent | None) -> str:
+        """Build a stable hash for a visible-content snapshot."""
+        if visible is None:
+            return ""
+        joined = "\n".join((visible.text_elements or [])[:50])
+        parts = [
+            visible.app_name,
+            visible.window_title,
+            visible.url,
+            joined,
+        ]
+        return self._hash_content("\0".join(parts))
+
+    def _resolve_visible_content(
+        self,
+        focused,
+    ) -> tuple[VisibleContent | None, dict[str, object]]:
+        """Return visible content plus measurement metadata for this trigger."""
+        self._latency_tracker.mark("visible_start")
+        now = time.time()
+        cache_age_ms = None
+        if self._last_visible_content_time > 0:
+            cache_age_ms = max(0.0, (now - self._last_visible_content_time) * 1000)
+
+        metadata: dict[str, object] = {
+            "visible_source": "fresh",
+            "visible_cache_age_ms": cache_age_ms,
+            "visible_content_changed": None,
+        }
+
+        use_cache = (
+            self._last_visible_content is not None
+            and (now - self._last_visible_content_time) < self._current_poll_interval
+            and self._last_visible_content.app_name == focused.app_name
+        )
+        cached = self._last_visible_content if use_cache else None
+        cached_hash = self._visible_content_hash(cached)
+
+        if use_cache:
+            visible = cached
+            metadata["visible_source"] = "cache"
+            logger.debug(
+                "Using cached visible content (age=%.0fms)",
+                cache_age_ms or 0.0,
+            )
+        else:
+            visible = self.observer.get_visible_content()
+            fresh_hash = self._visible_content_hash(visible)
+            if (
+                self._last_visible_content is not None
+                and visible is not None
+                and self._last_visible_content.app_name == visible.app_name
+                and self._last_visible_content.window_title == visible.window_title
+            ):
+                metadata["visible_content_changed"] = bool(
+                    cached_hash and fresh_hash and cached_hash != fresh_hash
+                )
+        self._latency_tracker.mark("visible_ready")
+        return visible, metadata
+
     # Cap stored content to avoid DB bloat from terminal scrollback buffers
     _MAX_STORE_CHARS = 4000
 
@@ -555,6 +620,7 @@ class Autocompleter:
 
         # Gather info quickly (AX calls are fast) then dispatch heavy work
         focused = self.observer.get_focused_element()
+        self._latency_tracker.mark("focused_ready")
         if focused is None:
             logger.info("No focused text element found")
             return True
@@ -634,6 +700,7 @@ class Autocompleter:
         else:
             x, y = 100.0, 100.0
             logger.debug("No position available, using default (100, 100)")
+        self._latency_tracker.mark("caret_ready")
 
         # Show loading indicator immediately
         self._run_on_main(lambda: self.overlay.show(
@@ -643,24 +710,16 @@ class Autocompleter:
 
         # Fetch subtree context (XML from walking up from focused element).
         # Done before visible content because it's fast and more reliable.
+        self._latency_tracker.mark("subtree_start")
         subtree_context = self.observer.get_subtree_context(token_budget=500)
+        self._latency_tracker.mark("subtree_ready")
         if subtree_context:
             logger.info(
                 f"[CTX] Subtree context: {len(subtree_context)} chars "
                 f"(~{len(subtree_context) // 4} tokens)"
             )
 
-        # Reuse cached visible content if fresh enough, otherwise re-fetch.
-        # The observer loop polls dynamically, so if the cache is younger
-        # than the current poll interval, an AX tree re-traversal is redundant.
-        cache_age = time.time() - self._last_visible_content_time
-        if (self._last_visible_content is not None
-                and cache_age < self._current_poll_interval
-                and self._last_visible_content.app_name == focused.app_name):
-            visible = self._last_visible_content
-            logger.debug(f"Using cached visible content ({cache_age:.1f}s old)")
-        else:
-            visible = self.observer.get_visible_content()
+        visible, visible_meta = self._resolve_visible_content(focused)
         window_title = visible.window_title if visible else ""
         source_url = visible.url if visible else ""
         visible_text_elements: list[str] = []
@@ -737,13 +796,26 @@ class Autocompleter:
             snapshot.app_name = focused.app_name
             snapshot.window_title = window_title
             snapshot.source_url = source_url
+            snapshot.trigger_type = "manual"
             snapshot.role = focused.role
             snapshot.before_cursor = focused.before_cursor
             snapshot.after_cursor = focused.after_cursor
             snapshot.insertion_point = focused.insertion_point
             snapshot.value_length = len(focused.value)
             snapshot.placeholder_detected = focused.placeholder_detected
+            snapshot.visible_source = str(visible_meta.get("visible_source", ""))
+            snapshot.visible_cache_age_ms = (
+                float(visible_meta["visible_cache_age_ms"])
+                if visible_meta.get("visible_cache_age_ms") is not None
+                else None
+            )
+            snapshot.visible_content_changed = (
+                bool(visible_meta["visible_content_changed"])
+                if visible_meta.get("visible_content_changed") is not None
+                else None
+            )
             snapshot.visible_text_elements = list(visible_text_elements or [])
+            snapshot.request["live_context_variant"] = LIVE_REPLY_VARIANT.name if mode == AutocompleteMode.REPLY else LIVE_CONTINUATION_VARIANT.name
             if conversation_turns:
                 snapshot.conversation_turns = list(conversation_turns)
                 snapshot.has_conversation_turns = True
@@ -762,6 +834,8 @@ class Autocompleter:
             visible_text_elements=visible_text_elements,
             cross_app_context=cross_app_context,
             subtree_context=subtree_context,
+            visible_meta=visible_meta,
+            trigger_type="manual",
         )
 
         # Dispatch the LLM call to a worker thread so we don't block the tap.
@@ -772,7 +846,7 @@ class Autocompleter:
                 focused, x, y, caret_height, mode,
                 window_title, source_url, conversation_turns,
                 visible_text_elements, gen_id, cross_app_context,
-                snapshot, subtree_context,
+                snapshot, subtree_context, 0.0, None, visible_meta, "manual",
             ),
             daemon=True,
         ).start()
@@ -845,16 +919,29 @@ class Autocompleter:
                     # Trim to tail to avoid sending 145K+ chars of terminal buffer
                     effective_before_cursor = focused.before_cursor[-_TUI_CONTEXT_TAIL_CHARS:]
 
-        # Messaging apps: force reply mode and suppress raw visible text when
-        # structured conversation turns were extracted.  The user is composing a
-        # message in a chat, not continuing prose.
+        # Messaging apps: force reply mode when structured conversation turns
+        # were extracted.  The user is composing a message in a chat, not
+        # continuing prose.  Suppress raw visible text ONLY when the
+        # conversation has multiple speakers (i.e. we captured both sides).
+        # When turns are one-sided (e.g. Gemini only exposes user messages),
+        # keep visible text so the LLM can see assistant responses.
         if not use_shell and not use_tui and conversation_turns:
             mode = AutocompleteMode.REPLY
-            visible_text_elements = []
-            logger.info(
-                f"[CTX] Messaging app detected with {len(conversation_turns)} turns — "
-                f"forcing reply mode, suppressing raw visible text"
-            )
+            speakers = {t.speaker for t in conversation_turns}
+            if len(speakers) > 1:
+                visible_text_elements = []
+                logger.info(
+                    "[CTX] Messaging app detected with %d turns (%d speakers) — "
+                    "forcing reply mode, suppressing raw visible text",
+                    len(conversation_turns), len(speakers),
+                )
+            else:
+                logger.info(
+                    "[CTX] Messaging app detected with %d turns (one-sided: %s) — "
+                    "forcing reply mode, KEEPING visible text for assistant context",
+                    len(conversation_turns),
+                    speakers.pop() if speakers else "?",
+                )
 
         # Standard context assembly based on mode
         if not use_shell and mode == AutocompleteMode.CONTINUATION:
@@ -889,11 +976,16 @@ class Autocompleter:
                 memory_context=memory_context,
             )
 
+        live_variant = (
+            LIVE_CONTINUATION_VARIANT
+            if mode == AutocompleteMode.CONTINUATION
+            else LIVE_REPLY_VARIANT
+        )
+        context = apply_quality_variant_to_context(context, live_variant)
         logger.info(
             f"[CTX] --- CONTEXT (gen={generation_id}, mode={mode.value}, "
-            f"{len(context)} chars) ---"
+            f"{len(context)} chars, variant={live_variant.name}) ---"
         )
-        # Log the full assembled context so we can inspect exactly what the LLM sees
         for line in context.splitlines():
             logger.info(f"[CTX]   | {line}")
         logger.info("[CTX] --- END CONTEXT ---")
@@ -923,6 +1015,7 @@ class Autocompleter:
             feedback_stats=feedback_stats,
             negative_patterns=negative_patterns,
             shell_mode=use_shell,
+            prompt_placeholder_aware=True,
         )
         elapsed = time.time() - t0
 
@@ -985,6 +1078,8 @@ class Autocompleter:
         subtree_context: str | None = None,
         temperature_boost: float = 0.0,
         extra_negative_patterns: list[str] | None = None,
+        visible_meta: dict[str, object] | None = None,
+        trigger_type: str = "",
     ) -> None:
         """Run the streaming LLM call on a worker thread, updating the overlay incrementally."""
         app_name = focused.app_name
@@ -1039,18 +1134,32 @@ class Autocompleter:
                     # Trim to tail to avoid sending 145K+ chars of terminal buffer
                     effective_before_cursor = focused.before_cursor[-_TUI_CONTEXT_TAIL_CHARS:]
 
-        # Messaging apps: force reply mode and suppress raw visible text when
-        # structured conversation turns were extracted.  The user is composing a
-        # message in a chat, not continuing prose.
+        # Messaging apps: force reply mode when structured conversation turns
+        # were extracted.  The user is composing a message in a chat, not
+        # continuing prose.  Suppress raw visible text ONLY when the
+        # conversation has multiple speakers (i.e. we captured both sides).
+        # When turns are one-sided (e.g. Gemini only exposes user messages),
+        # keep visible text so the LLM can see assistant responses.
         if not use_shell and not use_tui and conversation_turns:
             mode = AutocompleteMode.REPLY
-            visible_text_elements = []
-            logger.info(
-                f"[CTX] Messaging app detected with {len(conversation_turns)} turns — "
-                f"forcing reply mode, suppressing raw visible text"
-            )
+            speakers = {t.speaker for t in conversation_turns}
+            if len(speakers) > 1:
+                visible_text_elements = []
+                logger.info(
+                    "[CTX] Messaging app detected with %d turns (%d speakers) — "
+                    "forcing reply mode, suppressing raw visible text",
+                    len(conversation_turns), len(speakers),
+                )
+            else:
+                logger.info(
+                    "[CTX] Messaging app detected with %d turns (one-sided: %s) — "
+                    "forcing reply mode, KEEPING visible text for assistant context",
+                    len(conversation_turns),
+                    speakers.pop() if speakers else "?",
+                )
 
         # Standard context assembly based on mode
+        self._latency_tracker.mark("context_build_start")
         if not use_shell and mode == AutocompleteMode.CONTINUATION:
             context = self.context_store.get_continuation_context(
                 before_cursor=effective_before_cursor,
@@ -1065,6 +1174,7 @@ class Autocompleter:
                 subtree_context=subtree_context,
                 memory_context=memory_context,
             )
+            used_semantic_context = bool(self.config.use_semantic_context)
         elif not use_shell:
             # For TUI apps, suppress visible text and semantic context —
             # the observer stores raw terminal buffer (including adjacent
@@ -1082,10 +1192,21 @@ class Autocompleter:
                 subtree_context=subtree_context if not use_tui else None,
                 memory_context=memory_context,
             )
+            used_semantic_context = bool(
+                self.config.use_semantic_context and not use_tui
+            )
+        else:
+            used_semantic_context = False
 
+        live_variant = (
+            LIVE_CONTINUATION_VARIANT
+            if mode == AutocompleteMode.CONTINUATION
+            else LIVE_REPLY_VARIANT
+        )
+        context = apply_quality_variant_to_context(context, live_variant)
         logger.info(
             f"[CTX] --- CONTEXT (gen={generation_id}, mode={mode.value}, "
-            f"{len(context)} chars) ---"
+            f"{len(context)} chars, variant={live_variant.name}) ---"
         )
         for line in context.splitlines():
             logger.info(f"[CTX]   | {line}")
@@ -1096,6 +1217,7 @@ class Autocompleter:
             snapshot.mode = mode.value
             snapshot.use_shell = use_shell
             snapshot.use_tui = use_tui
+            snapshot.request.setdefault("live_context_variant", live_variant.name)
             if use_tui:
                 snapshot.tui_name = tui.tui_name
                 snapshot.tui_user_input = tui.user_input
@@ -1124,6 +1246,20 @@ class Autocompleter:
 
         self._latency_tracker.mark("context_ready")
         self._latency_tracker.mark("llm_start")
+        fallback_used = False
+
+        def _on_stream_event(event_name: str, payload: dict[str, object] | None = None) -> None:
+            nonlocal fallback_used
+            if event_name == "fallback_started":
+                fallback_used = True
+            if snapshot is not None and payload is not None:
+                if event_name == "request_built":
+                    snapshot.request = dict(payload)
+                else:
+                    snapshot.request.setdefault("events", []).append({
+                        "name": event_name,
+                        "payload": dict(payload),
+                    })
 
         t0 = time.time()
         suggestions: list[Suggestion] = []
@@ -1138,6 +1274,8 @@ class Autocompleter:
                 negative_patterns=negative_patterns,
                 shell_mode=use_shell,
                 temperature_boost=temperature_boost,
+                event_callback=_on_stream_event,
+                prompt_placeholder_aware=True,
             ):
                 # Check if a newer trigger has superseded this one
                 if generation_id != self._generation_id:
@@ -1164,6 +1302,8 @@ class Autocompleter:
 
                 def _update(snp=suggestions_snapshot):
                     if generation_id == self._generation_id:
+                        if len(snp) == 1:
+                            self._latency_tracker.mark("overlay_first_show")
                         self.overlay.show(snp, x, y, caret_height=caret_height)
 
                 self._run_on_main(_update)
@@ -1185,8 +1325,38 @@ class Autocompleter:
         if not suggestions:
             logger.info(f"No suggestions from stream (took {elapsed:.2f}s)")
             self._run_on_main(self.overlay.hide)
+            record = self._latency_tracker.finish(
+                app_name=app_name,
+                mode=mode.value,
+                provider=self.config.llm_provider,
+                model=self.config.llm_model,
+                suggestion_count=0,
+                trigger_type=trigger_type,
+                visible_source=str((visible_meta or {}).get("visible_source", "")),
+                use_shell=use_shell,
+                use_tui=use_tui,
+                has_conversation_turns=bool(conversation_turns),
+                used_subtree_context=bool(subtree_context),
+                used_semantic_context=used_semantic_context,
+                used_memory_context=bool(memory_context),
+                fallback_used=fallback_used,
+                visible_cache_age_ms=(
+                    float((visible_meta or {}).get("visible_cache_age_ms"))
+                    if (visible_meta or {}).get("visible_cache_age_ms") is not None
+                    else None
+                ),
+                visible_content_changed=(
+                    bool((visible_meta or {}).get("visible_content_changed"))
+                    if (visible_meta or {}).get("visible_content_changed") is not None
+                    else None
+                ),
+            )
+            self._latency_store.save(record)
             # Save snapshot even with no suggestions (useful for debugging)
             if snapshot and self._dumper:
+                snapshot.latency = {
+                    k: v for k, v in vars(record).items()
+                }
                 snapshot.suggestion_latency_ms = elapsed * 1000
                 self._dumper.save(snapshot)
             return
@@ -1206,7 +1376,6 @@ class Autocompleter:
         if snapshot and self._dumper:
             snapshot.suggestions = [s.text for s in suggestions]
             snapshot.suggestion_latency_ms = elapsed * 1000
-            self._dumper.save(snapshot)
 
         # Record latency metrics
         record = self._latency_tracker.finish(
@@ -1215,8 +1384,32 @@ class Autocompleter:
             provider=self.config.llm_provider,
             model=self.config.llm_model,
             suggestion_count=len(suggestions),
+            trigger_type=trigger_type,
+            visible_source=str((visible_meta or {}).get("visible_source", "")),
+            use_shell=use_shell,
+            use_tui=use_tui,
+            has_conversation_turns=bool(conversation_turns),
+            used_subtree_context=bool(subtree_context),
+            used_semantic_context=used_semantic_context,
+            used_memory_context=bool(memory_context),
+            fallback_used=fallback_used,
+            visible_cache_age_ms=(
+                float((visible_meta or {}).get("visible_cache_age_ms"))
+                if (visible_meta or {}).get("visible_cache_age_ms") is not None
+                else None
+            ),
+            visible_content_changed=(
+                bool((visible_meta or {}).get("visible_content_changed"))
+                if (visible_meta or {}).get("visible_content_changed") is not None
+                else None
+            ),
         )
         self._latency_store.save(record)
+        if snapshot and self._dumper:
+            snapshot.latency = {
+                k: v for k, v in vars(record).items()
+            }
+            self._dumper.save(snapshot)
 
     def _fire_auto_trigger(self) -> None:
         """Fire an auto-trigger suggestion (runs on main thread)."""
@@ -1230,7 +1423,10 @@ class Autocompleter:
             return
 
         logger.info("--- AUTO-TRIGGER ---")
+        self._latency_tracker.start(generation_id=self._generation_id + 1)
+        self._latency_tracker.mark("trigger")
         focused = self.observer.get_focused_element()
+        self._latency_tracker.mark("focused_ready")
         if focused is None:
             logger.debug("Auto-trigger: no focused element")
             return
@@ -1270,18 +1466,12 @@ class Autocompleter:
                 y += focused.size[1]
         else:
             x, y = 100.0, 100.0
+        self._latency_tracker.mark("caret_ready")
 
         # Skip loading indicator for auto-trigger — suggestions just appear
         # silently when ready, without the disruptive "Generating..." flash.
 
-        # Reuse cached visible content if fresh enough
-        cache_age = time.time() - self._last_visible_content_time
-        if (self._last_visible_content is not None
-                and cache_age < self._current_poll_interval
-                and self._last_visible_content.app_name == focused.app_name):
-            visible = self._last_visible_content
-        else:
-            visible = self.observer.get_visible_content()
+        visible, visible_meta = self._resolve_visible_content(focused)
         window_title = visible.window_title if visible else ""
         source_url = visible.url if visible else ""
         visible_text_elements: list[str] = visible.text_elements if visible else []
@@ -1300,7 +1490,9 @@ class Autocompleter:
         cross_app_context = ContextTrail.format_cross_app_context(cross_app_snapshots)
 
         # Fetch subtree context (XML from walking up from focused element)
+        self._latency_tracker.mark("subtree_start")
         subtree_context = self.observer.get_subtree_context(token_budget=500)
+        self._latency_tracker.mark("subtree_ready")
 
         # Save trigger state so _on_regenerate can replay (same as manual trigger)
         self._last_trigger_args = dict(
@@ -1313,6 +1505,8 @@ class Autocompleter:
             visible_text_elements=visible_text_elements,
             cross_app_context=cross_app_context,
             subtree_context=subtree_context,
+            visible_meta=visible_meta,
+            trigger_type="auto",
         )
 
         self._generation_id += 1
@@ -1324,7 +1518,7 @@ class Autocompleter:
                 focused, x, y, caret_height, mode,
                 window_title, source_url, conversation_turns,
                 visible_text_elements, gen_id, cross_app_context,
-                None, subtree_context,
+                None, subtree_context, 0.0, None, visible_meta, "auto",
             ),
             daemon=True,
         ).start()
@@ -1383,6 +1577,7 @@ class Autocompleter:
         # context would produce wrong suggestions and overlay would appear
         # at the old position.
         focused = self.observer.get_focused_element()
+        self._latency_tracker.mark("focused_ready")
         if focused is None:
             logger.debug("Regenerate: no focused element, aborting")
             return False
@@ -1412,6 +1607,7 @@ class Autocompleter:
                 elem_bottom = focused.position[1] + focused.size[1]
                 if y < elem_bottom:
                     y = elem_bottom
+        self._latency_tracker.mark("caret_ready")
 
         # Bump generation to discard any in-flight stream
         self._generation_id += 1
@@ -1442,6 +1638,8 @@ class Autocompleter:
             kwargs={
                 "temperature_boost": 0.3,
                 "extra_negative_patterns": prev_texts,
+                "visible_meta": args.get("visible_meta"),
+                "trigger_type": "regenerate",
             },
             daemon=True,
         ).start()
