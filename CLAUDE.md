@@ -73,9 +73,29 @@ When the overlay is visible, `Ctrl+R` (configurable via `AUTOCOMPLETER_REGENERAT
 
 `text_injector.py` tries in order: AX value setting → clipboard paste → keystrokes. Placeholder-detected fields skip AX (bypasses web app JS handlers). `cdp_injector.py` provides CDP-based injection for Chromium apps via `Input.insertText` (requires `--remote-debugging-port`).
 
+### Follow-up suggestions
+
+After a suggestion is accepted, the system can automatically re-trigger with the updated context to offer a follow-up continuation. Controlled by `followup_after_accept_enabled` config / `AUTOCOMPLETER_FOLLOWUP_AFTER_ACCEPT` env var. Reuses the existing trigger context rather than re-capturing, so it's fast.
+
+### Prompt management
+
+`prompts.py` centralizes all system prompts and prompt assembly helpers. Mode-specific prompts (`SYSTEM_PROMPT_COMPLETION`, `SYSTEM_PROMPT_REPLY`) live here, along with `build_prompt_extra_rules()` for dynamic rule injection based on context (e.g., placeholder-aware rules). The pipeline is app-agnostic — no shell-specific prompts or temperature overrides. Terminal apps are treated the same as any other app for context assembly and prompt selection. `quality_review.py` defines `QualityVariant` dataclasses that control prompt/context modifications for A/B testing prompt strategies offline.
+
 ### Feedback loop
 
 Accepts/dismisses recorded in SQLite `suggestion_feedback` table. Accept rate feeds `adjust_temperature()` (< 30% → lower temp). Recently dismissed patterns appended to system prompt as negative examples.
+
+## Configuration
+
+All config is in `config.py` via environment variables (prefixed `AUTOCOMPLETER_`) with sensible defaults. A `.env` file at the project root is auto-loaded. Key env vars:
+
+- `AUTOCOMPLETER_LLM_PROVIDER` / `AUTOCOMPLETER_LLM_BASE_URL` / `AUTOCOMPLETER_LLM_MODEL` — primary LLM
+- `AUTOCOMPLETER_FALLBACK_*` — fallback LLM (fires after escalation timeout)
+- `AUTOCOMPLETER_HOTKEY` / `AUTOCOMPLETER_REGENERATE_HOTKEY` — keybindings
+- `CEREBRAS_API_KEY`, `GROQ_API_KEY`, `OPENAI_API_KEY` — API keys (auto-resolved by provider URL)
+- `AUTOCOMPLETER_MEMORY` — enable long-term memory (mem0-based)
+
+Data is stored in `~/.autocompleter/` (SQLite DB, etc.).
 
 ## Key patterns
 

@@ -74,6 +74,7 @@ class Config:
     memory_llm_model: str = "qwen/qwen3-32b"
     memory_embedder_provider: str = "openai"  # "openai" or "huggingface"
     memory_embedder_model: str = "text-embedding-3-small"
+    memory_decay_rate: float = 0.01  # Exponential decay λ (half-life ~69h). 0 = no decay.
 
     # Sentinel to distinguish "not provided" from "explicitly set to empty"
     _UNSET: str = "__UNSET__"
@@ -170,5 +171,8 @@ def load_config() -> Config:
         memory_embedder_model=os.environ.get(
             "AUTOCOMPLETER_MEMORY_EMBEDDER_MODEL", "text-embedding-3-small"
         ),
+        memory_decay_rate=float(os.environ.get(
+            "AUTOCOMPLETER_MEMORY_DECAY_RATE", "0.01"
+        )),
     )
     return config

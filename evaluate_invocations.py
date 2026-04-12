@@ -162,7 +162,6 @@ def _call_llm_once(req: dict) -> list[str]:
         suggestions,
         mode=mode,
         before_cursor=req.get("before_cursor") or "",
-        shell_mode=bool(req.get("shell_mode")),
     )
 
 
@@ -174,7 +173,6 @@ def _variant_request(data: dict, variant: QualityVariant) -> dict:
     mode = _mode_from_artifact(data)
     context = apply_quality_variant_to_context(_rebuild_context(data), variant)
     source_app = data.get("app") or "Unknown"
-    shell_mode = bool((data.get("detection") or {}).get("useShell"))
     num_suggestions = int(req.get("num_suggestions") or max(2, len(data.get("suggestions") or []),))
     system, user_msg = build_messages(
         mode=mode,
@@ -182,7 +180,6 @@ def _variant_request(data: dict, variant: QualityVariant) -> dict:
         num_suggestions=num_suggestions,
         streaming=True,
         source_app=source_app,
-        shell_mode=shell_mode,
         prompt_placeholder_aware=variant.prompt_placeholder_aware,
     )
     new_req = dict(req)

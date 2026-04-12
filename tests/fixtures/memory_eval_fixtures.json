@@ -1,0 +1,110 @@
+{
+  "extraction_cases": [
+    {
+      "name": "slack_database_discussion",
+      "messages": [
+        {"role": "user", "content": "[App: Slack] [Window: #engineering]\nWe decided to go with PostgreSQL for the new analytics service. Redis will handle the caching layer."},
+        {"role": "assistant", "content": "I agree, PostgreSQL is a solid choice for analytics workloads."}
+      ],
+      "expected_facts": ["PostgreSQL", "analytics", "Redis", "caching"]
+    },
+    {
+      "name": "imessage_personal_context",
+      "messages": [
+        {"role": "user", "content": "[App: Messages] [Window: Alice Chen]\nHey! I'm heading to the SF office on Thursday for the team offsite. Want to grab lunch at that ramen place on Mission?"},
+        {"role": "assistant", "content": "Sounds great! I'll be there around noon."}
+      ],
+      "expected_facts": ["Alice", "SF office", "Thursday", "offsite", "ramen", "Mission"]
+    },
+    {
+      "name": "discord_project_planning",
+      "messages": [
+        {"role": "user", "content": "[App: Discord] [Window: #dev-orchestrator]\nThe autocompleter v2 milestone is due by end of April. Main blockers are the memory system improvements and the new overlay renderer."},
+        {"role": "assistant", "content": "Let me prioritize the memory system work first since the overlay can be done in parallel."}
+      ],
+      "expected_facts": ["autocompleter", "v2", "April", "memory system", "overlay"]
+    },
+    {
+      "name": "terminal_coding_context",
+      "messages": [
+        {"role": "user", "content": "[App: Terminal] [Window: vim - autocompleter/memory.py]\nI'm refactoring the pre-warm cache from a single-slot to an LRU cache using OrderedDict. The cache should hold 8 entries."},
+        {"role": "assistant", "content": "from collections import OrderedDict"}
+      ],
+      "expected_facts": ["LRU cache", "OrderedDict", "pre-warm"]
+    },
+    {
+      "name": "email_work_update",
+      "messages": [
+        {"role": "user", "content": "[App: Mail] [Window: Re: Q2 Planning]\nI'll be OOO next week (April 14-18). Sarah is covering my on-call rotation. Please loop in @david for any urgent API gateway issues."},
+        {"role": "assistant", "content": "Thanks for the heads up! I'll make sure to reach out to Sarah for on-call and David for API gateway."}
+      ],
+      "expected_facts": ["OOO", "April 14-18", "Sarah", "on-call", "David", "API gateway"]
+    },
+    {
+      "name": "writing_style_formal",
+      "messages": [
+        {"role": "user", "content": "[App: Gmail] [Window: Compose - Partnership Proposal]\nDear Mr. Tanaka,\n\nI am writing to follow up on our conversation regarding the potential collaboration between our organizations. As discussed, we believe there is significant synergy in combining our respective expertise in machine learning infrastructure."},
+        {"role": "assistant", "content": "I would be delighted to schedule a follow-up meeting at your earliest convenience to discuss the next steps."}
+      ],
+      "expected_facts": ["Tanaka", "partnership", "collaboration", "machine learning"]
+    },
+    {
+      "name": "writing_style_casual",
+      "messages": [
+        {"role": "user", "content": "[App: Slack] [Window: #random]\nlol that standup was wild. anyone wanna grab coffee? i'm heading to blue bottle in 10"},
+        {"role": "assistant", "content": "haha yeah it was. i'm down, meet you there!"}
+      ],
+      "expected_facts": ["coffee", "Blue Bottle"]
+    }
+  ],
+  "retrieval_cases": [
+    {
+      "name": "find_db_preference",
+      "memories_to_load": [
+        "User decided to use PostgreSQL for the new analytics service",
+        "User prefers Redis for caching layers",
+        "User works with team in #engineering Slack channel",
+        "User is refactoring memory system code",
+        "User has lunch plans with Alice Chen"
+      ],
+      "query": "Slack | #engineering | what database should we use for the new service",
+      "expected_in_top_3": ["User decided to use PostgreSQL for the new analytics service"]
+    },
+    {
+      "name": "find_person_context",
+      "memories_to_load": [
+        "User has lunch plans with Alice Chen near Mission St",
+        "Sarah is covering user's on-call rotation",
+        "David handles API gateway issues",
+        "User discussed partnership with Mr. Tanaka",
+        "User prefers PostgreSQL for analytics"
+      ],
+      "query": "Messages | Alice Chen | hey are we still on for",
+      "expected_in_top_3": ["User has lunch plans with Alice Chen near Mission St"]
+    },
+    {
+      "name": "find_project_context",
+      "memories_to_load": [
+        "Autocompleter v2 milestone due end of April",
+        "Main blockers are memory system and overlay renderer",
+        "User is refactoring pre-warm cache to LRU",
+        "User prefers PostgreSQL for analytics",
+        "User discussed partnership with Mr. Tanaka"
+      ],
+      "query": "Discord | #dev-orchestrator | what's left for the milestone",
+      "expected_in_top_3": ["Autocompleter v2 milestone due end of April", "Main blockers are memory system and overlay renderer"]
+    },
+    {
+      "name": "find_schedule_context",
+      "memories_to_load": [
+        "User is OOO April 14-18",
+        "Sarah covers on-call during user's OOO",
+        "David handles API gateway issues",
+        "User has SF office visit Thursday",
+        "User prefers PostgreSQL for analytics"
+      ],
+      "query": "Slack | #team | when are you out next week",
+      "expected_in_top_3": ["User is out of office April 14-18"]
+    }
+  ]
+}

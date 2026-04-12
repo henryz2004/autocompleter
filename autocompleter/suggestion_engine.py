@@ -24,9 +24,11 @@ from typing import Callable, Generator, Optional
 from pydantic import BaseModel, Field
 
 from .config import Config
-from .quality_review import build_prompt_extra_rules
+from .prompts import build_messages as _build_messages
 
 # ---- Shell / terminal app detection ----
+# Used by input_observer and app.py for injection strategy and
+# placeholder detection — NOT for prompt selection (removed).
 
 _SHELL_APP_NAMES: frozenset[str] = frozenset({
     "Terminal", "iTerm2", "iTerm", "Warp",
@@ -60,134 +62,6 @@ class AutocompleteMode(enum.Enum):
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT_COMPLETION = """\
-You are a ghostwriter continuing the user's text. Write AS the user, in \
-their voice, continuing their exact train of thought. Your output will be \
-spliced directly onto what they have already written.
-
-Rules:
-- Continue the same sentence, paragraph, or thought — pick up exactly \
-where the cursor is
-- If the text before the cursor is mid-sentence or mid-question, CONTINUE \
-the sentence/question — do NOT answer it or provide advice
-- If the text before the cursor ends with a completed sentence or question \
-(e.g. ends with . ? !), write what the SAME AUTHOR would say NEXT — a \
-follow-up thought, elaboration, or new sentence in the same voice. Do NOT \
-answer, respond to, or evaluate what they wrote. You ARE the author, not \
-a respondent.
-- Write in the SAME voice, person, and perspective as the existing text \
-(if they write "I think...", continue as "I", never comment from outside)
-- MATCH THE USER'S EXACT TONE: if they write casually (lowercase, slang, \
-abbreviations), continue casually. If formal, stay formal. Mirror their \
-style precisely — word choice, punctuation, capitalization, everything.
-- Do not restate, summarize, or comment on text before the cursor
-- Do not introduce new topics or tangents
-- Keep completions SHORT — a few words to half a sentence
-- Never generate more than ~15 words per completion
-- Start with a leading space if the text before the cursor does NOT end \
-with a space (so the words don't collide). Omit the leading space if the \
-cursor already follows a space.
-- Vary direction across suggestions: branch the thought in different \
-plausible ways (e.g. different word choices, different next clauses, \
-different emphasis)
-- Be skeptical of unrelated UI text, navigation labels, or app chrome in \
-the context; use them only if they clearly belong to the same thought
-- Output ONLY the continuation text, nothing else
-"""
-
-SYSTEM_PROMPT_REPLY = """\
-You are a message suggestion assistant. You suggest messages the user \
-might type next.
-
-Rules:
-- If the user has a "Draft so far", output ONLY the remaining text to \
-COMPLETE their draft — your output will be appended directly after what \
-they already typed. Do NOT repeat any part of the draft.
-- If there is no draft or the draft is empty, suggest complete replies \
-to the latest message
-- If there is no conversation yet, suggest conversation starters \
-appropriate for the app
-- MATCH THE USER'S EXACT TONE from the conversation. If the user writes \
-casually (lowercase, no punctuation, slang, abbreviations), suggest in \
-that same casual style. If formal, stay formal. Mirror how the USER \
-actually writes, not the assistant.
-- Keep suggestions SHORT — 1 sentence max, like a real text message
-- Focus on the most recent messages in the conversation — older messages \
-are background context, not topics to address directly
-- Vary approach across suggestions (e.g. agree, ask follow-up, push back) \
-but keep them relevant to the latest exchange
-- Do not repeat or quote content already visible
-- Be skeptical of nearby UI labels, navigation text, and unrelated context \
-from other apps; use them only if they are clearly relevant
-- Output ONLY the message text, no meta-commentary or descriptions
-- Never refuse to generate suggestions
-"""
-
-USER_PROMPT_TEMPLATE_COMPLETION = """\
-{context}
-
-Continue writing from the cursor position as the same author. Generate \
-exactly {num_suggestions} distinct, short, natural continuations (a few words each). \
-Prioritize 'Text before cursor' over every other section. If the surrounding context is weak, noisy, or unrelated, ignore it and continue the literal draft naturally rather than guessing new specifics.\
-"""
-
-USER_PROMPT_TEMPLATE_REPLY = """\
-{context}
-
-Generate exactly {num_suggestions} distinct suggestions for what the \
-user might type next. If a "Draft so far" is shown, output ONLY the \
-remaining text to complete it (your output is appended directly). \
-If there is no draft, suggest complete replies or conversation starters. \
-Keep each suggestion to 1 short sentence max — like a real text message.\
-"""
-
-# ---- Shell-specific prompts ----
-
-SYSTEM_PROMPT_SHELL_COMPLETION = """\
-You are a shell command completion assistant. Complete the command the \
-user is currently typing in their terminal.
-
-Rules:
-- Output ONLY the remaining text to complete the command — your output \
-will be spliced directly onto what they have already typed
-- Suggest flags, arguments, file paths, or subcommands as appropriate
-- Keep completions SHORT — finish the current command, don't chain new ones
-- Use the command history for context (e.g. repeat similar flags, \
-continue a workflow)
-- Match the user's shell style (aliases, flag styles, quoting conventions)
-- Start with a leading space if the text before the cursor does NOT end \
-with a space. Omit the leading space if the cursor already follows a space.
-- Never output explanations, comments, or prose — only shell syntax
-"""
-
-SYSTEM_PROMPT_SHELL_REPLY = """\
-You are a shell command suggestion assistant. Suggest commands the user \
-might want to run next in their terminal.
-
-Rules:
-- Suggest complete, runnable shell commands
-- Use the command history and output to infer what the user is doing \
-and suggest logical next steps
-- If a previous command failed, suggest a fix or alternative
-- Keep suggestions short — one command per suggestion (pipes are OK)
-- Never output explanations or prose — only shell commands
-"""
-
-USER_PROMPT_TEMPLATE_SHELL_COMPLETION = """\
-{context}
-
-Complete the command being typed. Generate exactly {num_suggestions} \
-distinct completions. Output ONLY the remaining text to append \
-(not the part already typed).\
-"""
-
-USER_PROMPT_TEMPLATE_SHELL_REPLY = """\
-{context}
-
-Suggest exactly {num_suggestions} distinct commands the user might want \
-to run next. Each suggestion should be a complete, runnable command.\
-"""
-
 
 MAX_PREVIEW_LENGTH = 80
 
@@ -199,7 +73,6 @@ def build_messages(
     max_suggestion_lines: int = 10,
     streaming: bool = False,
     source_app: str = "",
-    shell_mode: Optional[bool] = None,
     prompt_placeholder_aware: bool = False,
 ) -> tuple[str, str]:
     """Build (system_prompt, user_message) for an LLM call.
@@ -214,46 +87,21 @@ def build_messages(
         max_suggestion_lines: Max lines per suggestion (reply mode only).
         streaming: If True, append STREAMING_JSON_INSTRUCTION to the
             system prompt (used by the streaming / benchmark paths).
-        source_app: Name of the source application. If a shell app,
-            shell-specific prompts are used instead of the generic ones.
-        shell_mode: Explicit override for shell prompt selection. If None,
-            inferred from source_app. Pass False to force generic prompts
-            even for shell apps (e.g. when inside a TUI like Claude Code).
+        source_app: Name of the source application.
 
     Returns:
         (system_prompt, user_message) tuple.
     """
-    ctx = context or "(no context yet)"
-
-    use_shell = shell_mode if shell_mode is not None else is_shell_app(source_app)
-    if use_shell:
-        # Shell-specific prompts
-        if mode == AutocompleteMode.CONTINUATION:
-            system = SYSTEM_PROMPT_SHELL_COMPLETION
-            user_msg = USER_PROMPT_TEMPLATE_SHELL_COMPLETION.format(
-                context=ctx, num_suggestions=num_suggestions,
-            )
-        else:
-            system = SYSTEM_PROMPT_SHELL_REPLY
-            user_msg = USER_PROMPT_TEMPLATE_SHELL_REPLY.format(
-                context=ctx, num_suggestions=num_suggestions,
-            )
-    elif mode == AutocompleteMode.CONTINUATION:
-        system = SYSTEM_PROMPT_COMPLETION
-        user_msg = USER_PROMPT_TEMPLATE_COMPLETION.format(
-            context=ctx, num_suggestions=num_suggestions,
-        )
-    else:
-        system = SYSTEM_PROMPT_REPLY
-        user_msg = USER_PROMPT_TEMPLATE_REPLY.format(
-            context=ctx, num_suggestions=num_suggestions,
-            max_suggestion_lines=max_suggestion_lines,
-        )
-    if prompt_placeholder_aware and not use_shell:
-        system += build_prompt_extra_rules(mode, True)
-    if streaming:
-        system += STREAMING_JSON_INSTRUCTION
-    return system, user_msg
+    return _build_messages(
+        mode=mode,
+        context=context,
+        num_suggestions=num_suggestions,
+        max_suggestion_lines=max_suggestion_lines,
+        streaming=streaming,
+        source_app=source_app,
+        prompt_placeholder_aware=prompt_placeholder_aware,
+        streaming_json_instruction=STREAMING_JSON_INSTRUCTION,
+    )
 
 
 def _normalize_continuation_spacing(before_cursor: str | None, text: str) -> str:
@@ -292,11 +140,10 @@ def _postprocess_continuation_text(
     text: str,
     before_cursor: str | None,
     index: int,
-    shell_mode: bool,
     avoid_texts: set[str] | None = None,
 ) -> str:
     stripped = _strip_repeated_prefix(text, before_cursor)
-    del index, shell_mode, avoid_texts
+    del index, avoid_texts
     return _normalize_continuation_spacing(before_cursor, stripped or text)
 
 
@@ -304,7 +151,6 @@ def postprocess_suggestion_texts(
     texts: list[str],
     mode: AutocompleteMode,
     before_cursor: str | None,
-    shell_mode: bool,
     avoid_texts: list[str] | None = None,
 ) -> list[str]:
     if mode != AutocompleteMode.CONTINUATION:
@@ -315,7 +161,7 @@ def postprocess_suggestion_texts(
         if _normalize_similarity_text(text)
     }
     return [
-        _postprocess_continuation_text(text, before_cursor, i, shell_mode, avoid)
+        _postprocess_continuation_text(text, before_cursor, i, avoid)
         for i, text in enumerate(texts)
     ]
 
@@ -324,7 +170,6 @@ def postprocess_suggestion_text(
     text: str,
     mode: AutocompleteMode,
     before_cursor: str | None,
-    shell_mode: bool,
     index: int,
     avoid_texts: list[str] | None = None,
 ) -> str:
@@ -335,7 +180,7 @@ def postprocess_suggestion_text(
         for item in (avoid_texts or [])
         if _normalize_similarity_text(item)
     }
-    return _postprocess_continuation_text(text, before_cursor, index, shell_mode, avoid)
+    return _postprocess_continuation_text(text, before_cursor, index, avoid)
 
 
 @dataclass
@@ -482,7 +327,6 @@ class SuggestionEngine:
         before_cursor: Optional[str] = None,
         feedback_stats: Optional[dict] = None,
         negative_patterns: Optional[list[str]] = None,
-        shell_mode: Optional[bool] = None,
         prompt_placeholder_aware: bool = False,
     ) -> list[Suggestion]:
         """Generate completion suggestions using the configured LLM.
@@ -498,8 +342,6 @@ class SuggestionEngine:
                 Used to adjust temperature based on accept rate.
             negative_patterns: Optional list of recently dismissed suggestion
                 texts. Appended to the system prompt to avoid similar suggestions.
-            shell_mode: Explicit override for shell prompt selection. If None,
-                inferred from app_name. Pass False to force generic prompts.
 
         Returns:
             A list of Suggestion objects.
@@ -523,8 +365,6 @@ class SuggestionEngine:
                 before_cursor=before_cursor if before_cursor is not None else current_input,
             )
 
-        _use_shell = shell_mode if shell_mode is not None else is_shell_app(app_name)
-
         system, user_msg = build_messages(
             mode=mode,
             context=context,
@@ -532,7 +372,6 @@ class SuggestionEngine:
             max_suggestion_lines=getattr(self.config, "max_suggestion_lines", 10),
             streaming=False,
             source_app=app_name,
-            shell_mode=_use_shell,
             prompt_placeholder_aware=prompt_placeholder_aware,
         )
 
@@ -540,10 +379,6 @@ class SuggestionEngine:
             temperature = self.config.continuation_temperature
         else:
             temperature = self.config.reply_temperature
-
-        # Override temperature for shell apps (lower = more precise commands)
-        if _use_shell:
-            temperature = 0.2 if mode == AutocompleteMode.CONTINUATION else 0.5
 
         max_tokens = self.config.max_tokens
 
@@ -577,7 +412,6 @@ class SuggestionEngine:
                     [suggestion.text for suggestion in results],
                     mode=mode,
                     before_cursor=before_cursor if before_cursor is not None else current_input,
-                    shell_mode=_use_shell,
                     avoid_texts=negative_patterns,
                 )
                 for suggestion, text in zip(results, processed):
@@ -624,7 +458,6 @@ class SuggestionEngine:
         before_cursor: Optional[str] = None,
         feedback_stats: Optional[dict] = None,
         negative_patterns: Optional[list[str]] = None,
-        shell_mode: Optional[bool] = None,
         temperature_boost: float = 0.0,
         event_callback: Optional[Callable[[str, dict | None], None]] = None,
         prompt_placeholder_aware: bool = False,
@@ -643,8 +476,6 @@ class SuggestionEngine:
                 when mode is None. Falls back to current_input if not provided.
             feedback_stats: Optional dict from ContextStore.get_feedback_stats().
             negative_patterns: Optional list of recently dismissed suggestion texts.
-            shell_mode: Explicit override for shell prompt selection. If None,
-                inferred from app_name. Pass False to force generic prompts.
             temperature_boost: Added to the base temperature (e.g. 0.3 on
                 regenerate) to increase output diversity. Clamped to [0, 2].
 
@@ -671,8 +502,6 @@ class SuggestionEngine:
                 before_cursor=before_cursor if before_cursor is not None else current_input,
             )
 
-        _use_shell = shell_mode if shell_mode is not None else is_shell_app(app_name)
-
         system, user_msg = build_messages(
             mode=mode,
             context=context,
@@ -680,7 +509,6 @@ class SuggestionEngine:
             max_suggestion_lines=getattr(self.config, "max_suggestion_lines", 10),
             streaming=True,
             source_app=app_name,
-            shell_mode=_use_shell,
             prompt_placeholder_aware=prompt_placeholder_aware,
         )
 
@@ -688,10 +516,6 @@ class SuggestionEngine:
             temperature = self.config.continuation_temperature
         else:
             temperature = self.config.reply_temperature
-
-        # Override temperature for shell apps
-        if _use_shell:
-            temperature = 0.2 if mode == AutocompleteMode.CONTINUATION else 0.5
 
         max_tokens = self.config.max_tokens
 
@@ -735,7 +559,6 @@ class SuggestionEngine:
                     "fallback_base_url": self.config.fallback_base_url,
                     "fallback_model": self.config.fallback_model,
                     "mode": mode.value,
-                    "shell_mode": _use_shell,
                     "temperature": temperature,
                     "max_tokens": max_tokens,
                     "num_suggestions": self.config.num_suggestions,
@@ -762,7 +585,6 @@ class SuggestionEngine:
                         suggestion.text,
                         mode=mode,
                         before_cursor=before_cursor if before_cursor is not None else current_input,
-                        shell_mode=_use_shell,
                         index=suggestion.index,
                         avoid_texts=negative_patterns if temperature_boost > 0 else None,
                     )

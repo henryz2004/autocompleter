@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import math
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -369,6 +371,124 @@ class TestBuildQuery:
 
 
 # ---------------------------------------------------------------------------
+# get_all_with_ids / delete / get_full_memory_context
+# ---------------------------------------------------------------------------
+
+class TestGetAllWithIds:
+    def _make_store_with_mock(self):
+        store = MemoryStore(_make_config(memory_enabled=False))
+        store._mem = MagicMock()
+        store._initialized = True
+        store._vector_count = 5
+        return store
+
+    def test_returns_dicts_with_ids(self):
+        store = self._make_store_with_mock()
+        store._mem.get_all.return_value = {
+            "results": [
+                {"id": "abc", "memory": "fact A", "created_at": "2026-04-10T00:00:00Z", "updated_at": "2026-04-10T00:00:00Z"},
+                {"id": "def", "memory": "fact B", "created_at": "2026-04-11T00:00:00Z", "updated_at": "2026-04-11T00:00:00Z"},
+            ]
+        }
+        results = store.get_all_with_ids()
+        assert len(results) == 2
+        assert results[0]["id"] == "abc"
+        assert results[0]["memory"] == "fact A"
+        assert results[1]["id"] == "def"
+
+    def test_filters_empty_memories(self):
+        store = self._make_store_with_mock()
+        store._mem.get_all.return_value = {
+            "results": [
+                {"id": "a", "memory": "good", "created_at": "", "updated_at": ""},
+                {"id": "b", "memory": "  ", "created_at": "", "updated_at": ""},
+            ]
+        }
+        results = store.get_all_with_ids()
+        assert len(results) == 1
+
+    def test_disabled_returns_empty(self):
+        store = MemoryStore(_make_config(memory_enabled=False))
+        assert store.get_all_with_ids() == []
+
+
+class TestDelete:
+    def _make_store_with_mock(self):
+        store = MemoryStore(_make_config(memory_enabled=False))
+        store._mem = MagicMock()
+        store._initialized = True
+        store._vector_count = 5
+        return store
+
+    def test_delete_success(self):
+        store = self._make_store_with_mock()
+        store._mem.delete.return_value = {"message": "deleted"}
+        assert store.delete("mem_123") is True
+        store._mem.delete.assert_called_once_with("mem_123")
+        assert store._vector_count == 4
+
+    def test_delete_error(self):
+        store = self._make_store_with_mock()
+        store._mem.delete.side_effect = Exception("not found")
+        assert store.delete("bad_id") is False
+        assert store._vector_count == 5  # unchanged
+
+    def test_delete_disabled(self):
+        store = MemoryStore(_make_config(memory_enabled=False))
+        assert store.delete("anything") is False
+
+
+class TestGetFullMemoryContext:
+    def _make_store_with_mock(self, data_dir):
+        cfg = _make_config(memory_enabled=False)
+        # Override data_dir to our temp dir
+        cfg.data_dir = data_dir
+        store = MemoryStore(cfg)
+        store._mem = MagicMock()
+        store._initialized = True
+        store._vector_count = 5
+        return store
+
+    def test_all_sources(self, tmp_path):
+        (tmp_path / "instructions.md").write_text("Always be formal.")
+        (tmp_path / "memory.md").write_text("## Identity\n- Works at Acme Corp")
+        store = self._make_store_with_mock(tmp_path)
+        # Populate FAISS cache
+        with store._cache_lock:
+            store._cache["q"] = (["recent fact"], "User memories:\n- recent fact")
+        result = store.get_full_memory_context()
+        assert "User instructions:" in result
+        assert "Always be formal" in result
+        assert "User profile:" in result
+        assert "Acme Corp" in result
+        assert "Recent context:" in result
+        assert "recent fact" in result
+
+    def test_no_files(self, tmp_path):
+        store = self._make_store_with_mock(tmp_path)
+        # Only FAISS cache
+        with store._cache_lock:
+            store._cache["q"] = (["a fact"], "User memories:\n- a fact")
+        result = store.get_full_memory_context()
+        assert "Recent context:" in result
+        assert "a fact" in result
+        assert "User instructions:" not in result
+        assert "User profile:" not in result
+
+    def test_empty_cache_files_only(self, tmp_path):
+        (tmp_path / "memory.md").write_text("## Preferences\n- Likes Python")
+        store = self._make_store_with_mock(tmp_path)
+        result = store.get_full_memory_context()
+        assert "User profile:" in result
+        assert "Likes Python" in result
+        assert "Recent context:" not in result
+
+    def test_all_empty(self, tmp_path):
+        store = self._make_store_with_mock(tmp_path)
+        assert store.get_full_memory_context() == ""
+
+
+# ---------------------------------------------------------------------------
 # Short-circuit tests
 # ---------------------------------------------------------------------------
 
@@ -465,8 +585,10 @@ class TestPreWarmCache:
         }
         store.pre_warm("query 2")
         store._executor.shutdown(wait=True)
+        # Most recent (query 2) is returned by default.
         assert "Memory B" in store.get_cached_context()
-        assert "Memory A" not in store.get_cached_context()
+        # Query 1 is still in the LRU cache — accessible by key.
+        assert "Memory A" in store.get_cached_context(query="query 1")
 
     def test_pre_warm_when_disabled_is_noop(self):
         store = MemoryStore(_make_config(memory_enabled=False))
@@ -478,3 +600,195 @@ class TestPreWarmCache:
         store._mem.add.return_value = {"id": "mem_123"}
         store.add([{"role": "user", "content": "test"}])
         assert store._vector_count == 1
+
+    def test_lru_eviction(self):
+        """Oldest entries are evicted when cache exceeds max size."""
+        store = self._make_store_with_mock()
+        store._cache_max_size = 3
+        store._mem.search.return_value = {
+            "results": [{"memory": "mem", "score": 0.9}]
+        }
+
+        from concurrent.futures import ThreadPoolExecutor
+
+        for i in range(4):
+            store._executor = ThreadPoolExecutor(max_workers=2)
+            store.pre_warm(f"query-{i}")
+            store._executor.shutdown(wait=True)
+
+        # Cache should have 3 entries: query-1, query-2, query-3
+        assert len(store._cache) == 3
+        assert "query-0" not in store._cache
+        assert "query-3" in store._cache
+
+    def test_lru_cache_hit_no_api_call(self):
+        """Re-visiting a cached query does not trigger a new search."""
+        store = self._make_store_with_mock()
+        store._mem.search.return_value = {
+            "results": [{"memory": "Memory A", "score": 0.9}]
+        }
+
+        from concurrent.futures import ThreadPoolExecutor
+
+        store.pre_warm("query A")
+        store._executor.shutdown(wait=True)
+        store._executor = ThreadPoolExecutor(max_workers=2)
+
+        store._mem.search.return_value = {
+            "results": [{"memory": "Memory B", "score": 0.8}]
+        }
+        store.pre_warm("query B")
+        store._executor.shutdown(wait=True)
+        store._executor = ThreadPoolExecutor(max_workers=2)
+
+        # Reset mock to track if search is called again
+        store._mem.search.reset_mock()
+
+        # Re-visit query A — should be an LRU hit, no API call.
+        store.pre_warm("query A")
+        store._executor.shutdown(wait=True)
+        store._mem.search.assert_not_called()
+
+        # query A should now be the most recent entry.
+        assert "Memory A" in store.get_cached_context()
+
+    def test_in_flight_dedup(self):
+        """Concurrent pre_warm calls for the same query don't duplicate."""
+        store = self._make_store_with_mock()
+
+        import threading
+        barrier = threading.Event()
+
+        original_search = store._mem.search
+
+        def slow_search(**kwargs):
+            barrier.wait(timeout=2)
+            return {"results": [{"memory": "found", "score": 0.9}]}
+
+        store._mem.search = MagicMock(side_effect=slow_search)
+
+        from concurrent.futures import ThreadPoolExecutor
+        store._executor = ThreadPoolExecutor(max_workers=4)
+
+        store.pre_warm("same-query")
+        store.pre_warm("same-query")  # should be deduped
+
+        barrier.set()
+        store._executor.shutdown(wait=True)
+
+        # search should have been called exactly once
+        assert store._mem.search.call_count == 1
+
+    def test_get_cached_context_by_query(self):
+        """get_cached_context with a specific query returns that entry."""
+        store = self._make_store_with_mock()
+
+        from concurrent.futures import ThreadPoolExecutor
+
+        store._mem.search.return_value = {
+            "results": [{"memory": "Slack memory", "score": 0.9}]
+        }
+        store.pre_warm("Slack | #general")
+        store._executor.shutdown(wait=True)
+        store._executor = ThreadPoolExecutor(max_workers=2)
+
+        store._mem.search.return_value = {
+            "results": [{"memory": "Discord memory", "score": 0.9}]
+        }
+        store.pre_warm("Discord | @friend")
+        store._executor.shutdown(wait=True)
+
+        assert "Slack memory" in store.get_cached_context(query="Slack | #general")
+        assert "Discord memory" in store.get_cached_context(query="Discord | @friend")
+        # Default (no query) returns most recent
+        assert "Discord memory" in store.get_cached_context()
+
+
+# ---------------------------------------------------------------------------
+# Decay tests
+# ---------------------------------------------------------------------------
+
+class TestApplyDecay:
+    """Test the exponential time-decay scoring."""
+
+    _NOW = datetime(2026, 4, 12, 12, 0, 0, tzinfo=timezone.utc)
+
+    def _ts(self, hours_ago: float) -> str:
+        """Return ISO timestamp *hours_ago* before _NOW."""
+        return (self._NOW - timedelta(hours=hours_ago)).isoformat()
+
+    def test_recent_memory_keeps_score(self):
+        entries = [
+            {"memory": "recent", "score": 0.9, "updated_at": self._ts(1)},
+        ]
+        MemoryStore._apply_decay(entries, decay_rate=0.01, now=self._NOW)
+        # 1 hour old: e^(-0.01 * 1) ≈ 0.99
+        assert entries[0]["decayed_score"] == pytest.approx(0.9 * math.exp(-0.01), rel=1e-3)
+
+    def test_three_day_old_memory_halved(self):
+        entries = [
+            {"memory": "old", "score": 0.9, "updated_at": self._ts(72)},
+        ]
+        MemoryStore._apply_decay(entries, decay_rate=0.01, now=self._NOW)
+        # 72 hours: e^(-0.01 * 72) ≈ 0.487
+        expected = 0.9 * math.exp(-0.01 * 72)
+        assert entries[0]["decayed_score"] == pytest.approx(expected, rel=1e-3)
+
+    def test_seven_day_old_memory_low(self):
+        entries = [
+            {"memory": "very old", "score": 0.9, "updated_at": self._ts(168)},
+        ]
+        MemoryStore._apply_decay(entries, decay_rate=0.01, now=self._NOW)
+        # 168 hours: e^(-0.01 * 168) ≈ 0.186
+        expected = 0.9 * math.exp(-0.01 * 168)
+        assert entries[0]["decayed_score"] == pytest.approx(expected, rel=1e-3)
+
+    def test_decay_rate_zero_disables(self):
+        entries = [
+            {"memory": "m", "score": 0.85, "updated_at": self._ts(1000)},
+        ]
+        MemoryStore._apply_decay(entries, decay_rate=0, now=self._NOW)
+        assert entries[0]["decayed_score"] == 0.85
+
+    def test_resorted_by_decayed_score(self):
+        """An old high-similarity memory should be outranked by a recent one."""
+        entries = [
+            {"memory": "old_high", "score": 0.95, "updated_at": self._ts(200)},
+            {"memory": "recent_low", "score": 0.60, "updated_at": self._ts(1)},
+        ]
+        MemoryStore._apply_decay(entries, decay_rate=0.01, now=self._NOW)
+        # old_high: 0.95 * e^(-2.0) ≈ 0.128
+        # recent_low: 0.60 * e^(-0.01) ≈ 0.594
+        assert entries[0]["memory"] == "recent_low"
+        assert entries[1]["memory"] == "old_high"
+
+    def test_missing_timestamp_no_decay(self):
+        """If updated_at is missing, score is unchanged."""
+        entries = [
+            {"memory": "no_ts", "score": 0.8},
+        ]
+        MemoryStore._apply_decay(entries, decay_rate=0.01, now=self._NOW)
+        # hours_elapsed = 0 → decay_factor = 1.0
+        assert entries[0]["decayed_score"] == pytest.approx(0.8, rel=1e-3)
+
+    def test_search_uses_decay(self):
+        """Integration: search() applies decay when configured."""
+        store = MemoryStore(_make_config(memory_enabled=False))
+        store._mem = MagicMock()
+        store._initialized = True
+        store._vector_count = 10
+        store._decay_rate = 0.01
+
+        old_ts = (datetime.now(timezone.utc) - timedelta(hours=200)).isoformat()
+        new_ts = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+
+        store._mem.search.return_value = {
+            "results": [
+                {"memory": "old high", "score": 0.95, "updated_at": old_ts},
+                {"memory": "recent low", "score": 0.60, "updated_at": new_ts},
+            ]
+        }
+        results = store.search("test query")
+        # After decay, recent_low should come first
+        assert results[0] == "recent low"
+        assert results[1] == "old high"

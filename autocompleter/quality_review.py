@@ -12,8 +12,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-
-
+from .prompts import build_prompt_extra_rules
 @dataclass(frozen=True)
 class QualityVariant:
     name: str
@@ -115,41 +114,6 @@ def summarize_context(context: str, max_blocks: int = 4, max_chars: int = 120) -
             line = line[:max_chars].rstrip() + "..."
         parts.append(line)
     return "\n".join(parts)
-
-
-def build_prompt_extra_rules(
-    mode,
-    prompt_placeholder_aware: bool,
-) -> str:
-    """Return extra prompt rules for a quality variant."""
-    if not prompt_placeholder_aware:
-        return ""
-    mode_value = getattr(mode, "value", mode)
-    if mode_value == "continuation":
-        return (
-            "\n\nAdditional context handling rules:\n"
-            "- Treat 'Text before cursor' as the strongest signal.\n"
-            "- Nearby UI labels, navigation text, or context from other apps may be irrelevant; ignore them unless they clearly continue the same thought.\n"
-            "- If the focused field text looks like placeholder text, a suggested prompt, or non-user-authored UI copy, do not continue it literally.\n"
-            "- Prefer the most literal continuation of the exact words already typed over a creative guess about what the user might mean.\n"
-            "- Reuse the syntax and direction already present in the draft instead of pivoting to advice, troubleshooting, or a new task.\n"
-            "- If the draft ends with an unfinished lead-in such as 'also,' or 'do you think', complete that same clause naturally rather than starting a different idea.\n"
-            "- If the local context is weak, prefer abstract references like 'it', 'this', 'that', or 'we' over inventing specific nouns.\n"
-            "- Do not invent debugging steps, logs, servers, APIs, env vars, deployments, or configuration issues unless the user already mentioned them explicitly.\n"
-            "- When context is weak, stay close to the literal wording and syntax of the text before cursor instead of guessing a new topic.\n"
-            "- Prefer relevant continuation over generic troubleshooting, task switching, or invented follow-up actions.\n"
-            "- Avoid repeating the exact words already typed before the cursor; continue from them instead.\n"
-            "- Even for very short drafts, prefer a natural literal continuation over canned filler or generic reassurance.\n"
-            "- If one possible continuation would merely acknowledge the situation or talk about testing, logs, fixes, or next steps, prefer the continuation that stays closest to the user's literal draft.\n"
-            "- If a continuation is weak or uncertain, still return the best literal continuation you can infer from the draft rather than switching to a generic fallback phrase.\n"
-        )
-    return (
-        "\n\nAdditional context handling rules:\n"
-        "- Prefer the user's draft and the most relevant recent content over nearby UI labels and navigation text.\n"
-        "- If the focused field text looks like placeholder text or non-user-authored UI copy, do not treat it as the user's intended message.\n"
-        "- Ignore unrelated context from other apps unless it is clearly relevant to what the user is replying to.\n"
-        "- Do not invent operational debugging or implementation details unless they are clearly present in the visible context.\n"
-    )
 
 
 def _is_cross_app_block(block: str) -> bool:

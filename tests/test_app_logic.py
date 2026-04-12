@@ -216,17 +216,42 @@ class TestReplyVisibleFiltering:
         ]
 
 class TestPostAcceptFollowup:
+    def test_build_post_accept_focused_state_uses_accepted_text(self):
+        live = FocusedElement(
+            app_name="Codex",
+            app_pid=123,
+            role="AXTextArea",
+            value="transient",
+            selected_text="",
+            position=(10.0, 20.0),
+            size=(300.0, 40.0),
+            insertion_point=4,
+            placeholder_detected=False,
+        )
+
+        result = Autocompleter._build_post_accept_focused_state(
+            live_focused=live,
+            accepted_text=" so far",
+            trigger_before_cursor="it seems to work",
+            trigger_after_cursor="",
+        )
+
+        assert result.before_cursor == "it seems to work so far"
+        assert result.after_cursor == ""
+        assert result.insertion_point == len("it seems to work so far")
+        assert result.position == live.position
+
     def test_reuses_saved_context_and_refreshes_focus_state(self, monkeypatch):
         app = Autocompleter.__new__(Autocompleter)
         focused = FocusedElement(
             app_name="Codex",
             app_pid=123,
             role="AXTextArea",
-            value="hello world there",
+            value="transient partial",
             selected_text="",
             position=(50.0, 60.0),
             size=(200.0, 20.0),
-            insertion_point=17,
+            insertion_point=10,
         )
 
         overlay_calls = []
@@ -255,7 +280,7 @@ class TestPostAcceptFollowup:
         app._dumper = None
         app._generation_id = 4
         app._trigger_time = None
-        app._trigger_before_cursor = ""
+        app._trigger_before_cursor = "hello world"
         app._trigger_after_cursor = ""
         app._trigger_mode = ""
         app._trigger_app = ""
@@ -281,19 +306,20 @@ class TestPostAcceptFollowup:
             "trigger_type": "manual",
         }
 
-        app._start_post_accept_followup()
+        app._start_post_accept_followup(" there")
 
         assert app._generation_id == 5
         assert app._trigger_before_cursor == "hello world there"
         assert app._trigger_mode == "continuation"
         assert overlay_calls == [("Generating...", 50.0, 80.0, 20.0)]
-        assert app._last_trigger_args["focused"] is focused
+        assert app._last_trigger_args["focused"] is not focused
+        assert app._last_trigger_args["focused"].before_cursor == "hello world there"
         assert app._last_trigger_args["visible_text_elements"] == ["visible context"]
         assert app._last_trigger_args["cross_app_context"].startswith("[Recent activity")
         assert app._last_trigger_args["trigger_type"] == "post_accept"
         assert captured["latency_start"] == 5
         assert captured["started"] is True
-        assert captured["args"][0] is focused
+        assert captured["args"][0].before_cursor == "hello world there"
         assert captured["args"][4] == app_module.AutocompleteMode.CONTINUATION
         assert captured["args"][7] == [{"speaker": "User", "text": "hi"}]
         assert captured["args"][8] == ["visible context"]

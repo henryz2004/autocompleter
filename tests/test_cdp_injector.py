@@ -634,6 +634,29 @@ class TestInjectorCDPIntegration:
         mock_ax.assert_not_called()
         mock_cdp.assert_called_once()
 
+    @patch("autocompleter.text_injector.TextInjector._inject_via_keystrokes")
+    @patch("autocompleter.text_injector.TextInjector._inject_via_clipboard")
+    @patch("autocompleter.text_injector.TextInjector._inject_via_cdp")
+    @patch("autocompleter.text_injector.TextInjector._inject_via_ax")
+    def test_codex_prefers_keystrokes_before_clipboard(
+        self, mock_ax, mock_cdp, mock_clipboard, mock_keys,
+    ):
+        """Codex should avoid AX rewrites and clipboard before keystrokes."""
+        from autocompleter.text_injector import TextInjector
+
+        mock_cdp.return_value = False
+        mock_keys.return_value = True
+        mock_clipboard.return_value = True
+
+        injector = TextInjector()
+        result = injector.inject("hello", app_name="Codex", app_pid=1234)
+
+        assert result is True
+        mock_ax.assert_not_called()
+        mock_cdp.assert_called_once_with("hello", app_name="Codex", app_pid=1234)
+        mock_keys.assert_called_once_with("hello")
+        mock_clipboard.assert_not_called()
+
     @patch("autocompleter.text_injector.TextInjector._inject_via_clipboard")
     @patch("autocompleter.text_injector.TextInjector._inject_via_cdp")
     @patch("autocompleter.text_injector.TextInjector._inject_via_ax")

@@ -33,7 +33,7 @@ from .embeddings import (
     TFIDFEmbeddingProvider,
 )
 from .hotkey import HotkeyListener
-from .input_observer import InputObserver, VisibleContent
+from .input_observer import FocusedElement, InputObserver, VisibleContent
 from .latency_tracker import LatencyStore, LatencyTracker
 from .overlay import OverlayConfig, SuggestionOverlay
 from .quality_review import (
@@ -41,7 +41,7 @@ from .quality_review import (
     LIVE_REPLY_VARIANT,
     apply_quality_variant_to_context,
 )
-from .shell_parser import parse_terminal_buffer, parse_tui_buffer
+from .shell_parser import strip_tmux_split_panes
 from .suggestion_engine import AutocompleteMode, Suggestion, SuggestionEngine, detect_mode, is_shell_app
 from .memory import MemoryStore
 from .text_injector import TextInjector
@@ -276,6 +276,11 @@ class Autocompleter:
         )
         if pruned:
             logger.info(f"Pruned {pruned} old context entries")
+
+        # Run daily memory consolidation in background if due.
+        if self.memory.enabled:
+            from .consolidation import run_consolidation
+            self._executor.submit(run_consolidation, self.memory, self.config)
 
         # Wire up click-outside-to-dismiss (reuses existing dismiss logic)
         def _click_dismiss():
@@ -1058,62 +1063,29 @@ class Autocompleter:
         app_name = focused.app_name
         current_input = focused.value
 
+        # Universal preprocessing: strip tmux pane noise (no-op for
+        # non-terminals) and cap buffer length to avoid sending huge
+        # terminal scrollback to the LLM.
+        effective_before_cursor = strip_tmux_split_panes(focused.before_cursor)
+        if len(effective_before_cursor) > _TUI_CONTEXT_TAIL_CHARS:
+            effective_before_cursor = effective_before_cursor[-_TUI_CONTEXT_TAIL_CHARS:]
+
         if mode is None:
-            mode = detect_mode(before_cursor=focused.before_cursor)
+            mode = detect_mode(before_cursor=effective_before_cursor)
 
-        # Terminal context detection: TUI first, then shell.
-        # TUI detection must run before shell detection because in tmux
-        # split-pane layouts, _strip_tmux_split_panes may pick the wrong
-        # pane — if it picks the shell pane, parse_terminal_buffer sees a
-        # prompt and we'd never try TUI detection.
-        use_shell = False
-        use_tui = False
-        effective_before_cursor = focused.before_cursor
-        # Read pre-warmed memory context (populated by observer loop — instant,
-        # no API call).  Falls back to "" if cache is cold or memory disabled.
-        memory_context = self.memory.get_cached_context()
+        # Read combined memory context: instructions.md + memory.md + FAISS cache.
+        # File reads are instant; FAISS results were pre-warmed by the observer loop.
+        memory_context = self.memory.get_full_memory_context()
         if memory_context:
-            logger.info(f"[MEM] Using cached memory context ({len(memory_context)} chars)")
+            logger.info(f"[MEM] Using memory context ({len(memory_context)} chars)")
 
-        if is_shell_app(app_name):
-            # Try TUI detection first (e.g. Claude Code running inside terminal)
-            tui = parse_tui_buffer(focused.before_cursor, focused.after_cursor)
-            if tui.is_tui:
-                use_tui = True
-                logger.info(f"[CTX] TUI detected: {tui.tui_name} | user_input={len(tui.user_input)} chars | turns={len(tui.conversation_turns)}")
-                effective_before_cursor = tui.user_input
-                # Always use reply mode for TUI apps — the user is composing
-                # a message to an AI agent, not continuing prose.
-                mode = AutocompleteMode.REPLY
-                # Use conversation turns from the TUI
-                if not conversation_turns and tui.conversation_turns:
-                    conversation_turns = tui.conversation_turns
-            else:
-                # Fall back to shell detection
-                parsed = parse_terminal_buffer(focused.before_cursor)
-                if parsed.is_likely_shell_context:
-                    use_shell = True
-                    context = self.context_store.get_shell_context(
-                        parsed=parsed,
-                        source_app=app_name,
-                        window_title=window_title,
-                        cross_app_context=cross_app_context,
-                        memory_context=memory_context,
-                    )
-                    mode = AutocompleteMode.CONTINUATION if parsed.current_command.strip() else AutocompleteMode.REPLY
-                else:
-                    logger.info("[CTX] Terminal detected but not at shell prompt — using generic mode")
-                    # Trim to tail to avoid sending 145K+ chars of terminal buffer
-                    effective_before_cursor = focused.before_cursor[-_TUI_CONTEXT_TAIL_CHARS:]
-
-        if not use_shell and not use_tui:
-            visible_text_elements, _ = self._maybe_refresh_visible_content_for_worker(
-                focused=focused,
-                window_title=window_title,
-                visible_text_elements=visible_text_elements,
-                visible_meta=None,
-                conversation_turns=conversation_turns,
-            )
+        visible_text_elements, _ = self._maybe_refresh_visible_content_for_worker(
+            focused=focused,
+            window_title=window_title,
+            visible_text_elements=visible_text_elements,
+            visible_meta=None,
+            conversation_turns=conversation_turns,
+        )
 
         # Messaging apps: force reply mode when structured conversation turns
         # were extracted.  The user is composing a message in a chat, not
@@ -1121,7 +1093,7 @@ class Autocompleter:
         # conversation has multiple speakers (i.e. we captured both sides).
         # When turns are one-sided (e.g. Gemini only exposes user messages),
         # keep visible text so the LLM can see assistant responses.
-        if not use_shell and not use_tui and conversation_turns:
+        if conversation_turns:
             mode = AutocompleteMode.REPLY
             speakers = {t.speaker for t in conversation_turns}
             if len(speakers) > 1:
@@ -1139,8 +1111,8 @@ class Autocompleter:
                     speakers.pop() if speakers else "?",
                 )
 
-        # Standard context assembly based on mode
-        if not use_shell and mode == AutocompleteMode.CONTINUATION:
+        # Context assembly based on mode
+        if mode == AutocompleteMode.CONTINUATION:
             context = self.context_store.get_continuation_context(
                 before_cursor=effective_before_cursor,
                 after_cursor=focused.after_cursor,
@@ -1154,21 +1126,18 @@ class Autocompleter:
                 subtree_context=subtree_context,
                 memory_context=memory_context,
             )
-        elif not use_shell:
-            # For TUI apps, suppress visible text and semantic context —
-            # the observer stores raw terminal buffer (including adjacent
-            # tmux panes) in the DB which pollutes semantic search results.
+        else:
             context = self.context_store.get_reply_context(
                 conversation_turns=conversation_turns or [],
                 source_app=app_name,
                 window_title=window_title,
                 source_url=source_url,
                 draft_text=effective_before_cursor if focused.insertion_point is not None else "",
-                visible_text=visible_text_elements if not use_tui else [],
+                visible_text=visible_text_elements,
                 embedding_provider=self._embedding_provider,
-                use_semantic_context=self.config.use_semantic_context and not use_tui,
+                use_semantic_context=self.config.use_semantic_context,
                 cross_app_context=cross_app_context,
-                subtree_context=subtree_context if not use_tui else None,
+                subtree_context=subtree_context,
                 memory_context=memory_context,
             )
 
@@ -1210,7 +1179,6 @@ class Autocompleter:
             mode=mode,
             feedback_stats=feedback_stats,
             negative_patterns=negative_patterns,
-            shell_mode=use_shell,
             prompt_placeholder_aware=True,
         )
         elapsed = time.time() - t0
@@ -1281,64 +1249,29 @@ class Autocompleter:
         app_name = focused.app_name
         current_input = focused.value
 
+        # Universal preprocessing: strip tmux pane noise (no-op for
+        # non-terminals) and cap buffer length.
+        effective_before_cursor = strip_tmux_split_panes(focused.before_cursor)
+        if len(effective_before_cursor) > _TUI_CONTEXT_TAIL_CHARS:
+            effective_before_cursor = effective_before_cursor[-_TUI_CONTEXT_TAIL_CHARS:]
+
         if mode is None:
-            mode = detect_mode(before_cursor=focused.before_cursor)
+            mode = detect_mode(before_cursor=effective_before_cursor)
 
-        # Terminal context detection: TUI first, then shell.
-        # TUI detection must run before shell detection because in tmux
-        # split-pane layouts, _strip_tmux_split_panes may pick the wrong
-        # pane — if it picks the shell pane, parse_terminal_buffer sees a
-        # prompt and we'd never try TUI detection.
-        use_shell = False
-        use_tui = False
-        effective_before_cursor = focused.before_cursor
-
-        # Read pre-warmed memory context (populated by observer loop — instant,
-        # no API call).  Falls back to "" if cache is cold or memory disabled.
-        memory_context = self.memory.get_cached_context()
+        # Read combined memory context: instructions.md + memory.md + FAISS cache.
+        # File reads are instant; FAISS results were pre-warmed by the observer loop.
+        memory_context = self.memory.get_full_memory_context()
         if memory_context:
-            logger.info(f"[MEM] Using cached memory context ({len(memory_context)} chars)")
+            logger.info(f"[MEM] Using memory context ({len(memory_context)} chars)")
 
-        if is_shell_app(app_name):
-            # Try TUI detection first (e.g. Claude Code running inside terminal)
-            tui = parse_tui_buffer(focused.before_cursor, focused.after_cursor)
-            if tui.is_tui:
-                use_tui = True
-                logger.info(f"[CTX] TUI detected: {tui.tui_name} | user_input={len(tui.user_input)} chars | turns={len(tui.conversation_turns)}")
-                effective_before_cursor = tui.user_input
-                # Always use reply mode for TUI apps — the user is composing
-                # a message to an AI agent, not continuing prose.
-                mode = AutocompleteMode.REPLY
-                # Use conversation turns from the TUI
-                if not conversation_turns and tui.conversation_turns:
-                    conversation_turns = tui.conversation_turns
-            else:
-                # Fall back to shell detection
-                parsed = parse_terminal_buffer(focused.before_cursor)
-                if parsed.is_likely_shell_context:
-                    use_shell = True
-                    context = self.context_store.get_shell_context(
-                        parsed=parsed,
-                        source_app=app_name,
-                        window_title=window_title,
-                        cross_app_context=cross_app_context,
-                        memory_context=memory_context,
-                    )
-                    mode = AutocompleteMode.CONTINUATION if parsed.current_command.strip() else AutocompleteMode.REPLY
-                else:
-                    logger.info("[CTX] Terminal detected but not at shell prompt — using generic mode")
-                    # Trim to tail to avoid sending 145K+ chars of terminal buffer
-                    effective_before_cursor = focused.before_cursor[-_TUI_CONTEXT_TAIL_CHARS:]
-
-        if not use_shell and not use_tui:
-            visible_text_elements, visible_meta = self._maybe_refresh_visible_content_for_worker(
-                focused=focused,
-                window_title=window_title,
-                visible_text_elements=visible_text_elements,
-                visible_meta=visible_meta,
-                conversation_turns=conversation_turns,
-                snapshot=snapshot,
-            )
+        visible_text_elements, visible_meta = self._maybe_refresh_visible_content_for_worker(
+            focused=focused,
+            window_title=window_title,
+            visible_text_elements=visible_text_elements,
+            visible_meta=visible_meta,
+            conversation_turns=conversation_turns,
+            snapshot=snapshot,
+        )
 
         # Messaging apps: force reply mode when structured conversation turns
         # were extracted.  The user is composing a message in a chat, not
@@ -1346,7 +1279,7 @@ class Autocompleter:
         # conversation has multiple speakers (i.e. we captured both sides).
         # When turns are one-sided (e.g. Gemini only exposes user messages),
         # keep visible text so the LLM can see assistant responses.
-        if not use_shell and not use_tui and conversation_turns:
+        if conversation_turns:
             mode = AutocompleteMode.REPLY
             speakers = {t.speaker for t in conversation_turns}
             if len(speakers) > 1:
@@ -1364,9 +1297,9 @@ class Autocompleter:
                     speakers.pop() if speakers else "?",
                 )
 
-        # Standard context assembly based on mode
+        # Context assembly based on mode
         self._latency_tracker.mark("context_build_start")
-        if not use_shell and mode == AutocompleteMode.CONTINUATION:
+        if mode == AutocompleteMode.CONTINUATION:
             context = self.context_store.get_continuation_context(
                 before_cursor=effective_before_cursor,
                 after_cursor=focused.after_cursor,
@@ -1381,28 +1314,21 @@ class Autocompleter:
                 memory_context=memory_context,
             )
             used_semantic_context = bool(self.config.use_semantic_context)
-        elif not use_shell:
-            # For TUI apps, suppress visible text and semantic context —
-            # the observer stores raw terminal buffer (including adjacent
-            # tmux panes) in the DB which pollutes semantic search results.
+        else:
             context = self.context_store.get_reply_context(
                 conversation_turns=conversation_turns or [],
                 source_app=app_name,
                 window_title=window_title,
                 source_url=source_url,
                 draft_text=effective_before_cursor if focused.insertion_point is not None else "",
-                visible_text=visible_text_elements if not use_tui else [],
+                visible_text=visible_text_elements,
                 embedding_provider=self._embedding_provider,
-                use_semantic_context=self.config.use_semantic_context and not use_tui,
+                use_semantic_context=self.config.use_semantic_context,
                 cross_app_context=cross_app_context,
-                subtree_context=subtree_context if not use_tui else None,
+                subtree_context=subtree_context,
                 memory_context=memory_context,
             )
-            used_semantic_context = bool(
-                self.config.use_semantic_context and not use_tui
-            )
-        else:
-            used_semantic_context = False
+            used_semantic_context = bool(self.config.use_semantic_context)
 
         live_variant = (
             LIVE_CONTINUATION_VARIANT
@@ -1419,14 +1345,15 @@ class Autocompleter:
         logger.info("[CTX] --- END CONTEXT ---")
 
         # Populate snapshot with detection results and context
+        is_terminal = is_shell_app(app_name)
         if snapshot:
             snapshot.mode = mode.value
-            snapshot.use_shell = use_shell
-            snapshot.use_tui = use_tui
+            snapshot.use_shell = is_terminal
+            snapshot.use_tui = is_terminal
             snapshot.request.setdefault("live_context_variant", live_variant.name)
-            if use_tui:
-                snapshot.tui_name = tui.tui_name
-                snapshot.tui_user_input = tui.user_input
+            if is_terminal:
+                snapshot.tui_name = "tui"
+                snapshot.tui_user_input = effective_before_cursor
             snapshot.context = context
             if conversation_turns:
                 snapshot.conversation_turns = list(conversation_turns)
@@ -1478,7 +1405,6 @@ class Autocompleter:
                 mode=mode,
                 feedback_stats=feedback_stats,
                 negative_patterns=negative_patterns,
-                shell_mode=use_shell,
                 temperature_boost=temperature_boost,
                 event_callback=_on_stream_event,
                 prompt_placeholder_aware=True,
@@ -1539,8 +1465,8 @@ class Autocompleter:
                 suggestion_count=0,
                 trigger_type=trigger_type,
                 visible_source=str((visible_meta or {}).get("visible_source", "")),
-                use_shell=use_shell,
-                use_tui=use_tui,
+                use_shell=is_terminal,
+                use_tui=is_terminal,
                 has_conversation_turns=bool(conversation_turns),
                 used_subtree_context=bool(subtree_context),
                 used_semantic_context=used_semantic_context,
@@ -1592,8 +1518,8 @@ class Autocompleter:
             suggestion_count=len(suggestions),
             trigger_type=trigger_type,
             visible_source=str((visible_meta or {}).get("visible_source", "")),
-            use_shell=use_shell,
-            use_tui=use_tui,
+            use_shell=is_terminal,
+            use_tui=is_terminal,
             has_conversation_turns=bool(conversation_turns),
             used_subtree_context=bool(subtree_context),
             used_semantic_context=used_semantic_context,
@@ -2049,13 +1975,19 @@ class Autocompleter:
             before_text = (
                 focused.before_cursor if focused
                 else self._trigger_before_cursor
-            )
+            ) or ""
+            # Prepend app/window metadata so mem0's extraction LLM sees them.
+            context_prefix = f"[App: {app_name}]"
+            window_title = self._last_observed_window
+            if window_title:
+                context_prefix += f" [Window: {window_title}]"
+            mem_content = f"{context_prefix}\n{before_text[-800:]}"
             logger.debug(
                 f"[MEM] Storing accepted suggestion: {suggestion.text[:60]}"
             )
             self.memory.add_async(
                 [
-                    {"role": "user", "content": before_text[-300:]},
+                    {"role": "user", "content": mem_content},
                     {"role": "assistant", "content": suggestion.text},
                 ],
                 metadata={"app": app_name, "mode": self._trigger_mode},
@@ -2076,7 +2008,35 @@ class Autocompleter:
         except Exception:
             logger.debug("Failed to record accepted feedback", exc_info=True)
 
-    def _start_post_accept_followup(self) -> None:
+    @staticmethod
+    def _build_post_accept_focused_state(
+        live_focused,
+        accepted_text: str,
+        trigger_before_cursor: str,
+        trigger_after_cursor: str,
+    ):
+        """Build a synthetic focused state that includes the accepted text.
+
+        We cannot trust a rich editor to have fully settled by the time the
+        chained follow-up starts, so derive the next draft from the accepted
+        text we intentionally inserted.
+        """
+        before_cursor = trigger_before_cursor + accepted_text
+        after_cursor = trigger_after_cursor
+        return FocusedElement(
+            app_name=live_focused.app_name,
+            app_pid=live_focused.app_pid,
+            role=live_focused.role,
+            value=before_cursor + after_cursor,
+            selected_text="",
+            position=live_focused.position,
+            size=live_focused.size,
+            insertion_point=len(before_cursor),
+            selection_length=0,
+            placeholder_detected=False,
+        )
+
+    def _start_post_accept_followup(self, accepted_text: str) -> None:
         """Launch a follow-up generation after a successful full accept."""
         if not self.config.followup_after_accept_enabled:
             return
@@ -2088,21 +2048,28 @@ class Autocompleter:
             logger.debug("Post-accept follow-up skipped: no focused element")
             return
 
+        focused_for_generation = self._build_post_accept_focused_state(
+            live_focused=focused,
+            accepted_text=accepted_text,
+            trigger_before_cursor=self._trigger_before_cursor,
+            trigger_after_cursor=self._trigger_after_cursor,
+        )
+
         self._trigger_time = time.time()
         self._latency_tracker.start(generation_id=self._generation_id + 1)
         self._latency_tracker.mark("trigger")
         self._latency_tracker.mark("focused_ready")
 
-        mode = detect_mode(before_cursor=focused.before_cursor)
+        mode = detect_mode(before_cursor=focused_for_generation.before_cursor)
         x, y, caret_height = self._compute_anchor_for_focused(focused)
         self._latency_tracker.mark("caret_ready")
 
-        self._trigger_before_cursor = focused.before_cursor
-        self._trigger_after_cursor = focused.after_cursor
+        self._trigger_before_cursor = focused_for_generation.before_cursor
+        self._trigger_after_cursor = focused_for_generation.after_cursor
         self._trigger_mode = mode.value
-        self._trigger_app = focused.app_name
-        self._replace_on_inject = focused.placeholder_detected
-        if is_shell_app(focused.app_name):
+        self._trigger_app = focused_for_generation.app_name
+        self._replace_on_inject = focused_for_generation.placeholder_detected
+        if is_shell_app(focused_for_generation.app_name):
             self._replace_on_inject = True
 
         prev = self._last_trigger_args
@@ -2111,7 +2078,7 @@ class Autocompleter:
 
         snapshot = self._new_snapshot_for_focus(
             generation_id=gen_id,
-            focused=focused,
+            focused=focused_for_generation,
             trigger_type="post_accept",
             mode=mode,
             window_title=prev["window_title"],
@@ -2122,7 +2089,7 @@ class Autocompleter:
         )
 
         self._last_trigger_args = dict(
-            focused=focused,
+            focused=focused_for_generation,
             x=x,
             y=y,
             caret_height=caret_height,
@@ -2147,7 +2114,7 @@ class Autocompleter:
         threading.Thread(
             target=self._generate_and_show_streaming,
             args=(
-                focused,
+                focused_for_generation,
                 x,
                 y,
                 caret_height,
@@ -2200,7 +2167,7 @@ class Autocompleter:
 
         logger.info(f"Injected: {text[:60]}")
         self._record_accepted_suggestion(suggestion, app_name, focused)
-        self._start_post_accept_followup()
+        self._start_post_accept_followup(text)
 
     def _on_partial_accept(self) -> bool:
         """Handle shift+tab — inject only the first sentence/line."""
@@ -2319,6 +2286,11 @@ def main():
         metavar="N",
         help="Print latency stats for the last N triggers (default: 50) and exit.",
     )
+    parser.add_argument(
+        "--consolidate-memory",
+        action="store_true",
+        help="Run memory consolidation (FAISS → memory.md) and exit.",
+    )
     args = parser.parse_args()
 
     log_fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -2353,6 +2325,15 @@ def main():
     if args.stats is not None:
         from .latency_tracker import print_stats
         print_stats(config.data_dir / "context.db", last_n=args.stats)
+        return
+
+    # --consolidate-memory: run consolidation and exit
+    if args.consolidate_memory:
+        from .memory import MemoryStore
+        from .consolidation import run_consolidation
+        store = MemoryStore(config)
+        ok = run_consolidation(store, config, force=True)
+        print("Consolidation " + ("succeeded" if ok else "failed (check logs)"))
         return
 
     app = Autocompleter(config, dump_dir=args.dump_dir)

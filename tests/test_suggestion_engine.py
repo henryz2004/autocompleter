@@ -137,7 +137,6 @@ class TestSuggestionEngine:
             ],
             mode=AutocompleteMode.CONTINUATION,
             before_cursor="just invoked it, ",
-            shell_mode=False,
         )
 
         assert result == [
@@ -151,7 +150,6 @@ class TestSuggestionEngine:
             ["it makes sense", "that seems right", "we should change it"],
             mode=AutocompleteMode.CONTINUATION,
             before_cursor="just invoked it again, can you check the logs now?",
-            shell_mode=False,
             avoid_texts=["it makes sense", "that seems right"],
         )
 

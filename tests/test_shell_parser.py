@@ -3,7 +3,8 @@
 from autocompleter.shell_parser import (
     _is_indented_or_numbered,
     _looks_like_command,
-    _strip_tmux_split_panes,
+    detect_tui,
+    strip_tmux_split_panes,
     parse_terminal_buffer,
     parse_tui_buffer,
 )
@@ -336,8 +337,8 @@ class TestIsIndentedOrNumbered:
         assert _is_indented_or_numbered("") is False
 
 
-class TestParseTUIBuffer:
-    """Tests for parse_tui_buffer() — Claude Code TUI detection."""
+class TestDetectTUI:
+    """Tests for detect_tui() — lightweight TUI detection."""
 
     # Minimal Claude Code buffer with a user prompt
     BASIC_CLAUDE_BUFFER = (
@@ -355,36 +356,9 @@ class TestParseTUIBuffer:
     )
 
     def test_detects_claude_code(self):
-        result = parse_tui_buffer(self.BASIC_CLAUDE_BUFFER)
-        assert result.is_tui is True
-        assert result.tui_name == "claude_code"
+        assert detect_tui(self.BASIC_CLAUDE_BUFFER) is True
 
-    def test_extracts_user_input(self):
-        result = parse_tui_buffer(self.BASIC_CLAUDE_BUFFER)
-        assert result.user_input == "can you also fix the tests"
-
-    def test_extracts_conversation_turns(self):
-        result = parse_tui_buffer(self.BASIC_CLAUDE_BUFFER)
-        assert len(result.conversation_turns) > 0
-        # Should have Claude turns
-        claude_turns = [t for t in result.conversation_turns if t["speaker"] == "Claude"]
-        assert len(claude_turns) > 0
-
-    def test_empty_user_input(self):
-        """Empty prompt area (user hasn't typed anything yet)."""
-        buf = (
-            "⏺ Here's the result.\n"
-            "\n"
-            "─────────────────────────────────────────\n"
-            "> \n"
-            "─────────────────────────────────────────\n"
-            "  ⏵⏵ accept edits on (shift+tab to cycle)\n"
-        )
-        result = parse_tui_buffer(buf)
-        assert result.is_tui is True
-        assert result.user_input == ""
-
-    def test_multi_turn_conversation(self):
+    def test_detects_multi_turn_buffer(self):
         """Buffer with multiple user + Claude turns."""
         buf = (
             "─────────────────────────────────────────\n"
@@ -408,76 +382,94 @@ class TestParseTUIBuffer:
             "─────────────────────────────────────────\n"
             "  ⏵⏵ accept edits on (shift+tab to cycle)\n"
         )
-        result = parse_tui_buffer(buf)
-        assert result.is_tui is True
-        assert result.user_input == "great, can you also update the docs"
-        # Should have user turns for previous messages
-        user_turns = [t for t in result.conversation_turns if t["speaker"] == "User"]
-        assert len(user_turns) >= 2
-        assert any("fix the bug" in t["text"] for t in user_turns)
-        assert any("run the tests" in t["text"] for t in user_turns)
+        assert detect_tui(buf) is True
 
     def test_not_claude_code_plain_terminal(self):
-        """Regular terminal output should not be detected as Claude Code."""
+        """Regular terminal output should not be detected as TUI."""
         buf = (
             "$ git status\n"
             "On branch main\n"
             "nothing to commit\n"
             "$ "
         )
-        result = parse_tui_buffer(buf)
-        assert result.is_tui is False
+        assert detect_tui(buf) is False
 
     def test_not_claude_code_no_separators(self):
-        """Buffer with ⏺ but no separator lines — not Claude Code."""
+        """Buffer with ⏺ but no separator lines — not a TUI."""
         buf = (
             "⏺ some marker\n"
             "text without separators\n"
         )
-        result = parse_tui_buffer(buf)
-        assert result.is_tui is False
+        assert detect_tui(buf) is False
 
     def test_empty_buffer(self):
-        result = parse_tui_buffer("")
-        assert result.is_tui is False
-        assert result.user_input == ""
+        assert detect_tui("") is False
 
-    def test_user_input_without_closing_separator(self):
-        """User is mid-typing, no closing separator yet."""
+    def test_output_marker_with_two_separators(self):
+        """Primary detection: output marker + ≥2 separators."""
         buf = (
             "⏺ Done with the task.\n"
             "\n"
             "─────────────────────────────────────────\n"
             "> what about the\n"
             "─────────────────────────────────────────\n"
-            "  ⏵⏵ accept edits on (shift+tab to cycle)\n"
         )
-        result = parse_tui_buffer(buf)
-        assert result.is_tui is True
-        assert result.user_input == "what about the"
+        assert detect_tui(buf) is True
 
-    def test_long_user_input(self):
-        """User has typed a longer multi-word message."""
+    def test_fresh_session_with_banner(self):
+        """Fresh Claude Code session (no ⏺ output yet) detected via welcome banner."""
         buf = (
-            "⏺ All tests passed!\n"
+            "henryz2004@host ~ % claude\n"
+            "╭─── Claude Code v2.1.89 ──────────────────────────────╮\n"
+            "│    Welcome back Henry!    │ Tips for getting started  │\n"
+            "╰──────────────────────────────────────────────────────╯\n"
+            "─────────────────────────────────────────\n"
+            "❯\xa0"
+        )
+        assert detect_tui(buf) is True
+
+    def test_fresh_session_banner_in_after_cursor(self):
+        """Fresh session with separator in after_cursor."""
+        before = (
+            "henryz2004@host ~ % claude\n"
+            "╭─── Claude Code v2.1.89 ──────────────────────────────╮\n"
+            "│    Welcome back Henry!    │ Tips for getting started  │\n"
+            "╰──────────────────────────────────────────────────────╯\n"
+            "─────────────────────────────────────────\n"
+            "❯\xa0hello"
+        )
+        after = (
             "\n"
             "─────────────────────────────────────────\n"
-            "> can you take a look at the logs, i invoked it three times and the suggestions seem off\n"
-            "─────────────────────────────────────────\n"
-            "  ⏵⏵ accept edits on (shift+tab to cycle)\n"
+            "  ? for shortcuts\n"
         )
-        result = parse_tui_buffer(buf)
-        assert result.is_tui is True
-        assert "take a look at the logs" in result.user_input
-        assert "suggestions seem off" in result.user_input
+        assert detect_tui(before, after) is True
 
-    def test_conversation_context_not_empty(self):
-        result = parse_tui_buffer(self.BASIC_CLAUDE_BUFFER)
-        assert len(result.conversation_context) > 0
-        assert "help you with that" in result.conversation_context
+    def test_new_hint_bar_style(self):
+        """Newer Claude Code hint bar style '? for shortcuts' should trigger detection."""
+        before = (
+            "⏺ Here's the result.\n"
+            "\n"
+            "─────────────────────────────────────────\n"
+            "❯\xa0"
+        )
+        after = (
+            "\n"
+            "─────────────────────────────────────────\n"
+            "  ? for shortcuts\n"
+        )
+        assert detect_tui(before, after) is True
 
-    def test_claude_turn_truncated(self):
-        """Very long Claude output should be truncated per turn."""
+    def test_banner_alone_not_enough(self):
+        """Banner without any separators should not trigger detection."""
+        buf = (
+            "some text mentioning Claude Code v2.1.89\n"
+            "no separators here\n"
+        )
+        assert detect_tui(buf) is False
+
+    def test_long_output_still_detects(self):
+        """Very long Claude output should still be detected."""
         long_output = "x" * 1000
         buf = (
             f"⏺ {long_output}\n"
@@ -487,17 +479,36 @@ class TestParseTUIBuffer:
             "─────────────────────────────────────────\n"
             "  ⏵⏵ accept edits on (shift+tab to cycle)\n"
         )
+        assert detect_tui(buf) is True
+
+
+class TestParseTUIBufferCompat:
+    """Tests for deprecated parse_tui_buffer() — ensures backward compat."""
+
+    def test_detects_claude_code(self):
+        buf = (
+            "⏺ I'll help you with that.\n"
+            "\n"
+            "─────────────────────────────────────────\n"
+            "> can you also fix the tests\n"
+            "─────────────────────────────────────────\n"
+            "  ⏵⏵ accept edits on (shift+tab to cycle)\n"
+        )
         result = parse_tui_buffer(buf)
         assert result.is_tui is True
-        claude_turns = [t for t in result.conversation_turns if t["speaker"] == "Claude"]
-        assert len(claude_turns) == 1
-        # Should be truncated to ~500 chars + "…"
-        assert len(claude_turns[0]["text"]) <= 510
-        assert claude_turns[0]["text"].endswith("…")
+        assert result.tui_name == "claude_code"
+
+    def test_not_detected_returns_false(self):
+        result = parse_tui_buffer("$ git status\nOn branch main\n$ ")
+        assert result.is_tui is False
+
+    def test_empty_buffer(self):
+        result = parse_tui_buffer("")
+        assert result.is_tui is False
 
 
 class TestTuiHintBarDetection:
-    """Tests for relaxed Claude Code detection using hint bar + after_cursor."""
+    """Tests for relaxed TUI detection using hint bar + after_cursor."""
 
     def test_hint_bar_in_after_cursor_with_output_marker(self):
         """Hint bar in after_cursor + output marker in before_cursor should detect TUI."""
@@ -511,9 +522,7 @@ class TestTuiHintBarDetection:
             "─────────────────────────────────────────\n"
             "  ⏵⏵ accept edits on (shift+tab to cycle)\n"
         )
-        result = parse_tui_buffer(before, after)
-        assert result.is_tui is True
-        assert result.tui_name == "claude_code"
+        assert detect_tui(before, after) is True
 
     def test_hint_bar_in_after_cursor_with_separator(self):
         """Hint bar in after_cursor + separator in before_cursor should detect TUI."""
@@ -526,8 +535,7 @@ class TestTuiHintBarDetection:
             "─────────────────────────────────────────\n"
             "  ⏵⏵ accept edits on (shift+tab to cycle)\n"
         )
-        result = parse_tui_buffer(before, after)
-        assert result.is_tui is True
+        assert detect_tui(before, after) is True
 
     def test_no_hint_bar_and_insufficient_markers_returns_non_tui(self):
         """Without hint bar and insufficient markers, should not detect TUI."""
@@ -535,15 +543,13 @@ class TestTuiHintBarDetection:
             "Some random text\n"
             "No TUI markers here\n"
         )
-        result = parse_tui_buffer(before, "")
-        assert result.is_tui is False
+        assert detect_tui(before, "") is False
 
     def test_hint_bar_alone_without_markers_returns_non_tui(self):
         """Hint bar without any output markers or separators is not enough."""
         before = "just some text\n"
         after = "  ⏵⏵ accept edits\n"
-        result = parse_tui_buffer(before, after)
-        assert result.is_tui is False
+        assert detect_tui(before, after) is False
 
     def test_existing_strict_detection_still_works(self):
         """Original strict detection (marker + 2 separators) still works without after_cursor."""
@@ -555,16 +561,15 @@ class TestTuiHintBarDetection:
             "─────────────────────────────────────────\n"
             "  ⏵⏵ accept edits on (shift+tab to cycle)\n"
         )
-        result = parse_tui_buffer(before)
-        assert result.is_tui is True
+        assert detect_tui(before) is True
 
 
 class TestStripTmuxSplitPanes:
-    """Tests for _strip_tmux_split_panes()."""
+    """Tests for strip_tmux_split_panes()."""
 
     def test_no_divider_unchanged(self):
         text = "user@host ~ % git status\nOn branch main"
-        assert _strip_tmux_split_panes(text) == text
+        assert strip_tmux_split_panes(text) == text
 
     def test_simple_split_right_pane_has_prompt(self):
         """Right pane has a shell prompt — should extract right pane."""
@@ -573,7 +578,7 @@ class TestStripTmuxSplitPanes:
             "Claude Code output line 2     │file1.py  file2.py",
             "Claude Code output line 3     │(venv) user@host dir % git sta",
         ])
-        result = _strip_tmux_split_panes(buf)
+        result = strip_tmux_split_panes(buf)
         assert "git sta" in result
         assert "Claude Code" not in result
 
@@ -584,14 +589,14 @@ class TestStripTmuxSplitPanes:
             "user@host code % ls            │more log output",
             "user@host code % git sta       │INFO: server started",
         ])
-        result = _strip_tmux_split_panes(buf)
+        result = strip_tmux_split_panes(buf)
         assert "git sta" in result
         assert "log output" not in result
 
     def test_inconsistent_divider_ignored(self):
         """Few lines have │ — not a tmux split, return unchanged."""
         buf = "normal line 1\nnormal line 2\nsingle │ here\nnormal line 3"
-        assert _strip_tmux_split_panes(buf) == buf
+        assert strip_tmux_split_panes(buf) == buf
 
     def test_claude_code_left_terminal_right(self):
         """Real scenario: Claude Code on left, terminal on right."""
@@ -604,7 +609,7 @@ class TestStripTmuxSplitPanes:
         lines.append("> user typing here            │(venv) user@host autocompleter % python -m auto")
         lines.append("──────────────────────────────│")
         buf = "\n".join(lines)
-        result = _strip_tmux_split_panes(buf)
+        result = strip_tmux_split_panes(buf)
         # Right pane should be selected (has shell prompt)
         assert "python -m auto" in result
         assert "Claude output" not in result
@@ -616,11 +621,11 @@ class TestStripTmuxSplitPanes:
             "left content line 2           │right content line 2",
             "left content line 3           │right content line 3",
         ])
-        result = _strip_tmux_split_panes(buf)
+        result = strip_tmux_split_panes(buf)
         assert "right content" in result
 
     def test_empty_string(self):
-        assert _strip_tmux_split_panes("") == ""
+        assert strip_tmux_split_panes("") == ""
 
     def test_parse_terminal_buffer_strips_panes(self):
         """parse_terminal_buffer should handle split panes transparently."""
@@ -635,8 +640,8 @@ class TestStripTmuxSplitPanes:
         assert result.is_likely_shell_context is True
         assert "git sta" in result.current_command
 
-    def test_parse_tui_buffer_strips_panes(self):
-        """parse_tui_buffer should detect Claude Code after stripping panes."""
+    def test_detect_tui_strips_panes(self):
+        """detect_tui should detect Claude Code after stripping tmux panes."""
         # Left pane = Claude Code (active), right pane = log output (no prompt)
         left = [
             "⏺ Hello! How can I help?",
@@ -657,7 +662,4 @@ class TestStripTmuxSplitPanes:
         buf = "\n".join(
             f"{l:<40}│{r}" for l, r in zip(left, right)
         )
-        result = parse_tui_buffer(buf)
-        assert result.is_tui is True
-        assert result.tui_name == "claude_code"
-        assert "what is this" in result.user_input
+        assert detect_tui(buf) is True

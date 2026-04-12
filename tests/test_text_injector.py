@@ -301,6 +301,18 @@ class TestInjectPassthrough:
         assert result is True
         mock_ax.assert_not_called()
 
+    def test_codex_skips_ax_and_prefers_keystrokes_over_clipboard(self, injector):
+        with patch.object(injector, "_inject_via_ax") as mock_ax, \
+             patch.object(injector, "_inject_via_cdp", return_value=False) as mock_cdp, \
+             patch.object(injector, "_inject_via_keystrokes", return_value=True) as mock_keys, \
+             patch.object(injector, "_inject_via_clipboard", return_value=True) as mock_clip:
+            result = injector.inject("text", insertion_point=5, app_name="Codex", app_pid=1234)
+        assert result is True
+        mock_ax.assert_not_called()
+        mock_cdp.assert_called_once_with("text", app_name="Codex", app_pid=1234)
+        mock_keys.assert_called_once_with("text")
+        mock_clip.assert_not_called()
+
 
 # ===================================================================
 # Clipboard and keystroke methods are NOT affected by insertion_point

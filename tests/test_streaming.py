@@ -232,7 +232,6 @@ class TestStreamingPostprocess:
             "any errors show up?",
             mode=AutocompleteMode.CONTINUATION,
             before_cursor=before,
-            shell_mode=False,
             index=1,
         ) == " any errors show up?"
 

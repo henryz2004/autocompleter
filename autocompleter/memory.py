@@ -11,9 +11,12 @@ that memory operations never block the hotkey / LLM pipeline.
 from __future__ import annotations
 
 import logging
+import math
 import os
 import threading
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -92,12 +95,15 @@ class MemoryStore:
             max_workers=2, thread_name_prefix="mem0",
         )
 
-        # ---- Pre-warm cache ----
+        # ---- Pre-warm LRU cache ----
         self._cache_lock = threading.Lock()
-        self._cached_query: str = ""
-        self._cached_results: list[str] = []
-        self._cached_formatted: str = ""
-        self._warm_in_flight: bool = False  # prevent duplicate warm jobs
+        # OrderedDict[query -> (results_list, formatted_str)], most recent last.
+        self._cache: OrderedDict[str, tuple[list[str], str]] = OrderedDict()
+        self._cache_max_size: int = 8
+        self._warm_in_flight_keys: set[str] = set()  # per-query dedup
+
+        # ---- Decay ----
+        self._decay_rate: float = getattr(config, "memory_decay_rate", 0.01)
 
         if not config.memory_enabled:
             logger.info("Memory system disabled (set AUTOCOMPLETER_MEMORY=1 to enable)")
@@ -201,6 +207,48 @@ class MemoryStore:
         """True when mem0 is fully initialized and ready."""
         return self._initialized and self._mem is not None
 
+    @staticmethod
+    def _apply_decay(
+        entries: list[dict],
+        decay_rate: float,
+        now: datetime | None = None,
+    ) -> list[dict]:
+        """Apply exponential time-decay to search results and re-sort.
+
+        Each entry dict must have ``score`` (float) and ``updated_at``
+        (ISO 8601 string).  Returns entries with ``decayed_score`` added,
+        sorted by decayed_score descending.
+
+        ``decay_rate`` is the λ parameter: ``decayed = score × e^(-λ × hours)``.
+        A rate of 0 disables decay (scores unchanged).
+        """
+        if now is None:
+            now = datetime.now(timezone.utc)
+
+        for entry in entries:
+            score = entry.get("score", 0.0) or 0.0
+            if decay_rate <= 0:
+                entry["decayed_score"] = score
+                continue
+
+            updated_at_str = entry.get("updated_at") or entry.get("created_at", "")
+            if updated_at_str:
+                try:
+                    updated_at = datetime.fromisoformat(updated_at_str)
+                    if updated_at.tzinfo is None:
+                        updated_at = updated_at.replace(tzinfo=timezone.utc)
+                    hours_elapsed = max(0, (now - updated_at).total_seconds() / 3600)
+                except (ValueError, TypeError):
+                    hours_elapsed = 0
+            else:
+                hours_elapsed = 0
+
+            decay_factor = math.exp(-decay_rate * hours_elapsed)
+            entry["decayed_score"] = score * decay_factor
+
+        entries.sort(key=lambda e: e.get("decayed_score", 0), reverse=True)
+        return entries
+
     def search(
         self,
         query: str,
@@ -210,7 +258,8 @@ class MemoryStore:
     ) -> list[str]:
         """Search memories relevant to *query*.
 
-        Returns a list of memory strings, most relevant first.
+        Returns a list of memory strings, most relevant first (with
+        time-decay applied when ``memory_decay_rate > 0``).
         Thread-safe and non-blocking for short queries.
         Returns ``[]`` when memory is disabled or on error.
         """
@@ -228,13 +277,35 @@ class MemoryStore:
                 user_id=user_id,
                 limit=limit,
             )
-            # mem0 returns {"results": [{"memory": "...", "score": 0.9}, ...]}
-            memories: list[str] = []
+            # mem0 returns {"results": [{"memory": "...", "score": 0.9,
+            #   "created_at": "...", "updated_at": "..."}, ...]}
             entries = results.get("results", []) if isinstance(results, dict) else results
+
+            if self._decay_rate > 0:
+                self._apply_decay(entries, self._decay_rate)
+
+            memories: list[str] = []
             for entry in entries:
                 text = entry.get("memory", "") if isinstance(entry, dict) else str(entry)
                 if text.strip():
                     memories.append(text.strip())
+                    if self._decay_rate > 0 and isinstance(entry, dict):
+                        raw = entry.get("score", 0)
+                        decayed = entry.get("decayed_score", raw)
+                        age_h = 0
+                        ts = entry.get("updated_at") or entry.get("created_at", "")
+                        if ts:
+                            try:
+                                dt = datetime.fromisoformat(ts)
+                                if dt.tzinfo is None:
+                                    dt = dt.replace(tzinfo=timezone.utc)
+                                age_h = (datetime.now(timezone.utc) - dt).total_seconds() / 3600
+                            except (ValueError, TypeError):
+                                pass
+                        logger.debug(
+                            f"[MEM] decay: {text[:50]!r} "
+                            f"score={raw:.2f} → {decayed:.2f} (age={age_h:.0f}h)"
+                        )
             if memories:
                 logger.debug(
                     f"[MEM] search({query[:60]!r}) -> {len(memories)} memories"
@@ -318,6 +389,101 @@ class MemoryStore:
             logger.debug("Memory get_all failed", exc_info=True)
             return []
 
+    def get_all_with_ids(
+        self,
+        *,
+        user_id: str = _DEFAULT_USER_ID,
+        limit: int = 1000,
+    ) -> list[dict]:
+        """Return all stored memories with IDs for consolidation.
+
+        Returns ``[{"id": "...", "memory": "...", "created_at": "...",
+        "updated_at": "..."}, ...]``.
+        """
+        if not self.enabled:
+            return []
+
+        try:
+            results = self._mem.get_all(user_id=user_id, limit=limit)  # type: ignore[union-attr]
+            entries = results.get("results", []) if isinstance(results, dict) else results
+            out: list[dict] = []
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                mem_text = entry.get("memory", "")
+                if mem_text.strip():
+                    out.append({
+                        "id": entry.get("id", ""),
+                        "memory": mem_text.strip(),
+                        "created_at": entry.get("created_at", ""),
+                        "updated_at": entry.get("updated_at", ""),
+                    })
+            return out
+        except Exception:
+            logger.debug("Memory get_all_with_ids failed", exc_info=True)
+            return []
+
+    def delete(self, memory_id: str) -> bool:
+        """Delete a single memory by ID.
+
+        Returns True on success, False on error.
+        """
+        if not self.enabled:
+            return False
+
+        try:
+            self._mem.delete(memory_id)  # type: ignore[union-attr]
+            self._vector_count = max(0, self._vector_count - 1)
+            logger.debug(f"[MEM] deleted memory {memory_id}")
+            return True
+        except Exception:
+            logger.debug(f"Memory delete failed for {memory_id}", exc_info=True)
+            return False
+
+    def get_full_memory_context(self, max_chars: int = 1200) -> str:
+        """Combine instructions file, memory file, and FAISS cache.
+
+        Priority: instructions.md (always full) > memory.md (always full)
+        > FAISS cached results (fills remaining budget).
+
+        Returns empty string if all sources are empty.
+        """
+        parts: list[str] = []
+
+        # 1. User instructions (never truncated).
+        instructions_path = self._config.data_dir / "instructions.md"
+        try:
+            instructions = instructions_path.read_text(encoding="utf-8").strip()
+            if instructions:
+                parts.append(f"User instructions:\n{instructions}")
+        except (FileNotFoundError, OSError):
+            pass
+
+        # 2. Long-term memory file (never truncated).
+        memory_path = self._config.data_dir / "memory.md"
+        try:
+            memory_md = memory_path.read_text(encoding="utf-8").strip()
+            if memory_md:
+                parts.append(f"User profile:\n{memory_md}")
+        except (FileNotFoundError, OSError):
+            pass
+
+        # 3. FAISS cached results (fill remaining budget).
+        faiss_formatted = self.get_cached_context()
+        if faiss_formatted:
+            current_len = sum(len(p) for p in parts)
+            remaining = max_chars - current_len
+            if remaining > 50:  # worth including if >50 chars available
+                # Replace "User memories:" header with "Recent context:"
+                faiss_block = faiss_formatted.replace(
+                    "User memories:", "Recent context:", 1
+                )
+                if len(faiss_block) > remaining:
+                    faiss_block = faiss_block[:remaining].rsplit("\n", 1)[0]
+                parts.append(faiss_block)
+
+        return "\n\n".join(parts) if parts else ""
+
     def format_for_context(self, memories: list[str], max_chars: int = 600) -> str:
         """Format a list of memory strings into a context block for the LLM.
 
@@ -369,26 +535,35 @@ class MemoryStore:
     ) -> None:
         """Pre-warm the memory cache in the background.
 
-        Called by the observer loop every poll cycle.  If *query* matches
-        the already-cached query, this is a no-op.  Otherwise it submits
-        a background search and updates the cache when done.
+        Called by the observer loop every poll cycle.  Uses an LRU cache
+        (size ``_cache_max_size``) so switching back to a previously-seen
+        app/tab reuses cached results instead of hitting the embedding API.
+
+        If *query* is already cached, it's promoted to most-recent (no API
+        call).  If a warm for this query is already in flight, this is a
+        no-op.
         """
         if not self.enabled:
             return
 
         with self._cache_lock:
-            if query == self._cached_query or self._warm_in_flight:
+            if query in self._cache:
+                # LRU hit — promote to most-recent.
+                self._cache.move_to_end(query)
                 return
-            self._warm_in_flight = True
+            if query in self._warm_in_flight_keys:
+                return
+            self._warm_in_flight_keys.add(query)
 
         def _do_warm() -> None:
             try:
                 memories = self.search(query, limit=limit, user_id=user_id)
                 formatted = self.format_for_context(memories)
                 with self._cache_lock:
-                    self._cached_query = query
-                    self._cached_results = memories
-                    self._cached_formatted = formatted
+                    self._cache[query] = (memories, formatted)
+                    # Evict oldest entries beyond max size.
+                    while len(self._cache) > self._cache_max_size:
+                        self._cache.popitem(last=False)
                 if formatted:
                     logger.debug(
                         f"[MEM] pre-warm: {len(memories)} memories "
@@ -398,22 +573,39 @@ class MemoryStore:
                 logger.debug("Memory pre-warm failed", exc_info=True)
             finally:
                 with self._cache_lock:
-                    self._warm_in_flight = False
+                    self._warm_in_flight_keys.discard(query)
 
         self._executor.submit(_do_warm)
 
-    def get_cached_context(self) -> str:
+    def get_cached_context(self, query: str = "") -> str:
         """Return the pre-warmed formatted memory string.
 
-        This is the hot-path method called at trigger time.  Returns
-        immediately with whatever was last cached (possibly empty string
-        if pre-warm hasn't run yet or there are no memories).
+        This is the hot-path method called at trigger time.  If *query*
+        is provided and found in the LRU cache, returns that entry.
+        Otherwise returns the most recently cached entry (last item in
+        the OrderedDict).
+
         No API calls, no blocking.
         """
         with self._cache_lock:
-            return self._cached_formatted
+            if not self._cache:
+                return ""
+            if query and query in self._cache:
+                self._cache.move_to_end(query)
+                _, formatted = self._cache[query]
+                return formatted
+            # Return the most recently inserted/accessed entry.
+            _, formatted = next(reversed(self._cache.values()))
+            return formatted
 
-    def get_cached_results(self) -> list[str]:
+    def get_cached_results(self, query: str = "") -> list[str]:
         """Return the raw pre-warmed memory list."""
         with self._cache_lock:
-            return list(self._cached_results)
+            if not self._cache:
+                return []
+            if query and query in self._cache:
+                self._cache.move_to_end(query)
+                results, _ = self._cache[query]
+                return list(results)
+            results, _ = next(reversed(self._cache.values()))
+            return list(results)

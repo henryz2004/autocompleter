@@ -120,7 +120,6 @@ class Scenario:
     description: str
     max_tokens: int = 200         # per-mode: production uses config.max_tokens (200)
     source_app: str = ""          # passed to build_messages for shell prompt selection
-    shell_mode: bool | None = None  # explicit override for shell prompts
 
 
 NUM_SUGGESTIONS = 3
@@ -219,7 +218,6 @@ SCENARIOS: list[Scenario] = [
         before_cursor="I also want to make sure the refresh token",
         description="TUI draft continuation in Claude Code",
         source_app="Terminal",
-        shell_mode=False,  # TUI inside terminal — use generic prompts
     ),
     Scenario(
         id="continuation_cross_app",
@@ -392,7 +390,6 @@ SCENARIOS: list[Scenario] = [
         before_cursor="git commit -m \"",
         description="Shell command completion — git commit message",
         source_app="Terminal",
-        shell_mode=True,
     ),
     Scenario(
         id="shell_reply",
@@ -417,7 +414,6 @@ SCENARIOS: list[Scenario] = [
         before_cursor="",
         description="Shell command suggestion — after test failures",
         source_app="iTerm2",
-        shell_mode=True,
     ),
 ]
 
@@ -541,18 +537,11 @@ def score_quality(
         score.no_prefix_repeat = 0.0
 
     # --- Length appropriate ---
-    is_shell = getattr(scenario, "shell_mode", None) is True
     if n > 0:
         good_count = 0
         for s in suggestions:
             length = len(s.strip())
-            if is_shell:
-                # Shell: commands are typically 3-200 chars
-                if 3 <= length <= 200:
-                    good_count += 1
-                elif length > 0:
-                    good_count += 0.5
-            elif scenario.mode == "continuation":
+            if scenario.mode == "continuation":
                 # Continuation: expect 3-150 chars (few words to half a sentence)
                 if 3 <= length <= 150:
                     good_count += 1
@@ -612,7 +601,6 @@ def _scenario_messages(scenario: Scenario) -> tuple[str, str]:
         max_suggestion_lines=10,
         streaming=True,
         source_app=scenario.source_app,
-        shell_mode=scenario.shell_mode,
     )
 
 # ---------------------------------------------------------------------------

@@ -70,8 +70,10 @@ class TextInjector:
         if not text:
             return False
 
+        prefer_insert_only = self._prefer_insert_only(app_name)
+
         # Try AX API value setting first (skip when replacing placeholder)
-        if not replace:
+        if not replace and not prefer_insert_only:
             if self._inject_via_ax(text, insertion_point=insertion_point):
                 logger.debug("Injected text via AX API")
                 return True
@@ -79,6 +81,12 @@ class TextInjector:
         # Try CDP injection for Chromium-based apps
         if self._inject_via_cdp(text, app_name=app_name, app_pid=app_pid):
             logger.debug("Injected text via CDP")
+            return True
+
+        # Rich web editors like Codex preserve structure better when we
+        # type at the live caret instead of rewriting/pasting the whole field.
+        if prefer_insert_only and self._inject_via_keystrokes(text):
+            logger.debug("Injected text via simulated keystrokes")
             return True
 
         # Fall back to clipboard paste.
@@ -98,6 +106,11 @@ class TextInjector:
 
         logger.warning("All injection methods failed")
         return False
+
+    @staticmethod
+    def _prefer_insert_only(app_name: str) -> bool:
+        """Return True for editors where AX value rewrites are destructive."""
+        return app_name == "Codex"
 
     def _inject_via_cdp(
         self, text: str, app_name: str = "", app_pid: int = 0,

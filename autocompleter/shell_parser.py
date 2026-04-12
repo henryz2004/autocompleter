@@ -164,7 +164,7 @@ class ParsedTerminalBuffer:
     is_likely_shell_context: bool = False  # True when user appears to be at a shell prompt
 
 
-def _strip_tmux_split_panes(before_cursor: str) -> str:
+def strip_tmux_split_panes(before_cursor: str) -> str:
     """Strip tmux vertical-split pane dividers from the terminal buffer.
 
     When tmux has a vertical split, macOS AX reports the full terminal
@@ -274,7 +274,7 @@ def parse_terminal_buffer(before_cursor: str) -> ParsedTerminalBuffer:
         ParsedTerminalBuffer with extracted command, prompt, and history.
     """
     # Strip tmux split-pane dividers to isolate the active pane
-    before_cursor = _strip_tmux_split_panes(before_cursor)
+    before_cursor = strip_tmux_split_panes(before_cursor)
 
     if not before_cursor:
         return ParsedTerminalBuffer(
@@ -388,8 +388,14 @@ def parse_terminal_buffer(before_cursor: str) -> ParsedTerminalBuffer:
 
 
 # ---------------------------------------------------------------------------
-# TUI buffer parser (Claude Code, etc.)
+# TUI detection (Claude Code, etc.)
 # ---------------------------------------------------------------------------
+
+# Patterns used to detect TUI apps running inside a terminal.
+# Detection is intentionally loose — we just need to distinguish "inside a
+# TUI" from "at a shell prompt" so the right code path fires.  The raw
+# buffer text (with its visual markers) is passed through to the LLM as-is
+# rather than being parsed into structured conversation turns.
 
 # Separator lines used by Claude Code between turns
 _TUI_SEPARATOR_RE = re.compile(r"^[─━═]{20,}$")
@@ -397,57 +403,53 @@ _TUI_SEPARATOR_RE = re.compile(r"^[─━═]{20,}$")
 # Claude Code output markers
 _CLAUDE_OUTPUT_MARKER = "⏺"
 
-# Claude Code hint bar (at the bottom of the prompt area)
-_CLAUDE_HINT_RE = re.compile(r"^\s*⏵⏵\s")
+# Claude Code hint bar — multiple versions across Claude Code releases
+_CLAUDE_HINT_RE = re.compile(
+    r"^\s*⏵⏵\s"             # v2.1.63-style: "⏵⏵ accept edits on ..."
+    r"|^\s*\?\s+for\s"       # v2.1.89-style: "? for shortcuts"
+)
 
-# Claude Code user prompt: "> " or ">  " after a separator line
-_CLAUDE_PROMPT_RE = re.compile(r"^>\s")
+# Claude Code welcome banner (stable across versions)
+_CLAUDE_BANNER_RE = re.compile(r"Claude Code v\d")
 
-# Max chars of conversation context to include
-_TUI_MAX_CONTEXT_CHARS = 3000
-
-
-@dataclass
-class ParsedTUIBuffer:
-    """Structured components extracted from a TUI buffer (e.g. Claude Code)."""
-    is_tui: bool = False           # True when a known TUI pattern was detected
-    tui_name: str = ""             # e.g. "claude_code"
-    user_input: str = ""           # The user's current message being typed
-    conversation_context: str = "" # Recent conversation for LLM context
-    conversation_turns: list[dict[str, str]] = field(default_factory=list)
+# Claude Code box-drawing welcome frame
+_CLAUDE_BOX_RE = re.compile(r"^[╭╰][─━═].*Claude Code")
 
 
-def parse_tui_buffer(before_cursor: str, after_cursor: str = "") -> ParsedTUIBuffer:
-    """Detect and parse TUI app buffers inside a terminal.
+def detect_tui(before_cursor: str, after_cursor: str = "") -> bool:
+    """Detect whether a TUI app (e.g. Claude Code) is running in the terminal.
 
-    Currently detects Claude Code by looking for its characteristic
-    separator lines (─────), output markers (⏺), prompt markers (> ),
-    and hint bar (⏵⏵).
+    This is a lightweight check — it only answers "is this a TUI?" so the
+    caller can avoid misinterpreting the buffer as a shell session.  No
+    attempt is made to parse conversation structure; the raw buffer text
+    is passed to the LLM which can interpret the visual markers itself.
+
+    Detection uses multiple signals, any sufficient combination triggers:
+    - ``⏺`` output markers (present once Claude has responded)
+    - ``─────`` separator lines (20+ box-drawing dashes)
+    - Hint bar (``⏵⏵ ...`` or ``? for shortcuts``)
+    - Welcome banner (``Claude Code v...``)
 
     Args:
-        before_cursor: The terminal buffer text up to the cursor position.
-        after_cursor: The terminal buffer text after the cursor position.
-            Used to detect the hint bar which may appear below the cursor.
+        before_cursor: Terminal buffer text up to the cursor position.
+        after_cursor: Terminal buffer text after the cursor position.
 
     Returns:
-        ParsedTUIBuffer with extracted user input and conversation context.
+        True if a TUI app was detected.
     """
+    if not before_cursor:
+        return False
+
     # Strip tmux split-pane dividers so TUI markers aren't interleaved
     # with content from an adjacent pane.
-    before_cursor = _strip_tmux_split_panes(before_cursor)
-
-    if not before_cursor:
-        return ParsedTUIBuffer()
+    before_cursor = strip_tmux_split_panes(before_cursor)
 
     lines = before_cursor.split("\n")
 
-    # --- Detect Claude Code ---
-    # Look for ⏺ markers (Claude's output), separator lines, and hint bar.
-    # Detection is relaxed: hint bar (in before or after cursor) combined
-    # with at least 1 output marker OR 1 separator is sufficient.
     has_output_marker = False
     separator_count = 0
     has_hint_bar = False
+    has_banner = False
     for line in lines[-200:]:  # scan recent portion
         stripped = line.strip()
         if stripped.startswith(_CLAUDE_OUTPUT_MARKER):
@@ -456,167 +458,56 @@ def parse_tui_buffer(before_cursor: str, after_cursor: str = "") -> ParsedTUIBuf
             separator_count += 1
         if _CLAUDE_HINT_RE.match(stripped):
             has_hint_bar = True
+        if _CLAUDE_BANNER_RE.search(line) or _CLAUDE_BOX_RE.match(stripped):
+            has_banner = True
         if has_output_marker and separator_count >= 2:
             break
 
-    # Also check after_cursor for hint bar (it often appears below cursor)
-    if not has_hint_bar and after_cursor:
+    # Also check after_cursor for hint bar and separators
+    if after_cursor:
         for line in after_cursor.split("\n")[:20]:
             stripped = line.strip()
             if _CLAUDE_HINT_RE.match(stripped):
                 has_hint_bar = True
-                break
             if _TUI_SEPARATOR_RE.match(stripped):
                 separator_count += 1
 
-    # Primary: output marker + ≥2 separators (original strict check)
-    # Relaxed: hint bar + at least 1 output marker or 1 separator
-    is_claude_code = (has_output_marker and separator_count >= 2) or (
-        has_hint_bar and (has_output_marker or separator_count >= 1)
-    )
-
-    if not is_claude_code:
-        return ParsedTUIBuffer()
-
-    # --- Extract user's current input ---
-    # Walk backwards from the end to find the user prompt area.
-    # Structure: ... separator > user message separator hint_bar
-    # The cursor is after the hint bar (or within the prompt area).
-
-    # Skip trailing hint bar lines and empty lines
-    end = len(lines) - 1
-    while end >= 0:
-        stripped = lines[end].strip()
-        if not stripped or _CLAUDE_HINT_RE.match(stripped):
-            end -= 1
-            continue
-        break
-
-    # Now `end` should point at the closing separator or the last line of
-    # user input.  If it's a separator, the user input is above it.
-    # If the user is still typing (no closing separator yet), we walk up
-    # until we hit the opening separator.
-
-    # Find the prompt region boundaries
-    prompt_bottom = end
-    if _TUI_SEPARATOR_RE.match(lines[end].strip()):
-        prompt_bottom = end - 1  # user input is above the closing separator
-
-    # Walk up from prompt_bottom to find the opening separator or ">" prompt
-    prompt_top = prompt_bottom
-    user_lines: list[str] = []
-    for k in range(prompt_bottom, max(prompt_bottom - 50, -1), -1):
-        stripped = lines[k].strip()
-        if _TUI_SEPARATOR_RE.match(stripped):
-            prompt_top = k
-            break
-        user_lines.append(lines[k])
-    else:
-        # Didn't find an opening separator — not a valid Claude Code prompt
-        return ParsedTUIBuffer()
-
-    user_lines.reverse()
-
-    # The first user line usually starts with "> " — strip that prefix
-    user_text_parts: list[str] = []
-    for i, ul in enumerate(user_lines):
-        if i == 0 and _CLAUDE_PROMPT_RE.match(ul):
-            # Strip the "> " prefix
-            user_text_parts.append(ul[2:])
-        else:
-            user_text_parts.append(ul)
-    user_input = "\n".join(user_text_parts).strip()
-
-    # --- Extract conversation context ---
-    # Everything above the opening separator is conversation context.
-    # Parse it into turns: ⏺ lines are Claude's output, text between
-    # separators after ">" is user input.
-    context_lines = lines[:prompt_top]
-
-    # Trim to reasonable size (take the tail)
-    context_text = "\n".join(context_lines)
-    if len(context_text) > _TUI_MAX_CONTEXT_CHARS:
-        context_text = context_text[-_TUI_MAX_CONTEXT_CHARS:]
-        # Re-align to a line boundary
-        nl = context_text.find("\n")
-        if nl >= 0:
-            context_text = context_text[nl + 1:]
-
-    # --- Build conversation turns ---
-    turns: list[dict[str, str]] = []
-    _extract_claude_code_turns(context_lines, turns)
-
-    return ParsedTUIBuffer(
-        is_tui=True,
-        tui_name="claude_code",
-        user_input=user_input,
-        conversation_context=context_text,
-        conversation_turns=turns,
+    # Detection rules (any match triggers):
+    # 1. Output marker + ≥2 separators (active conversation)
+    # 2. Hint bar + at least 1 output marker or separator
+    # 3. Welcome banner + at least 1 separator (fresh session, no response yet)
+    return (
+        (has_output_marker and separator_count >= 2)
+        or (has_hint_bar and (has_output_marker or separator_count >= 1))
+        or (has_banner and separator_count >= 1)
     )
 
 
-def _extract_claude_code_turns(
-    lines: list[str],
-    turns: list[dict[str, str]],
-    max_turns: int = 10,
-) -> None:
-    """Parse Claude Code conversation lines into speaker/text turns.
+# Keep ParsedTUIBuffer and parse_tui_buffer as deprecated aliases so that
+# existing tests and call sites still compile.  They will be removed once
+# all callers are migrated to detect_tui().
 
-    Walks the lines looking for:
-    - Separator + "> " lines → user turns
-    - "⏺" lines → Claude turns (accumulate until next separator)
+@dataclass
+class ParsedTUIBuffer:
+    """Structured components extracted from a TUI buffer (e.g. Claude Code).
+
+    .. deprecated::
+        Use :func:`detect_tui` instead.  The raw terminal buffer is now
+        passed to the LLM without structured turn extraction.
     """
-    i = 0
-    n = len(lines)
+    is_tui: bool = False
+    tui_name: str = ""
+    user_input: str = ""
+    conversation_context: str = ""
+    conversation_turns: list[dict[str, str]] = field(default_factory=list)
 
-    while i < n and len(turns) < max_turns * 2:
-        stripped = lines[i].strip()
 
-        # Detect user turn: separator followed by "> " line
-        if _TUI_SEPARATOR_RE.match(stripped):
-            # Look for "> " on the next non-empty line
-            j = i + 1
-            while j < n and not lines[j].strip():
-                j += 1
-            if j < n and _CLAUDE_PROMPT_RE.match(lines[j]):
-                # Collect user message until next separator
-                user_parts: list[str] = []
-                text = lines[j][2:] if lines[j].startswith("> ") else lines[j].lstrip("> ")
-                user_parts.append(text)
-                k = j + 1
-                while k < n:
-                    if _TUI_SEPARATOR_RE.match(lines[k].strip()):
-                        break
-                    user_parts.append(lines[k])
-                    k += 1
-                user_msg = "\n".join(user_parts).strip()
-                if user_msg:
-                    turns.append({"speaker": "User", "text": user_msg})
-                i = k
-                continue
+def parse_tui_buffer(before_cursor: str, after_cursor: str = "") -> ParsedTUIBuffer:
+    """Detect a TUI app and return a minimal result.
 
-        # Detect Claude turn: line starting with ⏺
-        if stripped.startswith(_CLAUDE_OUTPUT_MARKER):
-            claude_parts: list[str] = [stripped]
-            k = i + 1
-            while k < n:
-                s = lines[k].strip()
-                if _TUI_SEPARATOR_RE.match(s):
-                    break
-                # New ⏺ block starts a continuation of Claude's turn
-                claude_parts.append(lines[k])
-                k += 1
-            claude_msg = "\n".join(claude_parts).strip()
-            # Limit length per turn
-            if len(claude_msg) > 500:
-                claude_msg = claude_msg[:500] + "…"
-            if claude_msg:
-                turns.append({"speaker": "Claude", "text": claude_msg})
-            i = k
-            continue
-
-        i += 1
-
-    # Keep only the most recent turns
-    if len(turns) > max_turns:
-        del turns[:-max_turns]
+    .. deprecated::
+        Use :func:`detect_tui` instead.
+    """
+    if detect_tui(before_cursor, after_cursor):
+        return ParsedTUIBuffer(is_tui=True, tui_name="claude_code")
+    return ParsedTUIBuffer()
