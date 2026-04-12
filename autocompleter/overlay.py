@@ -25,6 +25,11 @@ except ImportError:
     HAS_APPKIT = False
 
 
+def _has_liquid_glass() -> bool:
+    """Return True if NSGlassEffectView is available (macOS 26+)."""
+    return HAS_APPKIT and hasattr(AppKit, "NSGlassEffectView")
+
+
 @dataclass
 class OverlayConfig:
     width: int = 500
@@ -202,7 +207,8 @@ if HAS_APPKIT:
         def drawRect_(self, rect):
             cfg = self._config
 
-            # No solid background fill — NSVisualEffectView provides the blur
+            # No solid background fill — the backdrop view (NSGlassEffectView
+            # or NSVisualEffectView) provides the translucent blur.
 
             # Draw each suggestion
             font = AppKit.NSFont.systemFontOfSize_(cfg.font_size)
@@ -789,7 +795,7 @@ class SuggestionOverlay:
         return (x, ns_y)
 
     def _create_window(self, frame) -> None:
-        """Create the borderless floating window with NSVisualEffectView backdrop."""
+        """Create the borderless floating window with translucent backdrop."""
         if not HAS_APPKIT:
             return
 
@@ -814,29 +820,39 @@ class SuggestionOverlay:
 
         content_rect = NSMakeRect(0, 0, frame.size.width, frame.size.height)
 
-        # NSVisualEffectView provides the frosted-glass blur backdrop
-        effect_view = AppKit.NSVisualEffectView.alloc().initWithFrame_(content_rect)
-        # NSVisualEffectMaterialHUDWindow = 13 (dark translucent, like Spotlight)
-        material = getattr(AppKit, "NSVisualEffectMaterialHUDWindow", 13)
-        effect_view.setMaterial_(material)
-        # NSVisualEffectBlendingModeBehindWindow = 0
-        effect_view.setBlendingMode_(0)
-        # NSVisualEffectStateActive = 1 (always active, even when app not focused)
-        effect_view.setState_(1)
-        effect_view.setWantsLayer_(True)
-        effect_view.layer().setCornerRadius_(self._config.border_radius)
-        effect_view.layer().setMasksToBounds_(True)
-
-        # Force dark appearance so backdrop stays dark regardless of system theme
-        dark_appearance = AppKit.NSAppearance.appearanceNamed_("NSAppearanceNameVibrantDark")
-        effect_view.setAppearance_(dark_appearance)
-
-        window.setContentView_(effect_view)
-
         view = SuggestionOverlayView.alloc().initWithFrame_config_(
             content_rect, self._config
         )
-        effect_view.addSubview_(view)
+
+        if _has_liquid_glass():
+            # macOS 26+: use NSGlassEffectView for Liquid Glass backdrop
+            glass_view = AppKit.NSGlassEffectView.alloc().initWithFrame_(content_rect)
+            glass_view.setCornerRadius_(self._config.border_radius)
+            window.setContentView_(glass_view)
+            glass_view.setContentView_(view)
+            effect_view = glass_view
+        else:
+            # Older macOS: NSVisualEffectView with HUD material
+            effect_view = AppKit.NSVisualEffectView.alloc().initWithFrame_(content_rect)
+            # NSVisualEffectMaterialHUDWindow = 13 (dark translucent, like Spotlight)
+            material = getattr(AppKit, "NSVisualEffectMaterialHUDWindow", 13)
+            effect_view.setMaterial_(material)
+            # NSVisualEffectBlendingModeBehindWindow = 0
+            effect_view.setBlendingMode_(0)
+            # NSVisualEffectStateActive = 1 (always active, even when app not focused)
+            effect_view.setState_(1)
+            effect_view.setWantsLayer_(True)
+            effect_view.layer().setCornerRadius_(self._config.border_radius)
+            effect_view.layer().setMasksToBounds_(True)
+
+            # Force dark appearance so backdrop stays dark regardless of system theme
+            dark_appearance = AppKit.NSAppearance.appearanceNamed_(
+                "NSAppearanceNameVibrantDark"
+            )
+            effect_view.setAppearance_(dark_appearance)
+
+            window.setContentView_(effect_view)
+            effect_view.addSubview_(view)
 
         self._window = window
         self._effect_view = effect_view
