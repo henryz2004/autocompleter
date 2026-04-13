@@ -143,8 +143,12 @@ def _postprocess_continuation_text(
     avoid_texts: set[str] | None = None,
 ) -> str:
     stripped = _strip_repeated_prefix(text, before_cursor)
-    del index, avoid_texts
-    return _normalize_continuation_spacing(before_cursor, stripped or text)
+    result = _normalize_continuation_spacing(before_cursor, stripped or text)
+    # Drop suggestions that duplicate a previous one (e.g. on regenerate)
+    if avoid_texts and _normalize_similarity_text(result) in avoid_texts:
+        return ""
+    del index
+    return result
 
 
 def postprocess_suggestion_texts(
@@ -588,7 +592,8 @@ class SuggestionEngine:
                         index=suggestion.index,
                         avoid_texts=negative_patterns if temperature_boost > 0 else None,
                     )
-                yield suggestion
+                if suggestion.text.strip():
+                    yield suggestion
         except Exception as exc:
             if self._is_rate_limit_error(exc):
                 self._handle_rate_limit()

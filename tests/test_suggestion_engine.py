@@ -145,7 +145,7 @@ class TestSuggestionEngine:
             "but",
         ]
 
-    def test_postprocess_no_longer_rewrites_avoided_texts(self):
+    def test_postprocess_filters_avoided_texts(self):
         result = postprocess_suggestion_texts(
             ["it makes sense", "that seems right", "we should change it"],
             mode=AutocompleteMode.CONTINUATION,
@@ -154,8 +154,8 @@ class TestSuggestionEngine:
         )
 
         assert result == [
-            " it makes sense",
-            " that seems right",
+            "",
+            "",
             " we should change it",
         ]
 
