@@ -48,60 +48,28 @@ class TextInjector:
     ) -> bool:
         """Inject text into the currently focused input.
 
-        Tries multiple strategies in order of preference.
-        When *replace* is True (field has a baked-in placeholder), skip
-        AXValue setting — it bypasses the web app's JS event handlers so
-        the PWA/Electron app never clears its placeholder.  Clipboard
-        paste and keystrokes go through normal input handling, which
-        triggers the placeholder-clearing behaviour.
+        Uses simulated keystrokes as the primary strategy.  AX value
+        setting and CDP are avoided because they bypass the app's normal
+        input handling — rich text editors (Claude Desktop, ChatGPT,
+        ProseMirror/React apps) break when their internal state is mutated
+        externally.  Keystrokes go through the standard input pipeline so
+        the app processes them natively.
 
-        Args:
-            text: The text to inject.
-            replace: If True, skip AXValue setting and use clipboard/keystrokes.
-            insertion_point: Character offset at which to splice the text.
-                When None, text is appended to the end (backward-compatible).
-                Only used by the AX API strategy; clipboard paste and
-                keystrokes naturally inject at the OS cursor position.
-            app_name: App name for CDP injection (Chromium-based apps).
-            app_pid: App PID for CDP injection port discovery.
+        Falls back to clipboard paste if keystrokes fail.
 
         Returns True if injection succeeded.
         """
         if not text:
             return False
 
-        prefer_insert_only = self._prefer_insert_only(app_name)
-
-        # Try AX API value setting first (skip when replacing placeholder)
-        if not replace and not prefer_insert_only:
-            if self._inject_via_ax(text, insertion_point=insertion_point):
-                logger.debug("Injected text via AX API")
-                return True
-
-        # Try CDP injection for Chromium-based apps
-        if self._inject_via_cdp(text, app_name=app_name, app_pid=app_pid):
-            logger.debug("Injected text via CDP")
-            return True
-
-        # Rich web editors like Codex preserve structure better when we
-        # type at the live caret instead of rewriting/pasting the whole field.
-        if prefer_insert_only and self._inject_via_keystrokes(text):
-            logger.debug("Injected text via simulated keystrokes")
-            return True
-
-        # Fall back to clipboard paste.
-        # NOTE: Clipboard paste simulates Cmd+V, which inserts at the
-        # current OS cursor position. The insertion_point parameter is
-        # not needed here — the OS handles cursor-aware insertion natively.
-        if self._inject_via_clipboard(text):
-            logger.debug("Injected text via clipboard paste")
-            return True
-
-        # Last resort: simulated keystrokes.
-        # NOTE: Like clipboard paste, simulated keystrokes are typed at
-        # the current OS cursor position, so insertion_point is not needed.
+        # Primary: simulated keystrokes (works with all rich text editors)
         if self._inject_via_keystrokes(text):
             logger.debug("Injected text via simulated keystrokes")
+            return True
+
+        # Fallback: clipboard paste (Cmd+V)
+        if self._inject_via_clipboard(text):
+            logger.debug("Injected text via clipboard paste")
             return True
 
         logger.warning("All injection methods failed")

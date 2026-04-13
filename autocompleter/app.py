@@ -674,10 +674,7 @@ class Autocompleter:
                     line for line in filtered.split("\n") if line.strip()
                 ]
             if visible.conversation_turns:
-                conversation_turns = [
-                    {"speaker": t.speaker, "text": t.text, "timestamp": t.timestamp}
-                    for t in visible.conversation_turns
-                ]
+                conversation_turns = list(visible.conversation_turns)
 
             if visible.text_elements:
                 combined = "\n".join(visible.text_elements[:50])
@@ -1009,7 +1006,11 @@ class Autocompleter:
             snapshot.visible_text_elements = list(visible_text_elements or [])
             snapshot.request["live_context_variant"] = LIVE_REPLY_VARIANT.name if mode == AutocompleteMode.REPLY else LIVE_CONTINUATION_VARIANT.name
             if conversation_turns:
-                snapshot.conversation_turns = list(conversation_turns)
+                snapshot.conversation_turns = [
+                        {"speaker": t.speaker, "text": t.text, "timestamp": getattr(t, "timestamp", "")}
+                        if not isinstance(t, dict) else t
+                        for t in conversation_turns
+                    ]
                 snapshot.has_conversation_turns = True
                 snapshot.conversation_turn_count = len(conversation_turns)
             # Capture AX tree on a background thread to avoid blocking the tap
@@ -1246,12 +1247,42 @@ class Autocompleter:
         trigger_type: str = "",
     ) -> None:
         """Run the streaming LLM call on a worker thread, updating the overlay incrementally."""
+        try:
+            self._generate_and_show_streaming_inner(
+                focused, x, y, caret_height, mode, window_title, source_url,
+                conversation_turns, visible_text_elements, generation_id,
+                cross_app_context, snapshot, subtree_context, temperature_boost,
+                extra_negative_patterns, visible_meta, trigger_type,
+            )
+        except Exception:
+            logger.error("Worker thread crashed", exc_info=True)
+            self._run_on_main(self.overlay.hide)
+
+    def _generate_and_show_streaming_inner(
+        self,
+        focused,
+        x: float, y: float,
+        caret_height: float = 20.0,
+        mode: AutocompleteMode | None = None,
+        window_title: str = "",
+        source_url: str = "",
+        conversation_turns: list[dict[str, str]] | None = None,
+        visible_text_elements: list[str] | None = None,
+        generation_id: int = 0,
+        cross_app_context: str = "",
+        snapshot: TriggerSnapshot | None = None,
+        subtree_context: str | None = None,
+        temperature_boost: float = 0.0,
+        extra_negative_patterns: list[str] | None = None,
+        visible_meta: dict[str, object] | None = None,
+        trigger_type: str = "",
+    ) -> None:
         app_name = focused.app_name
         current_input = focused.value
 
         # Universal preprocessing: strip tmux pane noise (no-op for
         # non-terminals) and cap buffer length.
-        effective_before_cursor = strip_tmux_split_panes(focused.before_cursor)
+        effective_before_cursor = strip_tmux_split_panes(focused.before_cursor or "")
         if len(effective_before_cursor) > _TUI_CONTEXT_TAIL_CHARS:
             effective_before_cursor = effective_before_cursor[-_TUI_CONTEXT_TAIL_CHARS:]
 
@@ -1356,7 +1387,11 @@ class Autocompleter:
                 snapshot.tui_user_input = effective_before_cursor
             snapshot.context = context
             if conversation_turns:
-                snapshot.conversation_turns = list(conversation_turns)
+                snapshot.conversation_turns = [
+                        {"speaker": t.speaker, "text": t.text, "timestamp": getattr(t, "timestamp", "")}
+                        if not isinstance(t, dict) else t
+                        for t in conversation_turns
+                    ]
                 snapshot.has_conversation_turns = True
                 snapshot.conversation_turn_count = len(conversation_turns)
 
@@ -1609,10 +1644,7 @@ class Autocompleter:
         visible_text_elements: list[str] = visible.text_elements if visible else []
         conversation_turns = None
         if visible and visible.conversation_turns:
-            conversation_turns = [
-                {"speaker": t.speaker, "text": t.text, "timestamp": t.timestamp}
-                for t in visible.conversation_turns
-            ]
+            conversation_turns = list(visible.conversation_turns)
 
         cross_app_snapshots = self.context_trail.get_recent_cross_app_context(
             current_app=focused.app_name,
@@ -1949,7 +1981,11 @@ class Autocompleter:
             else LIVE_CONTINUATION_VARIANT.name
         )
         if conversation_turns:
-            snapshot.conversation_turns = list(conversation_turns)
+            snapshot.conversation_turns = [
+                        {"speaker": t.speaker, "text": t.text, "timestamp": getattr(t, "timestamp", "")}
+                        if not isinstance(t, dict) else t
+                        for t in conversation_turns
+                    ]
             snapshot.has_conversation_turns = True
             snapshot.conversation_turn_count = len(conversation_turns)
         threading.Thread(
@@ -2009,29 +2045,22 @@ class Autocompleter:
             logger.debug("Failed to record accepted feedback", exc_info=True)
 
     @staticmethod
-    def _build_post_accept_focused_state(
-        live_focused,
-        accepted_text: str,
-        trigger_before_cursor: str,
-        trigger_after_cursor: str,
-    ):
-        """Build a synthetic focused state that includes the accepted text.
+    def _build_post_accept_focused_state(live_focused):
+        """Build a focused state for follow-up: empty draft, ready for next input.
 
-        We cannot trust a rich editor to have fully settled by the time the
-        chained follow-up starts, so derive the next draft from the accepted
-        text we intentionally inserted.
+        After accepting a suggestion the text is committed (sent in chat apps,
+        inserted in editors).  The follow-up suggests what to type *next*, so
+        the draft starts empty.
         """
-        before_cursor = trigger_before_cursor + accepted_text
-        after_cursor = trigger_after_cursor
         return FocusedElement(
             app_name=live_focused.app_name,
             app_pid=live_focused.app_pid,
             role=live_focused.role,
-            value=before_cursor + after_cursor,
+            value="",
             selected_text="",
             position=live_focused.position,
             size=live_focused.size,
-            insertion_point=len(before_cursor),
+            insertion_point=0,
             selection_length=0,
             placeholder_detected=False,
         )
@@ -2050,10 +2079,24 @@ class Autocompleter:
 
         focused_for_generation = self._build_post_accept_focused_state(
             live_focused=focused,
-            accepted_text=accepted_text,
-            trigger_before_cursor=self._trigger_before_cursor,
-            trigger_after_cursor=self._trigger_after_cursor,
         )
+
+        prev = self._last_trigger_args
+
+        # Update conversation turns with the committed text (what was just
+        # typed + accepted).  If conversation_turns exist we append a "You"
+        # turn so the LLM knows what was just said.  For non-chat apps the
+        # list is empty/None so nothing changes — no app-specific branching.
+        committed_text = self._trigger_before_cursor + accepted_text
+        prev_turns = prev.get("conversation_turns") or []
+        if prev_turns:
+            from .conversation_extractors import ConversationTurn
+            conversation_turns = list(prev_turns)
+            conversation_turns.append(
+                ConversationTurn(speaker="You", text=committed_text, timestamp=None)
+            )
+        else:
+            conversation_turns = prev_turns
 
         self._trigger_time = time.time()
         self._latency_tracker.start(generation_id=self._generation_id + 1)
@@ -2072,7 +2115,6 @@ class Autocompleter:
         if is_shell_app(focused_for_generation.app_name):
             self._replace_on_inject = True
 
-        prev = self._last_trigger_args
         self._generation_id += 1
         gen_id = self._generation_id
 
@@ -2084,7 +2126,7 @@ class Autocompleter:
             window_title=prev["window_title"],
             source_url=prev["source_url"],
             visible_text_elements=prev["visible_text_elements"],
-            conversation_turns=prev["conversation_turns"],
+            conversation_turns=conversation_turns,
             visible_meta=prev.get("visible_meta"),
         )
 
@@ -2096,7 +2138,7 @@ class Autocompleter:
             mode=mode,
             window_title=prev["window_title"],
             source_url=prev["source_url"],
-            conversation_turns=prev["conversation_turns"],
+            conversation_turns=conversation_turns,
             visible_text_elements=prev["visible_text_elements"],
             cross_app_context=prev["cross_app_context"],
             subtree_context=prev["subtree_context"],
@@ -2121,7 +2163,7 @@ class Autocompleter:
                 mode,
                 prev["window_title"],
                 prev["source_url"],
-                prev["conversation_turns"],
+                conversation_turns,
                 prev["visible_text_elements"],
                 gen_id,
                 prev["cross_app_context"],
@@ -2154,13 +2196,7 @@ class Autocompleter:
             self._trigger_before_cursor,
             self._trigger_after_cursor,
         )
-        success = self.injector.inject(
-            text,
-            replace=self._replace_on_inject,
-            insertion_point=cursor_pos,
-            app_name=app_name,
-            app_pid=app_pid,
-        )
+        success = self.injector.inject(text)
         if not success:
             logger.warning("Failed to inject suggestion")
             return
@@ -2183,9 +2219,7 @@ class Autocompleter:
                     self._trigger_before_cursor,
                     self._trigger_after_cursor,
                 )
-                success = self.injector.inject(
-                    partial_text, replace=self._replace_on_inject,
-                )
+                success = self.injector.inject(partial_text)
                 if success:
                     logger.info(f"Partial inject: {partial_text[:60]}")
                     focused = self.observer.get_focused_element()

@@ -207,8 +207,13 @@ if HAS_APPKIT:
         def drawRect_(self, rect):
             cfg = self._config
 
-            # No solid background fill — the backdrop view (NSGlassEffectView
-            # or NSVisualEffectView) provides the translucent blur.
+            # Draw a dark semi-transparent background so text is always
+            # readable regardless of system appearance or backdrop style.
+            bg_color = AppKit.NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                0.05, 0.05, 0.08, 0.65
+            )
+            bg_color.set()
+            AppKit.NSBezierPath.fillRect_(self.bounds())
 
             # Draw each suggestion
             font = AppKit.NSFont.systemFontOfSize_(cfg.font_size)
@@ -828,6 +833,11 @@ class SuggestionOverlay:
             # macOS 26+: use NSGlassEffectView for Liquid Glass backdrop
             glass_view = AppKit.NSGlassEffectView.alloc().initWithFrame_(content_rect)
             glass_view.setCornerRadius_(self._config.border_radius)
+            # Force dark appearance so text (light gray) stays readable
+            dark_appearance = AppKit.NSAppearance.appearanceNamed_(
+                "NSAppearanceNameVibrantDark"
+            )
+            glass_view.setAppearance_(dark_appearance)
             window.setContentView_(glass_view)
             glass_view.setContentView_(view)
             effect_view = glass_view

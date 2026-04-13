@@ -495,9 +495,9 @@ class ContextStore:
         if turns:
             turn_lines = []
             for turn in turns:
-                speaker = turn.get("speaker", "Unknown")
-                text = turn.get("text", "")
-                timestamp = turn.get("timestamp", "")
+                speaker = getattr(turn, "speaker", None) or (turn.get("speaker", "Unknown") if isinstance(turn, dict) else "Unknown")
+                text = getattr(turn, "text", None) or (turn.get("text", "") if isinstance(turn, dict) else "")
+                timestamp = getattr(turn, "timestamp", None) or (turn.get("timestamp", "") if isinstance(turn, dict) else "")
                 if timestamp:
                     turn_lines.append(f"- {speaker} [{timestamp}]: {text}")
                 else:
@@ -508,7 +508,7 @@ class ContextStore:
             # exposes "You said" headings — assistant responses are not
             # in the AX tree), supplement with visible text so the LLM
             # can see what the assistant actually said.
-            speakers = {t.get("speaker") for t in turns}
+            speakers = {getattr(t, "speaker", None) or (t.get("speaker") if isinstance(t, dict) else None) for t in turns}
             if len(speakers) <= 1 and visible_text:
                 supplement_parts: list[str] = []
                 supplement_total = 0
@@ -582,7 +582,8 @@ class ContextStore:
             # Build query from last conversation turn or draft
             query = ""
             if turns:
-                query = turns[-1].get("text", "")
+                last = turns[-1]
+                query = getattr(last, "text", None) or (last.get("text", "") if isinstance(last, dict) else "")
             elif draft_text.strip():
                 query = draft_text.strip()
 
