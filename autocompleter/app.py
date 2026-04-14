@@ -7,7 +7,6 @@ autocomplete tool.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import queue
 import signal
@@ -26,12 +25,7 @@ except ImportError:
 
 from .config import Config, load_config
 from .context_store import ContextStore
-from .context_trail import ContextTrail, _filter_ui_chrome
-from .embeddings import (
-    AnthropicEmbeddingProvider,
-    OpenAIEmbeddingProvider,
-    TFIDFEmbeddingProvider,
-)
+from .context_trail import ContextTrail
 from .hotkey import HotkeyListener
 from .input_observer import FocusedElement, InputObserver, VisibleContent
 from .latency_tracker import LatencyStore, LatencyTracker
@@ -164,9 +158,6 @@ def _get_caret_screen_position() -> tuple[float, float, float] | None:
 class Autocompleter:
     """Main application class that orchestrates all components."""
 
-    _CACHE_REVALIDATE_APPS = frozenset({"Codex"})
-    _CACHE_REVALIDATE_AGE_MS = 150.0
-
     def __init__(self, config: Config | None = None, dump_dir: str | None = None):
         self.config = config or load_config()
         self._dumper: TriggerDumper | None = TriggerDumper(dump_dir) if dump_dir else None
@@ -187,30 +178,10 @@ class Autocompleter:
         self.context_trail = ContextTrail()
         self.memory = MemoryStore(self.config)
 
-        # Initialize embedding provider for semantic context
-        self._embedding_provider = None
-        if self.config.use_semantic_context:
-            provider_name = self.config.embedding_provider
-            if provider_name == "anthropic":
-                self._embedding_provider = AnthropicEmbeddingProvider(
-                    api_key=self.config.anthropic_api_key,
-                )
-            elif provider_name == "openai":
-                self._embedding_provider = OpenAIEmbeddingProvider(
-                    api_key=self.config.openai_api_key,
-                )
-            else:
-                self._embedding_provider = TFIDFEmbeddingProvider()
-            logger.info(
-                f"Semantic context enabled with {provider_name} embeddings"
-            )
-
         self._running = False
         self._observer_thread: threading.Thread | None = None
         self._current_suggestions: list[Suggestion] = []
         self._main_queue: queue.Queue = queue.Queue()
-        self._last_content_hash: str = ""
-        self._last_input_hash: str = ""
         self._generation_id: int = 0  # Monotonic counter; only latest generation updates overlay
         self._replace_on_inject: bool = False  # True when focused field had baked-in placeholder
         self._trigger_time: float | None = None  # Timestamp of last trigger for latency tracking
@@ -222,7 +193,6 @@ class Autocompleter:
         self._trigger_after_cursor: str = ""   # after_cursor at trigger time (for trailing-space stripping)
 
         # Observer loop state
-        self._observe_iteration: int = 0  # Counter for periodic pruning
         self._observe_consecutive_errors: int = 0  # For exponential backoff
         self._last_visible_content: VisibleContent | None = None  # Cached for trigger reuse
         self._last_visible_content_time: float = 0.0  # Timestamp of cached content
@@ -267,20 +237,15 @@ class Autocompleter:
         # Open the context store
         self.context_store.open()
         logger.info(f"Context store opened at {self.config.db_path}")
-        logger.info(f"Context store has {self.context_store.entry_count()} entries")
-
-        # Prune old entries on startup
-        pruned = self.context_store.prune(
-            max_age_hours=self.config.max_context_age_hours,
-            max_entries=self.config.max_context_entries,
-        )
-        if pruned:
-            logger.info(f"Pruned {pruned} old context entries")
 
         # Run daily memory consolidation in background if due.
         if self.memory.enabled:
             from .consolidation import run_consolidation
-            self._executor.submit(run_consolidation, self.memory, self.config)
+            threading.Thread(
+                target=run_consolidation,
+                args=(self.memory, self.config),
+                daemon=True,
+            ).start()
 
         # Wire up click-outside-to-dismiss (reuses existing dismiss logic)
         def _click_dismiss():
@@ -404,221 +369,6 @@ class Autocompleter:
         except KeyboardInterrupt:
             self.stop()
 
-    @staticmethod
-    def _hash_content(text: str) -> str:
-        """Fast content hash for dedup."""
-        return hashlib.md5(text.encode("utf-8", errors="replace")).hexdigest()
-
-    def _visible_content_hash(self, visible: VisibleContent | None) -> str:
-        """Build a stable hash for a visible-content snapshot."""
-        if visible is None:
-            return ""
-        joined = "\n".join((visible.text_elements or [])[:50])
-        parts = [
-            visible.app_name,
-            visible.window_title,
-            visible.url,
-            joined,
-        ]
-        return self._hash_content("\0".join(parts))
-
-    def _resolve_visible_content(
-        self,
-        focused,
-    ) -> tuple[VisibleContent | None, dict[str, object]]:
-        """Return visible content plus measurement metadata for this trigger."""
-        self._latency_tracker.mark("visible_start")
-        now = time.time()
-        cache_age_ms = None
-        if self._last_visible_content_time > 0:
-            cache_age_ms = max(0.0, (now - self._last_visible_content_time) * 1000)
-
-        metadata: dict[str, object] = {
-            "visible_source": "fresh",
-            "visible_cache_age_ms": cache_age_ms,
-            "visible_content_changed": None,
-        }
-
-        use_cache = (
-            self._last_visible_content is not None
-            and (now - self._last_visible_content_time) < self._current_poll_interval
-            and self._last_visible_content.app_name == focused.app_name
-        )
-        cached = self._last_visible_content if use_cache else None
-        cached_hash = self._visible_content_hash(cached)
-
-        if use_cache:
-            visible = cached
-            metadata["visible_source"] = "cache"
-            logger.debug(
-                "Using cached visible content (age=%.0fms)",
-                cache_age_ms or 0.0,
-            )
-        else:
-            visible = self.observer.get_visible_content()
-            fresh_hash = self._visible_content_hash(visible)
-            if (
-                self._last_visible_content is not None
-                and visible is not None
-                and self._last_visible_content.app_name == visible.app_name
-                and self._last_visible_content.window_title == visible.window_title
-            ):
-                metadata["visible_content_changed"] = bool(
-                    cached_hash and fresh_hash and cached_hash != fresh_hash
-                )
-        self._latency_tracker.mark("visible_ready")
-        return visible, metadata
-
-    @classmethod
-    def _should_revalidate_cached_visible_content(
-        cls,
-        app_name: str,
-        visible_meta: dict[str, object] | None,
-        conversation_turns: list[dict[str, str]] | None = None,
-    ) -> bool:
-        """Return True when cached visible content is risky enough to refresh."""
-        if not visible_meta:
-            return False
-        if visible_meta.get("visible_source") != "cache":
-            return False
-        if app_name not in cls._CACHE_REVALIDATE_APPS:
-            return False
-        if conversation_turns:
-            return False
-        cache_age_ms = visible_meta.get("visible_cache_age_ms")
-        if cache_age_ms is None:
-            return True
-        try:
-            return float(cache_age_ms) >= cls._CACHE_REVALIDATE_AGE_MS
-        except (TypeError, ValueError):
-            return False
-
-    def _maybe_refresh_visible_content_for_worker(
-        self,
-        focused,
-        window_title: str,
-        visible_text_elements: list[str] | None,
-        visible_meta: dict[str, object] | None,
-        conversation_turns: list[dict[str, str]] | None = None,
-        snapshot: TriggerSnapshot | None = None,
-    ) -> tuple[list[str] | None, dict[str, object] | None]:
-        """Revalidate cached visible content off the event-tap thread when needed."""
-        if not self._should_revalidate_cached_visible_content(
-            focused.app_name,
-            visible_meta,
-            conversation_turns,
-        ):
-            return visible_text_elements, visible_meta
-
-        try:
-            fresh = self.observer.get_visible_content()
-        except Exception:
-            logger.debug("[CTX] Worker refresh of visible content failed", exc_info=True)
-            return visible_text_elements, visible_meta
-
-        if fresh is None or fresh.app_name != focused.app_name:
-            return visible_text_elements, visible_meta
-        if window_title and fresh.window_title and fresh.window_title != window_title:
-            logger.debug(
-                "[CTX] Worker refresh window mismatch, keeping cached visible content "
-                "(trigger=%r fresh=%r)",
-                window_title,
-                fresh.window_title,
-            )
-            return visible_text_elements, visible_meta
-
-        cached_hash = self._visible_content_hash(self._last_visible_content)
-        fresh_hash = self._visible_content_hash(fresh)
-        changed = bool(cached_hash and fresh_hash and cached_hash != fresh_hash)
-
-        refreshed_meta = dict(visible_meta or {})
-        refreshed_meta["visible_content_changed"] = changed
-
-        if not changed:
-            logger.debug("[CTX] Worker refresh confirmed cached visible content is still current")
-            return visible_text_elements, refreshed_meta
-
-        refreshed_elements = list(fresh.text_elements or [])
-        if refreshed_elements:
-            filtered = _filter_ui_chrome("\n".join(refreshed_elements))
-            refreshed_elements = [
-                line for line in filtered.splitlines() if line.strip()
-            ]
-
-        refreshed_meta["visible_source"] = "worker_refresh"
-        refreshed_meta["visible_cache_age_ms"] = 0.0
-        self._last_visible_content = fresh
-        self._last_visible_content_time = time.time()
-
-        logger.info(
-            "[CTX] Refreshed cached visible content on worker for %r "
-            "(cached=%d fresh=%d elements)",
-            focused.app_name,
-            len(visible_text_elements or []),
-            len(refreshed_elements),
-        )
-
-        if snapshot is not None:
-            snapshot.visible_source = str(refreshed_meta.get("visible_source", ""))
-            snapshot.visible_cache_age_ms = 0.0
-            snapshot.visible_content_changed = True
-            snapshot.visible_text_elements = list(refreshed_elements)
-            if not snapshot.source_url and fresh.url:
-                snapshot.source_url = fresh.url
-
-        if self._last_trigger_args and self._last_trigger_args.get("focused") is focused:
-            self._last_trigger_args["visible_text_elements"] = list(refreshed_elements)
-            self._last_trigger_args["visible_meta"] = dict(refreshed_meta)
-
-        return refreshed_elements, refreshed_meta
-
-    def _filter_recent_user_inputs_from_visible_text(
-        self,
-        source_app: str,
-        visible_text_elements: list[str] | None,
-        focused,
-    ) -> list[str] | None:
-        """Remove lines that likely mirror the user's just-submitted prompt."""
-        if not visible_text_elements:
-            return visible_text_elements
-        if not focused.placeholder_detected or focused.before_cursor.strip():
-            return visible_text_elements
-
-        recent_inputs = [
-            entry.content.strip()
-            for entry in self.context_store.get_by_source(source_app, limit=12)
-            if entry.entry_type == "user_input" and entry.content.strip()
-        ]
-        if not recent_inputs:
-            return visible_text_elements
-
-        def _norm(text: str) -> str:
-            return " ".join(text.split()).strip().lower()
-
-        recent_norms = {_norm(text) for text in recent_inputs if len(_norm(text)) >= 12}
-        filtered: list[str] = []
-        removed = 0
-        for line in visible_text_elements:
-            norm = _norm(line)
-            if not norm:
-                continue
-            if any(
-                norm == recent
-                or (len(norm) >= 20 and len(recent) >= 20 and (norm in recent or recent in norm))
-                for recent in recent_norms
-            ):
-                removed += 1
-                continue
-            filtered.append(line)
-
-        if removed:
-            logger.info(
-                "[CTX] Filtered %d visible line(s) matching recent user input for %r reply mode",
-                removed,
-                source_app,
-            )
-        return filtered or visible_text_elements
-
     def _capture_live_trigger_context(
         self,
         focused,
@@ -630,11 +380,9 @@ class Autocompleter:
         float,
         str,
         str,
-        list[dict[str, str]] | None,
-        list[str],
+        list | None,
         str,
         str | None,
-        dict[str, object],
     ]:
         """Capture the live context payload used for a trigger/regenerate."""
         mode = detect_mode(before_cursor=focused.before_cursor)
@@ -661,50 +409,12 @@ class Autocompleter:
         subtree_context = self.observer.get_subtree_context(token_budget=500)
         self._latency_tracker.mark("subtree_ready")
 
-        visible, visible_meta = self._resolve_visible_content(focused)
+        visible = self.observer.get_visible_content()
         window_title = visible.window_title if visible else ""
         source_url = visible.url if visible else ""
-        visible_text_elements: list[str] = []
         conversation_turns = None
-        if visible:
-            visible_text_elements = visible.text_elements or []
-            if visible_text_elements:
-                filtered = _filter_ui_chrome("\n".join(visible_text_elements))
-                visible_text_elements = [
-                    line for line in filtered.split("\n") if line.strip()
-                ]
-            if visible.conversation_turns:
-                conversation_turns = list(visible.conversation_turns)
-
-            if visible.text_elements:
-                combined = "\n".join(visible.text_elements[:50])
-                if combined.strip():
-                    content_hash = self._hash_content(
-                        f"{visible.app_name}\0{visible.window_title}\0{visible.url}\0{combined}"
-                    )
-                    if content_hash != self._last_content_hash:
-                        self._last_content_hash = content_hash
-                        self.context_store.add_entry(
-                            source_app=visible.app_name,
-                            content=combined,
-                            entry_type="visible_text",
-                            source_url=visible.url,
-                            window_title=visible.window_title,
-                        )
-
-        if (
-            mode == AutocompleteMode.REPLY
-            and not conversation_turns
-            and not focused.before_cursor.strip()
-        ):
-            visible_text_elements = (
-                self._filter_recent_user_inputs_from_visible_text(
-                    focused.app_name,
-                    visible_text_elements,
-                    focused,
-                )
-                or []
-            )
+        if visible and visible.conversation_turns:
+            conversation_turns = list(visible.conversation_turns)
 
         cross_app_snapshots = self.context_trail.get_recent_cross_app_context(
             current_app=focused.app_name,
@@ -721,17 +431,9 @@ class Autocompleter:
             window_title,
             source_url,
             conversation_turns,
-            visible_text_elements,
             cross_app_context,
             subtree_context,
-            visible_meta,
         )
-
-    # Cap stored content to avoid DB bloat from terminal scrollback buffers
-    _MAX_STORE_CHARS = 4000
-
-    # Prune the DB every N observer iterations
-    _PRUNE_EVERY = 100
 
     # Error backoff: max sleep multiplier
     _MAX_ERROR_BACKOFF = 16
@@ -742,15 +444,13 @@ class Autocompleter:
     _POLL_DECAY = 1.5   # Multiply interval by this each idle tick
 
     def _observe_loop(self) -> None:
-        """Background loop that observes visible content and stores context."""
+        """Background loop that observes visible content and records context."""
         while self._running:
-            content_changed = False
-            input_changed = False
             activity_detected = False
 
             try:
                 content = self.observer.get_visible_content()
-                if content and content.text_elements:
+                if content:
                     # Detect app/window switch
                     if (content.app_name != self._last_observed_app
                             or content.window_title != self._last_observed_window):
@@ -764,74 +464,17 @@ class Autocompleter:
 
                     self.context_trail.record(content)
 
-                    combined = "\n".join(content.text_elements[:50])
-                    if len(combined) > self._MAX_STORE_CHARS:
-                        combined = combined[:self._MAX_STORE_CHARS]
-                    if combined.strip():
-                        content_hash = self._hash_content(
-                            f"{content.app_name}\0{content.window_title}\0{content.url}\0{combined}"
-                        )
-                        if content_hash != self._last_content_hash:
-                            content_changed = True
-                            self._last_content_hash = content_hash
-                            logger.debug(
-                                f"Observer: stored {len(content.text_elements)} "
-                                f"elements from {content.app_name!r} "
-                                f"({len(combined)} chars)"
-                            )
-                            self.context_store.add_entry(
-                                source_app=content.app_name,
-                                content=combined,
-                                entry_type="visible_text",
-                                source_url=content.url,
-                                window_title=content.window_title,
-                            )
-
-                # Also store the current input field value (capped)
-                focused = self.observer.get_focused_element()
-                if focused and focused.value.strip():
-                    value = focused.value
-                    if len(value) > self._MAX_STORE_CHARS:
-                        value = value[:self._MAX_STORE_CHARS]
-                    input_hash = self._hash_content(f"{focused.app_name}\0{value}")
-                    if input_hash != self._last_input_hash:
-                        input_changed = True
-                        self._last_input_hash = input_hash
-                        logger.debug(
-                            f"Observer: stored user_input from {focused.app_name!r} "
-                            f"({len(value)} chars)"
-                        )
-                        self.context_store.add_entry(
-                            source_app=focused.app_name,
-                            content=value,
-                            entry_type="user_input",
-                        )
-
                 # Pre-warm memory cache (fire-and-forget, non-blocking).
-                # Uses app name + window title + recent visible text as a
-                # composite query — much richer than cursor text alone.
+                # Uses app name + window title as a composite query.
                 if self.memory.enabled and self._last_observed_app:
                     from autocompleter.memory import MemoryStore
-                    _snippet = ""
-                    if content and content.text_elements:
-                        _snippet = "\n".join(content.text_elements[-5:])
                     mem_query = MemoryStore.build_query(
                         app_name=self._last_observed_app,
                         window_title=self._last_observed_window,
-                        visible_snippet=_snippet,
+                        visible_snippet="",
                     )
                     if mem_query:
                         self.memory.pre_warm(mem_query)
-
-                # Periodic DB pruning
-                self._observe_iteration += 1
-                if self._observe_iteration % self._PRUNE_EVERY == 0:
-                    pruned = self.context_store.prune(
-                        max_age_hours=self.config.max_context_age_hours,
-                        max_entries=self.config.max_context_entries,
-                    )
-                    if pruned:
-                        logger.debug(f"Observer: pruned {pruned} old entries")
 
                 # Reset error backoff on success
                 self._observe_consecutive_errors = 0
@@ -846,7 +489,7 @@ class Autocompleter:
                     )
 
             # Dynamic polling: fast after changes, decay toward max when idle
-            if activity_detected or content_changed or input_changed:
+            if activity_detected:
                 self._current_poll_interval = self._POLL_MIN
             else:
                 self._current_poll_interval = min(
@@ -943,10 +586,8 @@ class Autocompleter:
             window_title,
             source_url,
             conversation_turns,
-            visible_text_elements,
             cross_app_context,
             subtree_context,
-            visible_meta,
         ) = self._capture_live_trigger_context(focused, trigger_type="manual")
         logger.info(f"Mode: {mode.value} (before_cursor len={len(focused.before_cursor.strip())})")
 
@@ -964,13 +605,8 @@ class Autocompleter:
 
         logger.info(
             f"[CTX] Window: {window_title!r} | URL: {source_url!r} | "
-            f"text_elements: {len(visible_text_elements)} | "
             f"conversation_turns: {len(conversation_turns) if conversation_turns else 0}"
         )
-        for i, elem in enumerate(visible_text_elements[:10]):
-            logger.debug(f"[CTX]   Visible text [{i}]: {elem[:120]!r}")
-        if len(visible_text_elements) > 10:
-            logger.debug(f"[CTX]   ... and {len(visible_text_elements) - 10} more elements")
         if cross_app_context:
             logger.info(f"[CTX] Cross-app context:\n{cross_app_context}")
 
@@ -992,18 +628,6 @@ class Autocompleter:
             snapshot.insertion_point = focused.insertion_point
             snapshot.value_length = len(focused.value)
             snapshot.placeholder_detected = focused.placeholder_detected
-            snapshot.visible_source = str(visible_meta.get("visible_source", ""))
-            snapshot.visible_cache_age_ms = (
-                float(visible_meta["visible_cache_age_ms"])
-                if visible_meta.get("visible_cache_age_ms") is not None
-                else None
-            )
-            snapshot.visible_content_changed = (
-                bool(visible_meta["visible_content_changed"])
-                if visible_meta.get("visible_content_changed") is not None
-                else None
-            )
-            snapshot.visible_text_elements = list(visible_text_elements or [])
             snapshot.request["live_context_variant"] = LIVE_REPLY_VARIANT.name if mode == AutocompleteMode.REPLY else LIVE_CONTINUATION_VARIANT.name
             if conversation_turns:
                 snapshot.conversation_turns = [
@@ -1024,10 +648,8 @@ class Autocompleter:
             window_title=window_title,
             source_url=source_url,
             conversation_turns=conversation_turns,
-            visible_text_elements=visible_text_elements,
             cross_app_context=cross_app_context,
             subtree_context=subtree_context,
-            visible_meta=visible_meta,
             trigger_type="manual",
         )
 
@@ -1038,8 +660,8 @@ class Autocompleter:
             args=(
                 focused, x, y, caret_height, mode,
                 window_title, source_url, conversation_turns,
-                visible_text_elements, gen_id, cross_app_context,
-                snapshot, subtree_context, 0.0, None, visible_meta, "manual",
+                gen_id, cross_app_context,
+                snapshot, subtree_context, 0.0, None, "manual",
             ),
             daemon=True,
         ).start()
@@ -1055,7 +677,6 @@ class Autocompleter:
         window_title: str = "",
         source_url: str = "",
         conversation_turns: list[dict[str, str]] | None = None,
-        visible_text_elements: list[str] | None = None,
         generation_id: int = 0,
         cross_app_context: str = "",
         subtree_context: str | None = None,
@@ -1080,37 +701,15 @@ class Autocompleter:
         if memory_context:
             logger.info(f"[MEM] Using memory context ({len(memory_context)} chars)")
 
-        visible_text_elements, _ = self._maybe_refresh_visible_content_for_worker(
-            focused=focused,
-            window_title=window_title,
-            visible_text_elements=visible_text_elements,
-            visible_meta=None,
-            conversation_turns=conversation_turns,
-        )
-
         # Messaging apps: force reply mode when structured conversation turns
         # were extracted.  The user is composing a message in a chat, not
-        # continuing prose.  Suppress raw visible text ONLY when the
-        # conversation has multiple speakers (i.e. we captured both sides).
-        # When turns are one-sided (e.g. Gemini only exposes user messages),
-        # keep visible text so the LLM can see assistant responses.
+        # continuing prose.
         if conversation_turns:
             mode = AutocompleteMode.REPLY
-            speakers = {t.speaker for t in conversation_turns}
-            if len(speakers) > 1:
-                visible_text_elements = []
-                logger.info(
-                    "[CTX] Messaging app detected with %d turns (%d speakers) — "
-                    "forcing reply mode, suppressing raw visible text",
-                    len(conversation_turns), len(speakers),
-                )
-            else:
-                logger.info(
-                    "[CTX] Messaging app detected with %d turns (one-sided: %s) — "
-                    "forcing reply mode, KEEPING visible text for assistant context",
-                    len(conversation_turns),
-                    speakers.pop() if speakers else "?",
-                )
+            logger.info(
+                "[CTX] Messaging app detected with %d turns — forcing reply mode",
+                len(conversation_turns),
+            )
 
         # Context assembly based on mode
         if mode == AutocompleteMode.CONTINUATION:
@@ -1120,9 +719,6 @@ class Autocompleter:
                 source_app=app_name,
                 window_title=window_title,
                 source_url=source_url,
-                visible_text=visible_text_elements,
-                embedding_provider=self._embedding_provider,
-                use_semantic_context=self.config.use_semantic_context,
                 cross_app_context=cross_app_context,
                 subtree_context=subtree_context,
                 memory_context=memory_context,
@@ -1134,9 +730,6 @@ class Autocompleter:
                 window_title=window_title,
                 source_url=source_url,
                 draft_text=effective_before_cursor if focused.insertion_point is not None else "",
-                visible_text=visible_text_elements,
-                embedding_provider=self._embedding_provider,
-                use_semantic_context=self.config.use_semantic_context,
                 cross_app_context=cross_app_context,
                 subtree_context=subtree_context,
                 memory_context=memory_context,
@@ -1236,23 +829,21 @@ class Autocompleter:
         window_title: str = "",
         source_url: str = "",
         conversation_turns: list[dict[str, str]] | None = None,
-        visible_text_elements: list[str] | None = None,
         generation_id: int = 0,
         cross_app_context: str = "",
         snapshot: TriggerSnapshot | None = None,
         subtree_context: str | None = None,
         temperature_boost: float = 0.0,
         extra_negative_patterns: list[str] | None = None,
-        visible_meta: dict[str, object] | None = None,
         trigger_type: str = "",
     ) -> None:
         """Run the streaming LLM call on a worker thread, updating the overlay incrementally."""
         try:
             self._generate_and_show_streaming_inner(
                 focused, x, y, caret_height, mode, window_title, source_url,
-                conversation_turns, visible_text_elements, generation_id,
+                conversation_turns, generation_id,
                 cross_app_context, snapshot, subtree_context, temperature_boost,
-                extra_negative_patterns, visible_meta, trigger_type,
+                extra_negative_patterns, trigger_type,
             )
         except Exception:
             logger.error("Worker thread crashed", exc_info=True)
@@ -1267,14 +858,12 @@ class Autocompleter:
         window_title: str = "",
         source_url: str = "",
         conversation_turns: list[dict[str, str]] | None = None,
-        visible_text_elements: list[str] | None = None,
         generation_id: int = 0,
         cross_app_context: str = "",
         snapshot: TriggerSnapshot | None = None,
         subtree_context: str | None = None,
         temperature_boost: float = 0.0,
         extra_negative_patterns: list[str] | None = None,
-        visible_meta: dict[str, object] | None = None,
         trigger_type: str = "",
     ) -> None:
         app_name = focused.app_name
@@ -1295,38 +884,14 @@ class Autocompleter:
         if memory_context:
             logger.info(f"[MEM] Using memory context ({len(memory_context)} chars)")
 
-        visible_text_elements, visible_meta = self._maybe_refresh_visible_content_for_worker(
-            focused=focused,
-            window_title=window_title,
-            visible_text_elements=visible_text_elements,
-            visible_meta=visible_meta,
-            conversation_turns=conversation_turns,
-            snapshot=snapshot,
-        )
-
         # Messaging apps: force reply mode when structured conversation turns
-        # were extracted.  The user is composing a message in a chat, not
-        # continuing prose.  Suppress raw visible text ONLY when the
-        # conversation has multiple speakers (i.e. we captured both sides).
-        # When turns are one-sided (e.g. Gemini only exposes user messages),
-        # keep visible text so the LLM can see assistant responses.
+        # were extracted.
         if conversation_turns:
             mode = AutocompleteMode.REPLY
-            speakers = {t.speaker for t in conversation_turns}
-            if len(speakers) > 1:
-                visible_text_elements = []
-                logger.info(
-                    "[CTX] Messaging app detected with %d turns (%d speakers) — "
-                    "forcing reply mode, suppressing raw visible text",
-                    len(conversation_turns), len(speakers),
-                )
-            else:
-                logger.info(
-                    "[CTX] Messaging app detected with %d turns (one-sided: %s) — "
-                    "forcing reply mode, KEEPING visible text for assistant context",
-                    len(conversation_turns),
-                    speakers.pop() if speakers else "?",
-                )
+            logger.info(
+                "[CTX] Messaging app detected with %d turns — forcing reply mode",
+                len(conversation_turns),
+            )
 
         # Context assembly based on mode
         self._latency_tracker.mark("context_build_start")
@@ -1337,14 +902,10 @@ class Autocompleter:
                 source_app=app_name,
                 window_title=window_title,
                 source_url=source_url,
-                visible_text=visible_text_elements,
-                embedding_provider=self._embedding_provider,
-                use_semantic_context=self.config.use_semantic_context,
                 cross_app_context=cross_app_context,
                 subtree_context=subtree_context,
                 memory_context=memory_context,
             )
-            used_semantic_context = bool(self.config.use_semantic_context)
         else:
             context = self.context_store.get_reply_context(
                 conversation_turns=conversation_turns or [],
@@ -1352,14 +913,10 @@ class Autocompleter:
                 window_title=window_title,
                 source_url=source_url,
                 draft_text=effective_before_cursor if focused.insertion_point is not None else "",
-                visible_text=visible_text_elements,
-                embedding_provider=self._embedding_provider,
-                use_semantic_context=self.config.use_semantic_context,
                 cross_app_context=cross_app_context,
                 subtree_context=subtree_context,
                 memory_context=memory_context,
             )
-            used_semantic_context = bool(self.config.use_semantic_context)
 
         live_variant = (
             LIVE_CONTINUATION_VARIANT
@@ -1499,24 +1056,12 @@ class Autocompleter:
                 model=self.config.llm_model,
                 suggestion_count=0,
                 trigger_type=trigger_type,
-                visible_source=str((visible_meta or {}).get("visible_source", "")),
                 use_shell=is_terminal,
                 use_tui=is_terminal,
                 has_conversation_turns=bool(conversation_turns),
                 used_subtree_context=bool(subtree_context),
-                used_semantic_context=used_semantic_context,
                 used_memory_context=bool(memory_context),
                 fallback_used=fallback_used,
-                visible_cache_age_ms=(
-                    float((visible_meta or {}).get("visible_cache_age_ms"))
-                    if (visible_meta or {}).get("visible_cache_age_ms") is not None
-                    else None
-                ),
-                visible_content_changed=(
-                    bool((visible_meta or {}).get("visible_content_changed"))
-                    if (visible_meta or {}).get("visible_content_changed") is not None
-                    else None
-                ),
             )
             self._latency_store.save(record)
             # Save snapshot even with no suggestions (useful for debugging)
@@ -1552,24 +1097,12 @@ class Autocompleter:
             model=self.config.llm_model,
             suggestion_count=len(suggestions),
             trigger_type=trigger_type,
-            visible_source=str((visible_meta or {}).get("visible_source", "")),
             use_shell=is_terminal,
             use_tui=is_terminal,
             has_conversation_turns=bool(conversation_turns),
             used_subtree_context=bool(subtree_context),
-            used_semantic_context=used_semantic_context,
             used_memory_context=bool(memory_context),
             fallback_used=fallback_used,
-            visible_cache_age_ms=(
-                float((visible_meta or {}).get("visible_cache_age_ms"))
-                if (visible_meta or {}).get("visible_cache_age_ms") is not None
-                else None
-            ),
-            visible_content_changed=(
-                bool((visible_meta or {}).get("visible_content_changed"))
-                if (visible_meta or {}).get("visible_content_changed") is not None
-                else None
-            ),
         )
         self._latency_store.save(record)
         if snapshot and self._dumper:
@@ -1638,10 +1171,9 @@ class Autocompleter:
         # Skip loading indicator for auto-trigger — suggestions just appear
         # silently when ready, without the disruptive "Generating..." flash.
 
-        visible, visible_meta = self._resolve_visible_content(focused)
+        visible = self.observer.get_visible_content()
         window_title = visible.window_title if visible else ""
         source_url = visible.url if visible else ""
-        visible_text_elements: list[str] = visible.text_elements if visible else []
         conversation_turns = None
         if visible and visible.conversation_turns:
             conversation_turns = list(visible.conversation_turns)
@@ -1666,10 +1198,8 @@ class Autocompleter:
             window_title=window_title,
             source_url=source_url,
             conversation_turns=conversation_turns,
-            visible_text_elements=visible_text_elements,
             cross_app_context=cross_app_context,
             subtree_context=subtree_context,
-            visible_meta=visible_meta,
             trigger_type="auto",
         )
 
@@ -1681,8 +1211,8 @@ class Autocompleter:
             args=(
                 focused, x, y, caret_height, mode,
                 window_title, source_url, conversation_turns,
-                visible_text_elements, gen_id, cross_app_context,
-                None, subtree_context, 0.0, None, visible_meta, "auto",
+                gen_id, cross_app_context,
+                None, subtree_context, 0.0, None, "auto",
             ),
             daemon=True,
         ).start()
@@ -1772,10 +1302,8 @@ class Autocompleter:
             window_title,
             source_url,
             conversation_turns,
-            visible_text_elements,
             cross_app_context,
             subtree_context,
-            visible_meta,
         ) = self._capture_live_trigger_context(focused, trigger_type="regenerate")
 
         self._last_trigger_args = dict(
@@ -1787,10 +1315,8 @@ class Autocompleter:
             window_title=window_title,
             source_url=source_url,
             conversation_turns=conversation_turns,
-            visible_text_elements=visible_text_elements,
             cross_app_context=cross_app_context,
             subtree_context=subtree_context,
-            visible_meta=visible_meta,
             trigger_type="regenerate",
         )
 
@@ -1805,9 +1331,7 @@ class Autocompleter:
             mode=mode,
             window_title=window_title,
             source_url=source_url,
-            visible_text_elements=visible_text_elements,
             conversation_turns=conversation_turns,
-            visible_meta=visible_meta,
         )
 
         # Show loading indicator at the (updated) position
@@ -1827,7 +1351,7 @@ class Autocompleter:
             args=(
                 focused, x, y, caret_height,
                 mode, window_title, source_url,
-                conversation_turns, visible_text_elements,
+                conversation_turns,
                 gen_id, cross_app_context,
                 snapshot,
                 subtree_context,
@@ -1835,7 +1359,6 @@ class Autocompleter:
             kwargs={
                 "temperature_boost": 0.5,
                 "extra_negative_patterns": prev_texts,
-                "visible_meta": visible_meta,
                 "trigger_type": "regenerate",
             },
             daemon=True,
@@ -1943,9 +1466,7 @@ class Autocompleter:
         mode: AutocompleteMode,
         window_title: str,
         source_url: str,
-        visible_text_elements: list[str] | None,
         conversation_turns: list[dict[str, str]] | None,
-        visible_meta: dict[str, object] | None,
     ) -> TriggerSnapshot | None:
         """Build a trigger snapshot for a live generation when dumping is enabled."""
         if not self._dumper:
@@ -1963,18 +1484,6 @@ class Autocompleter:
         snapshot.value_length = len(focused.value)
         snapshot.placeholder_detected = focused.placeholder_detected
         snapshot.mode = mode.value
-        snapshot.visible_source = str((visible_meta or {}).get("visible_source", ""))
-        snapshot.visible_cache_age_ms = (
-            float((visible_meta or {})["visible_cache_age_ms"])
-            if (visible_meta or {}).get("visible_cache_age_ms") is not None
-            else None
-        )
-        snapshot.visible_content_changed = (
-            bool((visible_meta or {})["visible_content_changed"])
-            if (visible_meta or {}).get("visible_content_changed") is not None
-            else None
-        )
-        snapshot.visible_text_elements = list(visible_text_elements or [])
         snapshot.request["live_context_variant"] = (
             LIVE_REPLY_VARIANT.name
             if mode == AutocompleteMode.REPLY
@@ -2001,12 +1510,7 @@ class Autocompleter:
         app_name: str,
         focused,
     ) -> None:
-        """Persist accepted suggestion to context store, memory, and feedback."""
-        self.context_store.add_entry(
-            source_app=app_name,
-            content=suggestion.text,
-            entry_type="accepted_suggestion",
-        )
+        """Persist accepted suggestion to memory and feedback."""
         if self.memory.enabled:
             before_text = (
                 focused.before_cursor if focused
@@ -2125,9 +1629,7 @@ class Autocompleter:
             mode=mode,
             window_title=prev["window_title"],
             source_url=prev["source_url"],
-            visible_text_elements=prev["visible_text_elements"],
             conversation_turns=conversation_turns,
-            visible_meta=prev.get("visible_meta"),
         )
 
         self._last_trigger_args = dict(
@@ -2139,10 +1641,8 @@ class Autocompleter:
             window_title=prev["window_title"],
             source_url=prev["source_url"],
             conversation_turns=conversation_turns,
-            visible_text_elements=prev["visible_text_elements"],
             cross_app_context=prev["cross_app_context"],
             subtree_context=prev["subtree_context"],
-            visible_meta=prev.get("visible_meta"),
             trigger_type="post_accept",
         )
 
@@ -2164,14 +1664,12 @@ class Autocompleter:
                 prev["window_title"],
                 prev["source_url"],
                 conversation_turns,
-                prev["visible_text_elements"],
                 gen_id,
                 prev["cross_app_context"],
                 snapshot,
                 prev["subtree_context"],
                 0.0,
                 None,
-                prev.get("visible_meta"),
                 "post_accept",
             ),
             daemon=True,
@@ -2224,11 +1722,6 @@ class Autocompleter:
                     logger.info(f"Partial inject: {partial_text[:60]}")
                     focused = self.observer.get_focused_element()
                     app_name = focused.app_name if focused else "Unknown"
-                    self.context_store.add_entry(
-                        source_app=app_name,
-                        content=partial_text,
-                        entry_type="accepted_suggestion",
-                    )
                 else:
                     logger.warning("Failed to inject partial suggestion")
 

@@ -333,10 +333,6 @@ class TestE2EPipeline:
         app_name = metadata.get("app", "")
         window_title = metadata.get("windowTitle", "")
 
-        # Extract visible text
-        text_elements: list[str] = []
-        _collect_text_from_mock(root, text_elements, max_items=50)
-
         # Extract conversation turns
         extractor = get_extractor(app_name)
         with (
@@ -371,7 +367,6 @@ class TestE2EPipeline:
                 after_cursor="",
                 source_app=app_name,
                 window_title=window_title,
-                visible_text=text_elements[:20] if text_elements else None,
                 subtree_context=subtree_ctx,
             )
 
@@ -380,9 +375,8 @@ class TestE2EPipeline:
             assert f"App: {app_name}" in context
             assert "Text before cursor:" in context
 
-            # Visible text should appear in context if we had any
-            if text_elements:
-                assert "Visible context:" in context or "Nearby content:" in context
+            if subtree_ctx:
+                assert "Nearby content:" in context
         finally:
             store.close()
 
@@ -415,9 +409,10 @@ class TestE2EPipeline:
             for t in turns
         ]
 
-        # Extract visible text for fallback
-        text_elements: list[str] = []
-        _collect_text_from_mock(root, text_elements, max_items=50)
+        tree = raw_data["tree"]
+        subtree_ctx = None
+        if _has_focus_annotations(tree):
+            subtree_ctx = extract_context_from_tree(tree, token_budget=1200)
 
         store = ContextStore(Path("/tmp/test_e2e_pipeline_reply.db"))
         store.open()
@@ -426,7 +421,7 @@ class TestE2EPipeline:
                 conversation_turns=conversation_turns,
                 source_app=app_name,
                 window_title=window_title,
-                visible_text=text_elements[:20] if text_elements else None,
+                subtree_context=subtree_ctx,
             )
 
             assert isinstance(context, str)
@@ -439,13 +434,10 @@ class TestE2EPipeline:
                 assert any(
                     t["speaker"] in context for t in conversation_turns
                 ), f"No turn speakers found in reply context for {fixture_name}"
-            elif text_elements:
-                # Non-chat apps: should have visible text fallback
-                assert (
-                    "Visible page content" in context
-                    or "Visible text" in context
-                    or len(context) > 20
-                )
+            elif subtree_ctx:
+                assert "Nearby content:" in context
+            else:
+                assert f"App: {app_name}" in context
         finally:
             store.close()
 
@@ -512,8 +504,10 @@ class TestE2EPipeline:
         if app_name in _TERMINAL_APPS:
             pytest.skip("Terminal fixture — text is in AXValue not tree children")
 
-        text_elements: list[str] = []
-        _collect_text_from_mock(root, text_elements, max_items=50)
+        tree = raw_data["tree"]
+        subtree_ctx = None
+        if _has_focus_annotations(tree):
+            subtree_ctx = extract_context_from_tree(tree, token_budget=1200)
 
         store = ContextStore(Path("/tmp/test_e2e_pipeline_nonempty.db"))
         store.open()
@@ -523,17 +517,15 @@ class TestE2EPipeline:
                 after_cursor="",
                 source_app=app_name,
                 window_title=metadata.get("windowTitle", ""),
-                visible_text=text_elements[:20] if text_elements else None,
+                subtree_context=subtree_ctx,
             )
             assert isinstance(context, str)
             assert len(context) > 0
 
-            # Fixtures with visible text should produce substantial context.
-            # New-chat / empty screens with no extractable text get a pass.
-            if text_elements:
+            if subtree_ctx:
                 assert len(context) > 80, (
                     f"Context too short for {fixture_name} with "
-                    f"{len(text_elements)} visible elements: {len(context)} chars\n"
+                    f"subtree context present: {len(context)} chars\n"
                     f"Context: {context[:300]}"
                 )
         finally:

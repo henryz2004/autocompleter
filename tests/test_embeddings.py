@@ -1,10 +1,6 @@
-"""Tests for the embeddings module and semantic context integration."""
+"""Tests for the embeddings module."""
 
 from __future__ import annotations
-
-import time
-from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -13,7 +9,6 @@ from autocompleter.embeddings import (
     cosine_similarity,
     find_relevant_context,
 )
-from autocompleter.context_store import ContextStore
 
 
 # ---------------------------------------------------------------------------
@@ -248,266 +243,23 @@ class TestFindRelevantContext:
         assert scores == sorted(scores, reverse=True)
 
 
-# ---------------------------------------------------------------------------
-# Integration tests: get_semantically_relevant
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def store(tmp_path):
-    db_path = tmp_path / "test_embeddings.db"
-    s = ContextStore(db_path)
-    s.open()
-    yield s
-    s.close()
-
-
-class TestGetSemanticallyRelevant:
-    def test_relevant_entries_rank_higher(self, store):
-        """Entries semantically related to the query should rank higher."""
-        provider = TFIDFEmbeddingProvider(max_features=200)
-
-        # Add entries with distinct topics
-        store.add_entry("App", "python programming language syntax", "visible_text",
-                        timestamp=time.time() - 100)
-        store.add_entry("App", "chocolate cake baking recipe oven", "visible_text",
-                        timestamp=time.time() - 90)
-        store.add_entry("App", "python coding tutorial functions classes", "visible_text",
-                        timestamp=time.time() - 80)
-
-        results = store.get_semantically_relevant(
-            query="python programming tutorial",
-            provider=provider,
-            top_k=3,
-            max_age_hours=1,
-        )
-        assert len(results) > 0
-        # Python-related entries should rank higher than baking
-        python_entries = [r for r in results if "python" in r.lower()]
-        assert len(python_entries) >= 1
-        # First result should be python-related
-        assert "python" in results[0].lower() or "programming" in results[0].lower()
-
-    def test_empty_query_returns_empty(self, store):
-        provider = TFIDFEmbeddingProvider()
-        store.add_entry("App", "some content", "visible_text")
-        results = store.get_semantically_relevant("", provider)
-        assert results == []
-
-    def test_no_entries_returns_empty(self, store):
-        provider = TFIDFEmbeddingProvider()
-        results = store.get_semantically_relevant("some query", provider)
-        assert results == []
-
-    def test_respects_max_age_hours(self, store):
-        provider = TFIDFEmbeddingProvider(max_features=100)
-
-        # Add old entry (beyond max_age_hours)
-        old_time = time.time() - 48 * 3600  # 48 hours ago
-        store.add_entry("App", "old python content", "visible_text",
-                        timestamp=old_time)
-        # Add recent entry
-        store.add_entry("App", "recent python content", "visible_text")
-
-        results = store.get_semantically_relevant(
-            "python", provider, top_k=5, max_age_hours=1
-        )
-        # Only the recent entry should appear (old one is beyond 1 hour)
-        assert len(results) == 1
-        assert "recent" in results[0]
-
-    def test_top_k_limits_results(self, store):
-        provider = TFIDFEmbeddingProvider(max_features=100)
-
-        for i in range(10):
-            store.add_entry(
-                "App", f"entry number {i} with some text",
-                "visible_text", timestamp=time.time() + i * 10,
-            )
-
-        results = store.get_semantically_relevant(
-            "entry text", provider, top_k=3, max_age_hours=1,
-        )
-        assert len(results) <= 3
-
-
-class TestEmbeddingCaching:
-    def test_embeddings_are_cached_in_db(self, store):
-        """After computing embeddings, they should be stored in the DB."""
-        provider = TFIDFEmbeddingProvider(max_features=100)
-
-        store.add_entry("App", "test content for caching", "visible_text")
-
-        # First call computes and caches embeddings
-        store.get_semantically_relevant("test", provider, top_k=5, max_age_hours=1)
-
-        # Check that the embedding was cached
-        conn = store._get_conn()
-        cursor = conn.execute(
-            "SELECT embeddings FROM context_entries WHERE content = ?",
-            ("test content for caching",),
-        )
-        row = cursor.fetchone()
-        assert row is not None
-        assert row[0] is not None, "Embedding should be cached as a BLOB"
-
-    def test_cached_embeddings_are_reused(self, store):
-        """Second call should use cached embeddings, not recompute."""
-        call_count = 0
-        original_embed = TFIDFEmbeddingProvider.embed
-
-        def counting_embed(self_inner, texts):
-            nonlocal call_count
-            call_count += 1
-            return original_embed(self_inner, texts)
-
-        provider = TFIDFEmbeddingProvider(max_features=100)
-
-        store.add_entry("App", "cached embedding content", "visible_text")
-
-        # First call: should call embed
-        with patch.object(TFIDFEmbeddingProvider, 'embed', counting_embed):
-            store.get_semantically_relevant("test query", provider, top_k=5, max_age_hours=1)
-            first_call_count = call_count
-
-        # Reset counter
-        call_count = 0
-
-        # Second call: entries have cached embeddings, but we still need to
-        # embed the query with corpus context. The key difference is that
-        # the cached entries don't need to be re-embedded.
-        with patch.object(TFIDFEmbeddingProvider, 'embed', counting_embed):
-            store.get_semantically_relevant("test query", provider, top_k=5, max_age_hours=1)
-            second_call_count = call_count
-
-        # Both calls should succeed
-        assert first_call_count >= 1
-        assert second_call_count >= 1
-
-
-class TestSemanticContextBlending:
-    def test_continuation_context_includes_semantic_when_enabled(self, store):
-        """When use_semantic_context=True, semantic entries should appear."""
-        provider = TFIDFEmbeddingProvider(max_features=200)
-
-        # Add some historical context about Python
-        store.add_entry("Editor", "python class definition with inheritance",
-                        "visible_text", timestamp=time.time() - 100)
-        store.add_entry("Editor", "javascript array methods map filter",
-                        "visible_text", timestamp=time.time() - 90)
-
-        context = store.get_continuation_context(
-            before_cursor="class MyPython",
-            after_cursor="",
-            source_app="Editor",
-            embedding_provider=provider,
-            use_semantic_context=True,
-        )
-        # The context should contain the semantic section
-        # (may or may not appear depending on TF-IDF match quality)
-        assert "Text before cursor:" in context
-        assert "class MyPython" in context
-
-    def test_continuation_context_skips_semantic_when_disabled(self, store):
-        """When use_semantic_context=False, no semantic section should appear."""
-        provider = TFIDFEmbeddingProvider(max_features=200)
-
-        store.add_entry("Editor", "python class definition", "visible_text",
-                        timestamp=time.time() - 100)
-
-        context = store.get_continuation_context(
-            before_cursor="class MyPython",
-            after_cursor="",
-            source_app="Editor",
-            embedding_provider=provider,
-            use_semantic_context=False,
-        )
-        assert "Related context:" not in context
-
-    def test_continuation_context_skips_semantic_when_no_provider(self, store):
-        """Without a provider, no semantic section should appear."""
-        store.add_entry("Editor", "python class definition", "visible_text",
-                        timestamp=time.time() - 100)
-
-        context = store.get_continuation_context(
-            before_cursor="class MyPython",
-            after_cursor="",
-            source_app="Editor",
-            embedding_provider=None,
-            use_semantic_context=True,
-        )
-        assert "Related context:" not in context
-
-    def test_reply_context_includes_semantic_when_enabled(self, store):
-        """Reply context should include semantic entries when enabled."""
-        provider = TFIDFEmbeddingProvider(max_features=200)
-
-        store.add_entry("Slack", "discussion about python deployment",
-                        "visible_text", timestamp=time.time() - 100)
-        store.add_entry("Slack", "holiday party planning committee",
-                        "visible_text", timestamp=time.time() - 90)
-
-        turns = [
-            {"speaker": "Alice", "text": "How should we deploy the python service?"},
-        ]
-        context = store.get_reply_context(
-            conversation_turns=turns,
-            source_app="Slack",
-            embedding_provider=provider,
-            use_semantic_context=True,
-        )
-        assert "Conversation:" in context
-        assert "deploy" in context.lower()
-
-    def test_reply_context_skips_semantic_when_disabled(self, store):
-        """Reply context should skip semantic section when disabled."""
-        provider = TFIDFEmbeddingProvider(max_features=200)
-
-        store.add_entry("Slack", "discussion about python", "visible_text",
-                        timestamp=time.time() - 100)
-
-        turns = [{"speaker": "Alice", "text": "How about python?"}]
-        context = store.get_reply_context(
-            conversation_turns=turns,
-            source_app="Slack",
-            embedding_provider=provider,
-            use_semantic_context=False,
-        )
-        assert "Related context:" not in context
-
-
 class TestConfigOptions:
     def test_config_defaults(self):
         from autocompleter.config import Config
         config = Config()
-        assert config.embedding_provider == "tfidf"
-        assert config.use_semantic_context is True
+        assert not hasattr(config, "embedding_provider")
+        assert not hasattr(config, "use_semantic_context")
 
     def test_config_custom_values(self):
         from autocompleter.config import Config
-        config = Config(
-            embedding_provider="openai",
-            use_semantic_context=False,
-        )
-        assert config.embedding_provider == "openai"
-        assert config.use_semantic_context is False
+        config = Config(llm_provider="anthropic")
+        assert config.llm_provider == "anthropic"
 
-    def test_use_semantic_context_false_skips_embedding(self, store):
-        """When use_semantic_context is False, embedding should not be used."""
-        # Create a mock provider that tracks calls
-        mock_provider = MagicMock()
-        mock_provider.embed.return_value = [[1.0, 0.0]]
-        mock_provider.dimension = 2
+    def test_removed_embedding_fields_are_rejected(self):
+        from autocompleter.config import Config
 
-        store.add_entry("App", "some content", "visible_text")
+        with pytest.raises(TypeError):
+            Config(embedding_provider="openai")
 
-        context = store.get_continuation_context(
-            before_cursor="test input",
-            after_cursor="",
-            source_app="App",
-            embedding_provider=mock_provider,
-            use_semantic_context=False,
-        )
-        # The mock should NOT have been called
-        mock_provider.embed.assert_not_called()
-        assert "Related context:" not in context
+        with pytest.raises(TypeError):
+            Config(use_semantic_context=False)
