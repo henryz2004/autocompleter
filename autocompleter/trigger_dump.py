@@ -86,14 +86,10 @@ class TriggerSnapshot:
     tui_user_input: str = ""
     has_conversation_turns: bool = False
     conversation_turn_count: int = 0
-    visible_source: str = ""
-    visible_cache_age_ms: float | None = None
-    visible_content_changed: bool | None = None
 
     # Context
     context: str = ""
     conversation_turns: list[dict[str, str]] = field(default_factory=list)
-    visible_text_elements: list[str] = field(default_factory=list)
     request: dict[str, Any] = field(default_factory=dict)
     latency: dict[str, Any] = field(default_factory=dict)
 
@@ -200,15 +196,11 @@ class TriggerDumper:
                 "tuiUserInput": snapshot.tui_user_input,
                 "hasConversationTurns": snapshot.has_conversation_turns,
                 "conversationTurnCount": snapshot.conversation_turn_count,
-                "visibleSource": snapshot.visible_source,
-                "visibleCacheAgeMs": snapshot.visible_cache_age_ms,
-                "visibleContentChanged": snapshot.visible_content_changed,
             },
 
             # Context sent to LLM
             "context": snapshot.context,
             "conversationTurns": snapshot.conversation_turns,
-            "visibleTextElements": snapshot.visible_text_elements,
             "request": snapshot.request,
             "latency": snapshot.latency,
 

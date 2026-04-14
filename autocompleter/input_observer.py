@@ -22,7 +22,7 @@ try:
 except ImportError:
     HAS_ACCESSIBILITY = False
 
-from .ax_utils import ax_get_attribute, ax_get_children, ax_get_pid, ax_get_position, ax_get_size, ax_get_visible_text, dump_ax_tree
+from .ax_utils import ax_get_attribute, ax_get_children, ax_get_pid, ax_get_position, ax_get_size
 from .conversation_extractors import (
     ConversationTurn,
     _collect_child_text,
@@ -74,7 +74,6 @@ class VisibleContent:
     app_name: str
     app_pid: int
     window_title: str
-    text_elements: list[str]
     url: str
     conversation_turns: list[ConversationTurn] | None = None
 
@@ -261,10 +260,10 @@ class InputObserver:
         )
 
     def get_visible_content(self) -> VisibleContent | None:
-        """Read visible text content from the active window.
+        """Read visible content metadata from the active window.
 
-        Traverses the accessibility tree of the frontmost application
-        to extract text elements visible in the current window.
+        Extracts conversation turns (for chat apps) and URL. Text context
+        is provided by get_subtree_context() instead of flat text collection.
         """
         if not HAS_ACCESSIBILITY:
             return None
@@ -282,7 +281,6 @@ class InputObserver:
         # Get the focused window
         window = ax_get_attribute(app_element, "AXFocusedWindow")
         if window is None:
-            # Fall back to first window
             windows = ax_get_attribute(app_element, "AXWindows")
             if windows and len(windows) > 0:
                 window = windows[0]
@@ -293,92 +291,8 @@ class InputObserver:
         window_title = ax_get_attribute(window, "AXTitle") or ""
         logger.debug("[CTX] app=%r window=%r", app_name, window_title)
 
-        # Extract text elements.  For web apps (PWAs, Electron) skip the
-        # browser scaffolding by starting from the AXWebArea — this avoids
-        # needing an artificially high depth limit to punch through the
-        # many wrapper <div>/AXGroup layers that Chromium generates.
-        #
-        # Electron apps like Claude Desktop can have MULTIPLE AXWebAreas
-        # (sidebar, main content, etc.). The first one found by DFS may be
-        # an empty sidebar.  We try each one and use the first that yields text.
-        text_elements: list[str] = []
-        _empty_stats = {"visited": 0, "max_depth_hit": 0, "skipped_chrome": 0,
-                        "no_value": 0, "too_short": 0, "placeholder": 0,
-                        "from_desc": 0}
-        stats = dict(_empty_stats)
-        web_areas = self._find_all_elements_by_role(window, "AXWebArea", max_depth=15)
-        logger.debug("[CTX] Found %d AXWebArea(s)", len(web_areas))
-
-        for i, wa in enumerate(web_areas):
-            self._collect_text(wa, text_elements, max_depth=20, max_items=100, _stats=stats)
-            if text_elements:
-                logger.debug("[CTX] AXWebArea[%d/%d] yielded %d elements",
-                             i, len(web_areas), len(text_elements))
-                break
-            logger.debug("[CTX] AXWebArea[%d/%d] empty (visited=%d)",
-                         i, len(web_areas), stats["visited"])
-            stats = dict(_empty_stats)
-
-        # If no AXWebArea had content (or none found), collect from full window
-        if not text_elements:
-            stats = dict(_empty_stats)
-            self._collect_text(window, text_elements, max_depth=20, max_items=100, _stats=stats)
-
-        logger.debug(
-            "[CTX] _collect_text: %d elements | visited=%d skipped_chrome=%d "
-            "no_value=%d too_short=%d placeholder=%d from_desc=%d max_depth_hit=%d",
-            len(text_elements), stats["visited"], stats["skipped_chrome"],
-            stats["no_value"], stats["too_short"], stats["placeholder"],
-            stats["from_desc"], stats["max_depth_hit"],
-        )
-
-        # Fallback for Electron/Chromium apps: if _collect_text returned nothing,
-        # use _collect_child_text which aggregates text from AXStaticText children
-        # regardless of parent role. This handles:
-        #  - Electron apps that fragment text into 1-2 char AXStaticText elements
-        #  - Apps where content elements have no AXValue but have text children
-        #  - Deeply nested trees without AXWebArea
-        if not text_elements:
-            # Try each AXWebArea, then fall back to window
-            fallback_targets = [(wa, f"AXWebArea[{i}]") for i, wa in enumerate(web_areas)]
-            fallback_targets.append((window, "window"))
-            for target, target_label in fallback_targets:
-                logger.debug("[CTX] Fallback: collecting child text from %s", target_label)
-                raw = _collect_child_text(target, max_depth=15, max_chars=6000)
-                if raw.strip():
-                    for line in raw.splitlines():
-                        stripped = line.strip()
-                        if len(stripped) >= self._MIN_TEXT_LEN:
-                            text_elements.append(stripped)
-                    logger.debug(
-                        "[CTX] Fallback: collected %d elements from %s (%d chars)",
-                        len(text_elements), target_label, len(raw),
-                    )
-                    if text_elements:
-                        break
-                else:
-                    logger.debug("[CTX] Fallback: child text from %s was empty", target_label)
-
-        # Diagnostic: if we still have 0 elements, dump a shallow AX tree to
-        # the log so the developer can diagnose the layout without needing
-        # the standalone dump_ax_tree.py script.
-        if not text_elements:
-            import io
-            buf = io.StringIO()
-            buf.write(f"AX tree diagnostic for {app_name!r}:\n")
-            dump_ax_tree(window, buf, max_depth=6, max_children=20)
-            logger.debug("[CTX] Zero context elements — %s", buf.getvalue())
-
-        # Reverse so that content elements (deeper in the tree, rendered later)
-        # come first. When truncated, this keeps actual content and drops
-        # top-of-tree UI chrome (headers, navigation, toolbars that passed
-        # the role filter).
-        text_elements.reverse()
-
-        # Try to get URL from browser
         url = self._get_browser_url(app_element, app_name)
 
-        # Try structured conversation extraction for chat-like apps
         conversation_turns = self._extract_conversation_turns(
             window, app_name=app_name, window_title=window_title,
         )
@@ -387,7 +301,6 @@ class InputObserver:
             app_name=app_name,
             app_pid=pid,
             window_title=window_title,
-            text_elements=text_elements,
             url=url,
             conversation_turns=conversation_turns,
         )
@@ -439,205 +352,8 @@ class InputObserver:
             logger.debug("Subtree context extraction failed", exc_info=True)
             return None
 
-    # Roles that are UI chrome — skip their entire subtree
-    _SKIP_ROLES = frozenset({
-        "AXToolbar", "AXMenuBar", "AXMenu", "AXMenuItem",
-        "AXButton", "AXScrollBar", "AXSlider", "AXIncrementor",
-        "AXPopUpButton", "AXCheckBox", "AXRadioButton",
-        "AXTabGroup", "AXTab",
-    })
-
-    # Roles that carry meaningful text content
-    _CONTENT_ROLES = frozenset({
-        "AXStaticText", "AXTextField", "AXTextArea",
-        "AXWebArea", "AXGroup", "AXCell", "AXRow",
-        "AXHeading", "AXLink", "AXParagraph",
-    })
-
-    _MIN_TEXT_LEN = 3  # Skip strings <= 2 chars
-
-    # Cap children iterated per node and total nodes visited to prevent
-    # runaway traversal on highly branched AX trees.
     _MAX_CHILDREN_PER_NODE = 50
-    _MAX_VISITS = 600
-
-    # AXGroup subroles that indicate app chrome — skip their entire subtree.
-    # Filters out status indicators, footer disclaimers, alert banners,
-    # and action bars (e.g. copy/feedback buttons in Claude Desktop).
-    _SKIP_SUBROLES = frozenset({
-        "AXApplicationStatus",   # Status/loading indicators ("Thought process")
-        "AXDocumentNote",        # Footer disclaimers ("Claude can make mistakes...")
-        "AXApplicationAlert",    # Alert banners ("New task - Claude")
-        "AXApplicationGroup",    # Action bars, widget containers ("Message actions")
-        "AXLandmarkComplementary",  # Session activity panels, sidebar asides
-    })
-
-    # Subrole prefixes / rdesc values that indicate structural sections
-    _LANDMARK_SUBROLE_PREFIX = "AXLandmark"
-    _SECTION_RDESCS = frozenset({"collection", "content list"})
-
-    def _collect_text(
-        self,
-        element,
-        results: list[str],
-        max_depth: int,
-        max_items: int,
-        depth: int = 0,
-        _seen: set[str] | None = None,
-        _stats: dict[str, int] | None = None,
-        _parent_desc: str = "",
-    ) -> None:
-        """Recursively collect text content from accessibility elements.
-
-        Filters out UI chrome (toolbars, buttons, menus, scrollbars) and
-        only extracts from content-bearing roles. Skips very short strings.
-        Uses a set for O(1) dedup checks.
-
-        Section markers (``[Label]``) are emitted when entering ARIA
-        landmark groups or collection containers so the LLM can
-        distinguish sidebar/navigation chrome from main content.
-
-        Parent-desc dedup: when a child's text is a substring of its
-        parent's ``AXDescription`` (and the parent desc is longer), the
-        child text is skipped — this prevents iMessage-style duplication
-        where the parent desc already contains the child value with
-        additional context (speaker, timestamp).
-        """
-        if depth > max_depth or len(results) >= max_items:
-            if _stats and depth > max_depth:
-                _stats["max_depth_hit"] = _stats.get("max_depth_hit", 0) + 1
-            return
-
-        # Global visit budget — stop traversal if we've visited too many nodes
-        if _stats and _stats.get("visited", 0) >= self._MAX_VISITS:
-            return
-
-        if _seen is None:
-            _seen = set()
-
-        role = ax_get_attribute(element, "AXRole") or ""
-        if _stats:
-            _stats["visited"] = _stats.get("visited", 0) + 1
-
-        # Skip entire subtrees for UI chrome roles
-        if role in self._SKIP_ROLES:
-            if _stats:
-                _stats["skipped_chrome"] = _stats.get("skipped_chrome", 0) + 1
-            return
-
-        # --- Section markers for AXGroup nodes (landmarks / collections) ---
-        # Only fetch AXSubrole / AXRoleDescription for AXGroup to minimise
-        # extra AX API calls.
-        desc_for_children = _parent_desc  # what we pass down to children
-        if role == "AXGroup":
-            section_label: str | None = None
-            subrole = ax_get_attribute(element, "AXSubrole") or ""
-            if subrole in self._SKIP_SUBROLES:
-                if _stats:
-                    _stats["skipped_chrome"] = _stats.get("skipped_chrome", 0) + 1
-                return
-            if subrole.startswith(self._LANDMARK_SUBROLE_PREFIX):
-                desc = ax_get_attribute(element, "AXDescription") or ""
-                # e.g. "AXLandmarkMain" → "Main content", with desc override
-                landmark_type = subrole[len(self._LANDMARK_SUBROLE_PREFIX):]
-                section_label = desc if desc else f"{landmark_type} content"
-            else:
-                rdesc = ax_get_attribute(element, "AXRoleDescription") or ""
-                if rdesc in self._SECTION_RDESCS:
-                    desc = ax_get_attribute(element, "AXDescription") or ""
-                    if desc:
-                        section_label = desc
-
-            if section_label and section_label not in _seen:
-                marker = f"[{section_label}]"
-                results.append(marker)
-                _seen.add(section_label)
-
-        # Extract text only from content-bearing roles
-        node_text: str | None = None  # the text extracted from this node
-        if role in self._CONTENT_ROLES:
-            # For text areas, try AXVisibleCharacterRange first (2 IPC calls
-            # vs walking all children) — gives us exactly the on-screen text.
-            text: str | None = None
-            if role in {"AXTextArea", "AXTextField"}:
-                vis = ax_get_visible_text(element)
-                if vis and vis.strip():
-                    text = vis.strip()
-            if text is None:
-                value = ax_get_attribute(element, "AXValue")
-                if isinstance(value, str) and value.strip():
-                    text = value.strip()
-            if text is None:
-                # Fallback: many Electron apps (ChatGPT, Slack) put message
-                # text in AXDescription instead of AXValue.
-                desc = ax_get_attribute(element, "AXDescription")
-                if isinstance(desc, str) and desc.strip():
-                    text = desc.strip()
-                    if _stats:
-                        _stats["from_desc"] = _stats.get("from_desc", 0) + 1
-                else:
-                    if _stats:
-                        _stats["no_value"] = _stats.get("no_value", 0) + 1
-
-            if text is not None:
-                if len(text) < self._MIN_TEXT_LEN:
-                    if _stats:
-                        _stats["too_short"] = _stats.get("too_short", 0) + 1
-                elif text in _seen:
-                    pass  # dedup
-                elif _parent_desc and text in _parent_desc and len(_parent_desc) > len(text):
-                    pass  # parent desc already captured this with richer context
-                else:
-                    # For input fields, skip placeholder text so it doesn't
-                    # pollute visible context (e.g. "Reply..." in chat sidebars)
-                    if role in {"AXTextField", "AXTextArea"}:
-                        ph = ax_get_attribute(element, "AXPlaceholderValue")
-                        nc = ax_get_attribute(element, "AXNumberOfCharacters")
-                        if (ph and text.rstrip("\n") == ph.strip()) or (
-                            nc is not None and nc == 0 and text
-                        ):
-                            if _stats:
-                                _stats["placeholder"] = _stats.get("placeholder", 0) + 1
-                        else:
-                            _seen.add(text)
-                            results.append(text)
-                            node_text = text
-                    else:
-                        _seen.add(text)
-                        results.append(text)
-                        node_text = text
-
-        # Determine _parent_desc for children: if this node contributed a
-        # desc-sourced text, pass it down so children can skip duplicates.
-        if node_text:
-            # Check if the text came from AXDescription (indicates it wraps
-            # child content, like iMessage parent descs).
-            node_desc = ax_get_attribute(element, "AXDescription") or ""
-            if isinstance(node_desc, str) and node_desc.strip() == node_text:
-                desc_for_children = node_text
-
-        # Recurse into children (capped per node to avoid wide-tree blowup)
-        children = ax_get_children(element)
-        if children:
-            # Claude Desktop thinking blocks: AXGroup with >=3 children
-            # whose first child is an AXButton titled "Thought...".
-            # Only recurse into the last child (response), skipping thinking.
-            if (
-                role == "AXGroup"
-                and len(children) >= 3
-                and (ax_get_attribute(children[0], "AXRole") or "") == "AXButton"
-                and "Thought" in (ax_get_attribute(children[0], "AXTitle") or "")
-            ):
-                children = [children[-1]]
-            for child in children[:self._MAX_CHILDREN_PER_NODE]:
-                if len(results) >= max_items:
-                    break
-                if _stats and _stats.get("visited", 0) >= self._MAX_VISITS:
-                    break
-                self._collect_text(
-                    child, results, max_depth, max_items, depth + 1, _seen,
-                    _stats, desc_for_children,
-                )
+    _MAX_FIND_VISITS = 500
 
     def _extract_conversation_turns(
         self, window, max_turns: int = 15, app_name: str = "",
@@ -711,8 +427,6 @@ class InputObserver:
                         return value
 
         return ""
-
-    _MAX_FIND_VISITS = 500  # visit budget for _find_element_by_role
 
     def _find_element_by_role(
         self, element, role: str, max_depth: int, depth: int = 0,

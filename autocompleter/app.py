@@ -462,7 +462,13 @@ class Autocompleter:
                     self._last_visible_content = content
                     self._last_visible_content_time = time.time()
 
-                    self.context_trail.record(content)
+                    subtree_xml = self.observer.get_subtree_context(token_budget=300) or ""
+                    self.context_trail.record(
+                        app_name=content.app_name,
+                        window_title=content.window_title,
+                        subtree_xml=subtree_xml,
+                        url=content.url,
+                    )
 
                 # Pre-warm memory cache (fire-and-forget, non-blocking).
                 # Uses app name + window title as a composite query.

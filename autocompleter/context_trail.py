@@ -7,70 +7,15 @@ so the suggestion engine can include context from recently visited apps
 
 from __future__ import annotations
 
+import re
 import time
 from collections import deque
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from .input_observer import VisibleContent
-
 
 # Default cap on how much visible text to store per snapshot.
 DEFAULT_TEXT_SUMMARY_CHARS = 500
-
-# Short UI chrome strings to filter from visible text summaries.
-# These appear in sidebar, toolbar, and status areas of various apps
-# and add no conversational value when used as cross-app context.
-_UI_CHROME_PATTERNS = frozenset({
-    # Discord
-    "send gif", "send a gif", "send sticker", "unmute", "mute",
-    "do not disturb", "set status", "user status and settings",
-    "manage profile and status", "deafen", "undeafen",
-    "open user settings", "direct messages", "find or start a conversation",
-    "create dm", "add friends to dm", "hide user profile",
-    "show user profile", "start voice call", "start video call",
-    "pinned messages", "add friends", "notification settings",
-    "thread panel", "member list", "search", "inbox",
-    # iMessage
-    "new message", "details",
-    # Common
-    "send", "attach", "emoji",
-})
-
-# Substrings — if any of these appear in a line (case-insensitive),
-# the line is filtered.
-_UI_CHROME_SUBSTRINGS = (
-    "icon, button",        # VoiceOver button descriptions
-    "status and settings", # Discord status bar
-    "unread message",      # Discord unread badge
-    "new unreads",         # Discord new unreads separator
-)
-
-
-def _filter_ui_chrome(text: str) -> str:
-    """Remove short UI chrome lines from a visible text summary.
-
-    Preserves substantive content (messages, docs, code) while stripping
-    toolbar buttons, sidebar labels, and status indicators.
-    """
-    lines = text.split("\n")
-    filtered: list[str] = []
-    for line in lines:
-        stripped = line.strip()
-        if not stripped:
-            continue
-        lower = stripped.lower()
-        # Exact match against known chrome strings
-        if lower in _UI_CHROME_PATTERNS:
-            continue
-        # Substring match
-        if any(sub in lower for sub in _UI_CHROME_SUBSTRINGS):
-            continue
-        # Very short lines (<=3 chars) that are just icons/separators
-        if len(stripped) <= 3:
-            continue
-        filtered.append(line)
-    return "\n".join(filtered)
 
 
 @dataclass
@@ -101,55 +46,52 @@ class ContextTrail:
         self._trail: deque[AppSnapshot] = deque(maxlen=maxlen)
         self._current_app: str = ""
         self._current_window: str = ""
-        self._current_content: Optional[VisibleContent] = None
+        self._current_subtree: str = ""
+        self._current_url: str = ""
         self._text_summary_chars = text_summary_chars
 
-    def record(self, visible_content: VisibleContent) -> None:
+    def record(
+        self,
+        app_name: str,
+        window_title: str,
+        subtree_xml: str = "",
+        url: str = "",
+    ) -> None:
         """Record an observation from the observe loop.
 
         If the app or window has changed since the last call, push a
-        snapshot of the *previous* content onto the trail.  This catches
-        both cross-app switches and intra-app navigation (e.g. switching
-        tabs in a browser or files in an editor).
+        snapshot of the *previous* content onto the trail.
         """
-        app_name = visible_content.app_name
-        window_title = visible_content.window_title
-
         if self._current_app and (
             app_name != self._current_app
             or window_title != self._current_window
         ):
-            # App or window switch detected -- snapshot the previous content
             self._push_snapshot()
 
-        # Update tracking state
         self._current_app = app_name
         self._current_window = window_title
-        self._current_content = visible_content
+        self._current_subtree = subtree_xml
+        self._current_url = url
 
     def _push_snapshot(self) -> None:
         """Push a snapshot of the current (soon-to-be-previous) app."""
-        if not self._current_content:
+        if not self._current_app:
             return
 
-        text_summary = self._build_text_summary(self._current_content)
+        text_summary = self._build_text_summary(self._current_subtree)
 
-        # Deduplication: don't record consecutive entries for the same
-        # app+window combination.
         if self._trail:
             last = self._trail[-1]
             if (
                 last.app_name == self._current_app
                 and last.window_title == self._current_window
             ):
-                # Update the existing entry's timestamp and summary instead
-                # of adding a duplicate.
                 self._trail[-1] = AppSnapshot(
                     app_name=self._current_app,
                     window_title=self._current_window,
                     text_summary=text_summary,
                     timestamp=time.time(),
-                    source_url=self._current_content.url,
+                    source_url=self._current_url,
                 )
                 return
 
@@ -158,23 +100,20 @@ class ContextTrail:
             window_title=self._current_window,
             text_summary=text_summary,
             timestamp=time.time(),
-            source_url=self._current_content.url,
+            source_url=self._current_url,
         )
         self._trail.append(snapshot)
 
-    def _build_text_summary(self, content: VisibleContent) -> str:
-        """Build a truncated text summary from visible content.
-
-        Filters out UI chrome (buttons, sidebar labels, status indicators)
-        to keep cross-app context focused on substantive content.
-        """
-        if not content.text_elements:
+    def _build_text_summary(self, subtree_xml: str) -> str:
+        """Build a text summary by stripping XML tags from subtree context."""
+        if not subtree_xml:
             return ""
-        combined = "\n".join(content.text_elements)
-        combined = _filter_ui_chrome(combined)
-        if len(combined) > self._text_summary_chars:
-            combined = combined[: self._text_summary_chars]
-        return combined
+        # Strip XML tags to get plain text
+        plain = re.sub(r"<[^>]+>", " ", subtree_xml)
+        plain = " ".join(plain.split())
+        if len(plain) > self._text_summary_chars:
+            plain = plain[: self._text_summary_chars]
+        return plain
 
     # Apps whose cross-app snapshots are typically notification previews
     # or system-level UI rather than substantive content the user was reading.
@@ -249,4 +188,5 @@ class ContextTrail:
         self._trail.clear()
         self._current_app = ""
         self._current_window = ""
-        self._current_content = None
+        self._current_subtree = ""
+        self._current_url = ""
