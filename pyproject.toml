@@ -6,6 +6,7 @@ build-backend = "setuptools.backends._legacy:_Backend"
 name = "autocompleter"
 version = "0.1.0"
 description = "macOS contextual autocomplete powered by LLM"
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "pyobjc-core>=10.0",
