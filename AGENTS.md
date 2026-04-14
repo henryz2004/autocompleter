@@ -137,6 +137,7 @@ Feedback is used to compute accept-rate stats, adjust temperature, and feed rece
 - **TUI vs shell**: Claude Code-like panes inside terminals should go through `parse_tui_buffer()` so suggestions act like chat/reply rather than command completion.
 - **Subtree-first context**: current prompting relies on subtree XML near the focused element, not flat visible-text scraping.
 - **Cross-app snapshots**: `ContextTrail.record()` now stores subtree-derived summaries keyed by app/window switches rather than raw `VisibleContent`.
+- **Metadata preservation matters**: subtree XML can carry important chat metadata in `title=` / `desc=` attributes, so cross-app summary generation should preserve that signal instead of stripping everything but element bodies.
 - **Python requirement**: Python `>=3.11` per `pyproject.toml`.
 
 ## Testing
@@ -153,6 +154,7 @@ High-signal tests for behavior changes:
 
 Legacy note:
 - `tests/test_embeddings.py` still targets the older persisted-context and semantic-retrieval APIs. If you continue the subtree-only refactor, update or remove that coverage in the same change so the suite stays internally consistent.
+- If you intentionally remove semantic-context config or `ContextStore` APIs, also update any stale tests and callers in the same change rather than leaving the repo in a mixed subtree/embedding state.
 
 ## Debugging
 
