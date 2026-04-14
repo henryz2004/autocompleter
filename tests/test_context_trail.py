@@ -7,30 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from autocompleter.context_trail import AppSnapshot, ContextTrail, _filter_ui_chrome
+from autocompleter.context_trail import AppSnapshot, ContextTrail
 from autocompleter.context_store import ContextStore
-from autocompleter.input_observer import VisibleContent
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _make_visible_content(
-    app_name: str = "TestApp",
-    window_title: str = "Test Window",
-    text_elements: list[str] | None = None,
-    url: str = "",
-    app_pid: int = 1234,
-) -> VisibleContent:
-    """Create a mock VisibleContent for testing."""
-    return VisibleContent(
-        app_name=app_name,
-        app_pid=app_pid,
-        window_title=window_title,
-        text_elements=text_elements or ["Some visible text"],
-        url=url,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -57,33 +35,27 @@ def store(tmp_path):
 
 class TestRecord:
     def test_single_app_no_trail_entry(self, trail):
-        """Recording from a single app should not create any trail entries
-        because there is no app switch."""
-        content = _make_visible_content(app_name="Chrome")
-        trail.record(content)
-        trail.record(content)
-        trail.record(content)
+        """Recording from a single app should not create any trail entries."""
+        trail.record(app_name="Chrome", window_title="Docs")
+        trail.record(app_name="Chrome", window_title="Docs")
+        trail.record(app_name="Chrome", window_title="Docs")
 
         snapshots = trail.get_recent_cross_app_context("Chrome")
         assert len(snapshots) == 0
 
     def test_app_switch_creates_snapshot(self, trail):
         """Switching A -> B should create a snapshot of A."""
-        content_a = _make_visible_content(
+        trail.record(
             app_name="Chrome",
             window_title="React Docs",
-            text_elements=["useState allows you to add state"],
+            subtree_xml="<text>useState allows you to add state</text>",
         )
-        content_b = _make_visible_content(
+        trail.record(
             app_name="VS Code",
             window_title="App.tsx",
-            text_elements=["import React from 'react'"],
+            subtree_xml="<text>import React from 'react'</text>",
         )
 
-        trail.record(content_a)
-        trail.record(content_b)  # Switch: should snapshot Chrome
-
-        # From VS Code's perspective, Chrome should appear
         snapshots = trail.get_recent_cross_app_context("VS Code")
         assert len(snapshots) == 1
         assert snapshots[0].app_name == "Chrome"
@@ -92,17 +64,10 @@ class TestRecord:
 
     def test_multiple_switches(self, trail):
         """A -> B -> C -> A should create snapshots for A, B, C."""
-        apps = [
-            _make_visible_content(app_name="Chrome", text_elements=["Chrome text"]),
-            _make_visible_content(app_name="VS Code", text_elements=["VS Code text"]),
-            _make_visible_content(app_name="Slack", text_elements=["Slack text"]),
-            _make_visible_content(app_name="Chrome", text_elements=["Chrome text 2"]),
-        ]
+        for app, text in [("Chrome", "Chrome text"), ("VS Code", "VS Code text"),
+                          ("Slack", "Slack text"), ("Chrome", "Chrome text 2")]:
+            trail.record(app_name=app, window_title="w", subtree_xml=f"<t>{text}</t>")
 
-        for content in apps:
-            trail.record(content)
-
-        # From Chrome's perspective: should see VS Code and Slack
         snapshots = trail.get_recent_cross_app_context("Chrome")
         assert len(snapshots) == 2
         app_names = [s.app_name for s in snapshots]
@@ -110,65 +75,20 @@ class TestRecord:
         assert "Slack" in app_names
 
     def test_deduplication_consecutive_same_app_window(self, trail):
-        """Consecutive snapshots for the same app+window should be deduplicated.
-
-        Scenario: Chrome -> VS Code -> Chrome (same window) -> VS Code
-        This creates trail entries [Chrome, VS Code, Chrome] -- not consecutive
-        dupes, so all three are kept.
-
-        But if Chrome appears as the last entry and we try to push another
-        Chrome snapshot, the dedup fires.
-        """
-        # Test true consecutive dedup: A -> B -> A -> B should create
-        # [A, B, A] but if the second push of A matches the last entry,
-        # it updates in place instead of appending.
-        chrome = _make_visible_content(
-            app_name="Chrome",
-            window_title="Docs",
-            text_elements=["First visit"],
-        )
-        vscode = _make_visible_content(app_name="VS Code", text_elements=["code"])
-        chrome_2 = _make_visible_content(
-            app_name="Chrome",
-            window_title="Docs",
-            text_elements=["Second visit"],
-        )
-
-        # A -> B: trail = [Chrome(Docs)]
-        trail.record(chrome)
-        trail.record(vscode)
-
-        # B -> A: trail = [Chrome(Docs), VS Code]
-        trail.record(chrome_2)
-
-        # A -> B again: tries to push Chrome(Docs) -- but last entry is VS Code,
-        # so NOT consecutive. Trail = [Chrome(Docs), VS Code, Chrome(Docs)]
-        trail.record(vscode)
+        """Non-consecutive same app+window entries are NOT deduplicated."""
+        trail.record(app_name="Chrome", window_title="Docs", subtree_xml="<t>First visit</t>")
+        trail.record(app_name="VS Code", window_title="w", subtree_xml="<t>code</t>")
+        trail.record(app_name="Chrome", window_title="Docs", subtree_xml="<t>Second visit</t>")
+        trail.record(app_name="VS Code", window_title="w", subtree_xml="<t>code</t>")
 
         all_snapshots = trail.get_recent_cross_app_context(
             "NONE", max_age_seconds=9999, max_entries=20,
         )
-        # Non-consecutive: both Chrome entries should exist
         chrome_entries = [s for s in all_snapshots if s.app_name == "Chrome"]
         assert len(chrome_entries) == 2
 
     def test_deduplication_truly_consecutive(self, trail):
-        """When the last trail entry matches app+window, it should be updated
-        in place rather than creating a duplicate.
-
-        This happens when: A -> B -> A -> B, and before the second A->B switch,
-        the last trail entry is already A (from the first A->B switch). But
-        since we interleave with B, the second snapshot of A won't be consecutive.
-
-        A true consecutive scenario requires: We push A, then try to push A again
-        without any intervening entries. This happens when record() is called with
-        the same previous-app state -- which requires manually constructing the
-        scenario.
-        """
-        # Directly manipulate to test the dedup path
-        from autocompleter.context_trail import AppSnapshot
-        import time
-
+        """Consecutive snapshots for same app+window are updated in place."""
         trail._trail.append(AppSnapshot(
             app_name="Chrome",
             window_title="Docs",
@@ -177,15 +97,10 @@ class TestRecord:
         ))
         trail._current_app = "Chrome"
         trail._current_window = "Docs"
-        trail._current_content = _make_visible_content(
-            app_name="Chrome",
-            window_title="Docs",
-            text_elements=["updated text"],
-        )
+        trail._current_subtree = "<t>updated text</t>"
+        trail._current_url = ""
 
-        # Now simulate switching to VS Code -- this would push a Chrome snapshot,
-        # but since the last trail entry is already Chrome+Docs, it should dedup
-        trail.record(_make_visible_content(app_name="VS Code", text_elements=["code"]))
+        trail.record(app_name="VS Code", window_title="w", subtree_xml="<t>code</t>")
 
         all_snapshots = trail.get_recent_cross_app_context(
             "NONE", max_age_seconds=9999, max_entries=20,
@@ -201,51 +116,37 @@ class TestRecord:
 
 class TestGetRecentCrossAppContext:
     def test_excludes_current_app(self, trail):
-        """Snapshots from the current app should be excluded."""
-        trail.record(_make_visible_content(app_name="Chrome", text_elements=["chrome"]))
-        trail.record(_make_visible_content(app_name="VS Code", text_elements=["code"]))
+        trail.record(app_name="Chrome", window_title="w", subtree_xml="<t>chrome</t>")
+        trail.record(app_name="VS Code", window_title="w", subtree_xml="<t>code</t>")
 
         snapshots = trail.get_recent_cross_app_context("Chrome")
         for s in snapshots:
             assert s.app_name != "Chrome"
 
     def test_respects_max_age(self, trail):
-        """Old entries should be excluded based on max_age_seconds."""
-        trail.record(_make_visible_content(app_name="Chrome", text_elements=["old content from Chrome"]))
-        trail.record(_make_visible_content(app_name="VS Code", text_elements=["code from VS Code"]))
+        trail.record(app_name="Chrome", window_title="w", subtree_xml="<t>old</t>")
+        trail.record(app_name="VS Code", window_title="w", subtree_xml="<t>code</t>")
 
-        # Manually age the Chrome snapshot
         if trail._trail:
             trail._trail[0] = AppSnapshot(
                 app_name=trail._trail[0].app_name,
                 window_title=trail._trail[0].window_title,
                 text_summary=trail._trail[0].text_summary,
-                timestamp=time.time() - 120,  # 2 minutes ago
+                timestamp=time.time() - 120,
                 source_url=trail._trail[0].source_url,
             )
 
-        # With max_age=60, the Chrome entry should be excluded
-        snapshots = trail.get_recent_cross_app_context(
-            "VS Code", max_age_seconds=60,
-        )
+        snapshots = trail.get_recent_cross_app_context("VS Code", max_age_seconds=60)
         assert len(snapshots) == 0
 
-        # With max_age=300, it should be included
-        snapshots = trail.get_recent_cross_app_context(
-            "VS Code", max_age_seconds=300,
-        )
+        snapshots = trail.get_recent_cross_app_context("VS Code", max_age_seconds=300)
         assert len(snapshots) == 1
 
     def test_respects_max_entries(self, trail):
-        """Should return at most max_entries snapshots."""
-        # Create many app switches
         apps = ["Chrome", "VS Code", "Slack", "Terminal", "Safari"]
-        for i, app in enumerate(apps):
-            trail.record(_make_visible_content(
-                app_name=app, text_elements=[f"text from {app}"],
-            ))
-        # One more to push the last app's snapshot
-        trail.record(_make_visible_content(app_name="Notes", text_elements=["notes"]))
+        for app in apps:
+            trail.record(app_name=app, window_title="w", subtree_xml=f"<t>text from {app}</t>")
+        trail.record(app_name="Notes", window_title="w", subtree_xml="<t>notes</t>")
 
         snapshots = trail.get_recent_cross_app_context(
             "Notes", max_age_seconds=9999, max_entries=2,
@@ -253,16 +154,12 @@ class TestGetRecentCrossAppContext:
         assert len(snapshots) == 2
 
     def test_returns_most_recent_first(self, trail):
-        """Snapshots should be ordered newest first."""
-        trail.record(_make_visible_content(app_name="Chrome", text_elements=["first"]))
-        trail.record(_make_visible_content(app_name="VS Code", text_elements=["second"]))
-        trail.record(_make_visible_content(app_name="Slack", text_elements=["third"]))
-        trail.record(_make_visible_content(app_name="Terminal", text_elements=["fourth"]))
+        for app in ["Chrome", "VS Code", "Slack", "Terminal"]:
+            trail.record(app_name=app, window_title="w", subtree_xml=f"<t>{app}</t>")
 
         snapshots = trail.get_recent_cross_app_context(
             "Terminal", max_age_seconds=9999, max_entries=10,
         )
-        # Should be Slack, VS Code, Chrome (most recent switch first)
         assert len(snapshots) == 3
         assert snapshots[0].app_name == "Slack"
         assert snapshots[1].app_name == "VS Code"
@@ -306,11 +203,9 @@ class TestFormatCrossAppContext:
         ]
         result = ContextTrail.format_cross_app_context(snapshots)
         assert "- Terminal: $ python script.py" in result
-        # Should NOT have empty quotes
         assert '("")' not in result
 
     def test_format_truncates_long_summary(self):
-        """Summaries longer than 200 chars should be truncated in format output."""
         long_text = "x" * 300
         snapshots = [
             AppSnapshot(
@@ -321,7 +216,6 @@ class TestFormatCrossAppContext:
             ),
         ]
         result = ContextTrail.format_cross_app_context(snapshots)
-        # The formatted line should contain "..." and not the full 300 chars
         assert "..." in result
 
 
@@ -331,43 +225,25 @@ class TestFormatCrossAppContext:
 
 class TestTrailLimits:
     def test_maxlen_evicts_oldest(self):
-        """When trail is full, oldest entries should be evicted."""
         trail = ContextTrail(maxlen=3)
+        for app in ["A", "B", "C", "D", "E", "F"]:
+            trail.record(app_name=app, window_title="w", subtree_xml=f"<t>{app}</t>")
 
-        # Create 5 app switches: A -> B -> C -> D -> E -> F
-        apps = ["A", "B", "C", "D", "E", "F"]
-        for app in apps:
-            trail.record(_make_visible_content(
-                app_name=app, text_elements=[f"text from {app}"],
-            ))
-
-        # Trail should contain at most 3 entries
         all_snapshots = trail.get_recent_cross_app_context(
             "F", max_age_seconds=9999, max_entries=20,
         )
         assert len(all_snapshots) <= 3
-
-        # Oldest entries (A, B) should have been evicted
         names = [s.app_name for s in all_snapshots]
         assert "A" not in names
         assert "B" not in names
 
     def test_text_summary_truncation(self):
-        """Long visible content should be capped at text_summary_chars."""
         trail = ContextTrail(text_summary_chars=50)
+        long_xml = "<text>" + "a" * 200 + "</text>"
+        trail.record(app_name="Chrome", window_title="w", subtree_xml=long_xml)
+        trail.record(app_name="VS Code", window_title="w", subtree_xml="<t>code</t>")
 
-        long_text = "a" * 200
-        content_a = _make_visible_content(
-            app_name="Chrome", text_elements=[long_text],
-        )
-        content_b = _make_visible_content(app_name="VS Code", text_elements=["code"])
-
-        trail.record(content_a)
-        trail.record(content_b)  # triggers snapshot of Chrome
-
-        snapshots = trail.get_recent_cross_app_context(
-            "VS Code", max_age_seconds=9999,
-        )
+        snapshots = trail.get_recent_cross_app_context("VS Code", max_age_seconds=9999)
         assert len(snapshots) == 1
         assert len(snapshots[0].text_summary) == 50
 
@@ -378,8 +254,8 @@ class TestTrailLimits:
 
 class TestClear:
     def test_clear_resets_trail(self, trail):
-        trail.record(_make_visible_content(app_name="Chrome"))
-        trail.record(_make_visible_content(app_name="VS Code"))
+        trail.record(app_name="Chrome", window_title="w")
+        trail.record(app_name="VS Code", window_title="w")
         trail.clear()
 
         assert trail.get_recent_cross_app_context("VS Code") == []
@@ -392,7 +268,6 @@ class TestClear:
 
 class TestContextStoreIntegration:
     def test_continuation_context_includes_cross_app(self, store):
-        """Cross-app context should appear in the assembled continuation context."""
         cross_app = (
             "[Recent activity from other apps]\n"
             '- Chrome ("React Docs"): useState allows you to add state'
@@ -410,26 +285,23 @@ class TestContextStoreIntegration:
         assert "const [count, setCount] =" in context
 
     def test_continuation_context_cross_app_position(self, store):
-        """Cross-app context should appear between metadata and visible text."""
         cross_app = "[Recent activity from other apps]\n- Chrome: docs"
         context = store.get_continuation_context(
             before_cursor="typing here",
             after_cursor="",
             source_app="VS Code",
             window_title="file.py",
-            visible_text=["def hello():"],
+            subtree_context="<text>def hello():</text>",
             cross_app_context=cross_app,
         )
-        # Metadata should come first
         meta_idx = context.index("App: VS Code")
         cross_idx = context.index("[Recent activity from other apps]")
-        visible_idx = context.index("Visible context:")
+        nearby_idx = context.index("Nearby content:")
         cursor_idx = context.index("Text before cursor:")
 
-        assert meta_idx < cross_idx < visible_idx < cursor_idx
+        assert meta_idx < cross_idx < nearby_idx < cursor_idx
 
     def test_continuation_context_empty_cross_app(self, store):
-        """Empty cross_app_context should not add any section."""
         context = store.get_continuation_context(
             before_cursor="test",
             after_cursor="",
@@ -439,7 +311,6 @@ class TestContextStoreIntegration:
         assert "[Recent activity from other apps]" not in context
 
     def test_reply_context_includes_cross_app(self, store):
-        """Cross-app context should appear in the assembled reply context."""
         cross_app = (
             "[Recent activity from other apps]\n"
             '- VS Code ("main.py"): def process_data(input):'
@@ -458,7 +329,6 @@ class TestContextStoreIntegration:
         assert "Alice:" in context
 
     def test_reply_context_empty_cross_app(self, store):
-        """Empty cross_app_context should not add any section."""
         context = store.get_reply_context(
             conversation_turns=[],
             source_app="Slack",
@@ -467,7 +337,6 @@ class TestContextStoreIntegration:
         assert "[Recent activity from other apps]" not in context
 
     def test_reply_context_cross_app_position(self, store):
-        """Cross-app context should appear between metadata and conversation."""
         cross_app = "[Recent activity from other apps]\n- Chrome: docs"
         context = store.get_reply_context(
             conversation_turns=[
@@ -490,27 +359,23 @@ class TestContextStoreIntegration:
 
 class TestEndToEnd:
     def test_trail_to_context_store_pipeline(self, store):
-        """Full pipeline: record app switches, format, pass to context assembly."""
         trail = ContextTrail()
 
-        # Simulate: user reads docs in Chrome, then switches to VS Code
-        trail.record(_make_visible_content(
+        trail.record(
             app_name="Chrome",
             window_title="React Hooks Docs",
-            text_elements=["useState hook lets you add state to function components"],
+            subtree_xml="<text>useState hook lets you add state to function components</text>",
             url="https://react.dev/hooks",
-        ))
-        trail.record(_make_visible_content(
+        )
+        trail.record(
             app_name="VS Code",
             window_title="App.tsx",
-            text_elements=["import React from 'react'"],
-        ))
+            subtree_xml="<text>import React from 'react'</text>",
+        )
 
-        # Get cross-app context from trail
         snapshots = trail.get_recent_cross_app_context("VS Code")
         cross_app_str = ContextTrail.format_cross_app_context(snapshots)
 
-        # Pass to context_store
         context = store.get_continuation_context(
             before_cursor="const [items, setItems] = ",
             after_cursor="",
@@ -519,107 +384,37 @@ class TestEndToEnd:
             cross_app_context=cross_app_str,
         )
 
-        # Verify the Chrome docs context made it through
         assert "React Hooks Docs" in context
         assert "useState" in context
         assert "const [items, setItems] =" in context
 
 
 # ---------------------------------------------------------------------------
-# UI chrome filtering tests (Fix 3)
+# _build_text_summary tests
 # ---------------------------------------------------------------------------
 
-class TestUIChromFiltering:
-    def test_filters_discord_ui_elements(self):
-        """Known Discord UI strings should be stripped."""
-        text = "Send GIF\nUnmute\nDo Not Disturb\nHello from Alice"
-        result = _filter_ui_chrome(text)
-        assert "Send GIF" not in result
-        assert "Unmute" not in result
-        assert "Do Not Disturb" not in result
-        assert "Hello from Alice" in result
-
-    def test_preserves_real_content(self):
-        """Substantive messages and content should be preserved."""
-        text = "Hey, how's the project going?\nI just pushed the latest changes.\nLooks great!"
-        result = _filter_ui_chrome(text)
-        assert "project going" in result
-        assert "pushed the latest changes" in result
-        assert "Looks great!" in result
-
-    def test_filters_case_insensitive(self):
-        """Filtering should be case-insensitive."""
-        text = "SEND GIF\nunmute\nReal message here"
-        result = _filter_ui_chrome(text)
-        assert "SEND GIF" not in result
-        assert "unmute" not in result
-        assert "Real message here" in result
-
-    def test_filters_substring_matches(self):
-        """Lines containing known UI chrome substrings should be filtered."""
-        text = "Toggle icon, button\n3 unread messages\nActual chat content"
-        result = _filter_ui_chrome(text)
-        assert "icon, button" not in result
-        assert "unread message" not in result
-        assert "Actual chat content" in result
-
-    def test_filters_very_short_lines(self):
-        """Lines with 3 or fewer chars (icons, separators) should be filtered."""
-        text = "Hi\n|\n---\nA real message"
-        result = _filter_ui_chrome(text)
-        # "Hi" is 2 chars, "|" is 1 char, "---" is 3 chars
-        assert "A real message" in result
-
-    def test_empty_input(self):
-        """Empty input should return empty output."""
-        result = _filter_ui_chrome("")
-        assert result == ""
-
-    def test_all_chrome_filtered_returns_empty(self):
-        """If all lines are chrome, result should be empty."""
-        text = "Send\nMute\nEmoji"
-        result = _filter_ui_chrome(text)
-        assert result.strip() == ""
-
-    def test_text_summary_filters_chrome(self):
-        """ContextTrail._build_text_summary should filter UI chrome."""
+class TestBuildTextSummary:
+    def test_strips_xml_tags(self):
         trail = ContextTrail()
-        content = _make_visible_content(
-            app_name="Discord",
-            text_elements=[
-                "Send GIF",
-                "Unmute",
-                "Hey Alice, how's the project?",
-                "Emoji",
-            ],
-        )
-        # Manually call _build_text_summary
-        summary = trail._build_text_summary(content)
-        assert "Send GIF" not in summary
-        assert "Unmute" not in summary
-        assert "Emoji" not in summary
-        assert "Hey Alice" in summary
+        summary = trail._build_text_summary('<text role="heading">Hello World</text>')
+        assert "<" not in summary
+        assert "Hello World" in summary
+
+    def test_empty_xml(self):
+        trail = ContextTrail()
+        assert trail._build_text_summary("") == ""
 
 
 # ---------------------------------------------------------------------------
-# Noisy cross-app source filtering tests (Fix 4)
+# Noisy cross-app source filtering tests
 # ---------------------------------------------------------------------------
 
 class TestNoisyCrossAppFiltering:
     def test_skips_notification_center(self):
-        """Notification Center should be excluded from cross-app context."""
         trail = ContextTrail()
-        # Chrome -> Notification Center -> VS Code
-        trail.record(_make_visible_content(
-            app_name="Chrome", text_elements=["React docs"],
-        ))
-        trail.record(_make_visible_content(
-            app_name="Notification Center",
-            text_elements=["New message from Bob"],
-        ))
-        trail.record(_make_visible_content(
-            app_name="VS Code", text_elements=["code"],
-        ))
+        trail.record(app_name="Chrome", window_title="w", subtree_xml="<t>React docs</t>")
+        trail.record(app_name="Notification Center", window_title="w", subtree_xml="<t>New message</t>")
+        trail.record(app_name="VS Code", window_title="w", subtree_xml="<t>code</t>")
 
         snapshots = trail.get_recent_cross_app_context("VS Code")
         app_names = [s.app_name for s in snapshots]
@@ -627,49 +422,32 @@ class TestNoisyCrossAppFiltering:
         assert "Chrome" in app_names
 
     def test_skips_system_ui_server(self):
-        """SystemUIServer should be excluded."""
         trail = ContextTrail()
-        trail.record(_make_visible_content(
-            app_name="Chrome", text_elements=["docs"],
-        ))
-        trail.record(_make_visible_content(
-            app_name="SystemUIServer", text_elements=["Battery 85%"],
-        ))
-        trail.record(_make_visible_content(
-            app_name="VS Code", text_elements=["code"],
-        ))
+        trail.record(app_name="Chrome", window_title="w", subtree_xml="<t>docs</t>")
+        trail.record(app_name="SystemUIServer", window_title="w", subtree_xml="<t>Battery</t>")
+        trail.record(app_name="VS Code", window_title="w", subtree_xml="<t>code</t>")
 
         snapshots = trail.get_recent_cross_app_context("VS Code")
         app_names = [s.app_name for s in snapshots]
         assert "SystemUIServer" not in app_names
 
     def test_skips_empty_summaries(self):
-        """Snapshots with empty text summaries after filtering should be skipped."""
         trail = ContextTrail()
-        # Create a snapshot that will be all UI chrome
-        trail.record(_make_visible_content(
-            app_name="Discord",
-            text_elements=["Send GIF", "Unmute", "Mute"],
-        ))
-        trail.record(_make_visible_content(
-            app_name="VS Code", text_elements=["code"],
-        ))
+        trail.record(app_name="Discord", window_title="w", subtree_xml="")
+        trail.record(app_name="VS Code", window_title="w", subtree_xml="<t>code</t>")
 
         snapshots = trail.get_recent_cross_app_context("VS Code")
-        # Discord snapshot should be filtered out (empty after chrome removal)
         for s in snapshots:
             assert s.text_summary.strip() != ""
 
     def test_allows_substantive_apps(self):
-        """Real apps like Chrome, Safari, VS Code should pass through."""
         trail = ContextTrail()
-        trail.record(_make_visible_content(
+        trail.record(
             app_name="Safari",
-            text_elements=["Python documentation: list comprehensions"],
-        ))
-        trail.record(_make_visible_content(
-            app_name="VS Code", text_elements=["code"],
-        ))
+            window_title="w",
+            subtree_xml="<t>Python documentation: list comprehensions</t>",
+        )
+        trail.record(app_name="VS Code", window_title="w", subtree_xml="<t>code</t>")
 
         snapshots = trail.get_recent_cross_app_context("VS Code")
         assert len(snapshots) == 1

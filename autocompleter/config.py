@@ -46,13 +46,7 @@ class Config:
     followup_after_accept_enabled: bool = True
 
     # Context store
-    max_context_age_hours: int = 72
-    max_context_entries: int = 5000
     context_window_chars: int = 4000
-
-    # Semantic context (embeddings)
-    embedding_provider: str = "tfidf"  # "tfidf", "anthropic", or "openai"
-    use_semantic_context: bool = True
 
     # Overlay
     overlay_width: int = 500

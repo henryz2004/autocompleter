@@ -12,7 +12,6 @@ import pytest
 # these are guarded by try/except, so the import should succeed.
 import autocompleter.app as app_module
 from autocompleter.app import Autocompleter
-from autocompleter.input_observer import VisibleContent
 from autocompleter.trigger_dump import TriggerSnapshot
 from autocompleter.input_observer import FocusedElement
 
@@ -65,155 +64,12 @@ class TestPrepareInjectedText:
         assert result == "hello there"
 
 
-# ---------------------------------------------------------------------------
-# _hash_content tests
-# ---------------------------------------------------------------------------
-
-class TestHashContent:
-    def test_deterministic(self):
-        """Same input always produces the same hash."""
-        h1 = Autocompleter._hash_content("hello world")
-        h2 = Autocompleter._hash_content("hello world")
-        assert h1 == h2
-
-    def test_different_inputs_different_hashes(self):
-        h1 = Autocompleter._hash_content("hello")
-        h2 = Autocompleter._hash_content("world")
-        assert h1 != h2
-
-    def test_unicode(self):
-        """Unicode text should hash without errors."""
-        h = Autocompleter._hash_content("Bonjour le monde")
-        assert isinstance(h, str)
-        assert len(h) == 32  # MD5 hex digest length
-
-
 class _Focused:
     def __init__(self, app_name: str, before_cursor: str = "", placeholder_detected: bool = False):
         self.app_name = app_name
         self.before_cursor = before_cursor
         self.placeholder_detected = placeholder_detected
 
-
-class TestVisibleRefreshDecision:
-    def test_should_revalidate_cached_visible_content_for_codex(self):
-        assert Autocompleter._should_revalidate_cached_visible_content(
-            "Codex",
-            {"visible_source": "cache", "visible_cache_age_ms": 300.0},
-            conversation_turns=None,
-        )
-
-    def test_should_not_revalidate_non_codex_cache(self):
-        assert not Autocompleter._should_revalidate_cached_visible_content(
-            "Slack",
-            {"visible_source": "cache", "visible_cache_age_ms": 300.0},
-            conversation_turns=None,
-        )
-
-    def test_should_not_revalidate_fresh_source(self):
-        assert not Autocompleter._should_revalidate_cached_visible_content(
-            "Codex",
-            {"visible_source": "fresh", "visible_cache_age_ms": 300.0},
-            conversation_turns=None,
-        )
-
-
-class TestWorkerVisibleRefresh:
-    def test_worker_refresh_swaps_in_fresh_visible_content(self):
-        app = object.__new__(Autocompleter)
-        app.observer = Mock()
-        app._last_trigger_args = {}
-
-        cached = VisibleContent(
-            app_name="Codex",
-            app_pid=1,
-            window_title="Codex",
-            text_elements=["Old thread context", "Older message"],
-            url="",
-        )
-        fresh = VisibleContent(
-            app_name="Codex",
-            app_pid=1,
-            window_title="Codex",
-            text_elements=[
-                "New thread context from the current Codex chat",
-                "Latest visible message in the current thread",
-            ],
-            url="",
-        )
-        app._last_visible_content = cached
-        app._last_visible_content_time = 0.0
-        app.observer.get_visible_content.return_value = fresh
-
-        snapshot = TriggerSnapshot()
-        focused = _Focused("Codex")
-        refreshed, meta = app._maybe_refresh_visible_content_for_worker(
-            focused=focused,
-            window_title="Codex",
-            visible_text_elements=list(cached.text_elements),
-            visible_meta={"visible_source": "cache", "visible_cache_age_ms": 300.0},
-            conversation_turns=None,
-            snapshot=snapshot,
-        )
-
-        assert refreshed == fresh.text_elements
-        assert meta["visible_source"] == "worker_refresh"
-        assert meta["visible_content_changed"] is True
-        assert snapshot.visible_source == "worker_refresh"
-        assert snapshot.visible_text_elements == fresh.text_elements
-
-    def test_worker_refresh_keeps_cached_visible_content_when_unchanged(self):
-        app = object.__new__(Autocompleter)
-        app.observer = Mock()
-        app._last_trigger_args = {}
-
-        cached = VisibleContent(
-            app_name="Codex",
-            app_pid=1,
-            window_title="Codex",
-            text_elements=["Same thread context", "Same message"],
-            url="",
-        )
-        app._last_visible_content = cached
-        app._last_visible_content_time = 0.0
-        app.observer.get_visible_content.return_value = cached
-
-        focused = _Focused("Codex")
-        refreshed, meta = app._maybe_refresh_visible_content_for_worker(
-            focused=focused,
-            window_title="Codex",
-            visible_text_elements=list(cached.text_elements),
-            visible_meta={"visible_source": "cache", "visible_cache_age_ms": 300.0},
-            conversation_turns=None,
-        )
-
-        assert refreshed == cached.text_elements
-        assert meta["visible_source"] == "cache"
-        assert meta["visible_content_changed"] is False
-
-
-class TestReplyVisibleFiltering:
-    def test_filters_recent_user_prompt_from_visible_text(self):
-        app = object.__new__(Autocompleter)
-        app.context_store = Mock()
-        app.context_store.get_by_source.return_value = [
-            Mock(entry_type="user_input", content="just invoked it again, can you check the logs now?"),
-            Mock(entry_type="visible_text", content="other"),
-        ]
-        focused = _Focused("Codex", before_cursor="", placeholder_detected=True)
-
-        result = app._filter_recent_user_inputs_from_visible_text(
-            "Codex",
-            [
-                "just invoked it again, can you check the logs now?",
-                "let's fix. also make sure the testing logic exactly mirrors the live logic",
-            ],
-            focused,
-        )
-
-        assert result == [
-            "let's fix. also make sure the testing logic exactly mirrors the live logic",
-        ]
 
 class TestPostAcceptFollowup:
     def test_build_post_accept_focused_state_empty_draft(self):
@@ -298,10 +154,8 @@ class TestPostAcceptFollowup:
             "window_title": "Codex",
             "source_url": "",
             "conversation_turns": [{"speaker": "User", "text": "hi"}],
-            "visible_text_elements": ["visible context"],
             "cross_app_context": "[Recent activity from other apps]\n- Terminal: ...",
             "subtree_context": "<context><TextArea>old</TextArea></context>",
-            "visible_meta": {"visible_source": "cache"},
             "trigger_type": "manual",
         }
 
@@ -314,7 +168,6 @@ class TestPostAcceptFollowup:
         assert overlay_calls == [("Generating...", 50.0, 80.0, 20.0)]
         assert app._last_trigger_args["focused"] is not focused
         assert app._last_trigger_args["focused"].before_cursor == ""
-        assert app._last_trigger_args["visible_text_elements"] == ["visible context"]
         assert app._last_trigger_args["cross_app_context"].startswith("[Recent activity")
         assert app._last_trigger_args["trigger_type"] == "post_accept"
         # Conversation turns should include the committed text as a new "You" turn
@@ -330,10 +183,9 @@ class TestPostAcceptFollowup:
         # Generation thread also gets updated conversation turns
         assert len(captured["args"][7]) == 2
         assert captured["args"][7][1].speaker == "You"
-        assert captured["args"][8] == ["visible context"]
-        assert captured["args"][10].startswith("[Recent activity")
-        assert captured["args"][12] == "<context><TextArea>old</TextArea></context>"
-        assert captured["args"][16] == "post_accept"
+        assert captured["args"][9].startswith("[Recent activity")
+        assert captured["args"][11] == "<context><TextArea>old</TextArea></context>"
+        assert captured["args"][14] == "post_accept"
 
     def test_followup_no_conversation_turns_stays_empty(self, monkeypatch):
         """When no conversation turns exist (non-chat app), list stays empty."""
@@ -382,10 +234,8 @@ class TestPostAcceptFollowup:
             "window_title": "Untitled",
             "source_url": "",
             "conversation_turns": [],
-            "visible_text_elements": ["doc content"],
             "cross_app_context": "",
             "subtree_context": None,
-            "visible_meta": None,
             "trigger_type": "manual",
         }
 
@@ -439,10 +289,8 @@ class TestRegenerateDiversity:
             "window_title": "Codex",
             "source_url": "",
             "conversation_turns": None,
-            "visible_text_elements": ["visible context"],
             "cross_app_context": "",
             "subtree_context": "<context></context>",
-            "visible_meta": {"visible_source": "cache"},
             "trigger_type": "manual",
         }
         app._current_suggestions = [SimpleNamespace(text="old one"), SimpleNamespace(text="old two")]
@@ -453,11 +301,11 @@ class TestRegenerateDiversity:
         app._capture_live_trigger_context = lambda focused, trigger_type: (
             app_module.AutocompleteMode.CONTINUATION,
             10.0, 20.0, 20.0,
-            "Codex", "", None, ["visible"], "", "<context></context>", {"visible_source": "fresh"},
+            "Codex", "", None, "", "<context></context>",
         )
 
         assert app._on_regenerate() is True
         assert captured["kwargs"]["temperature_boost"] == 0.5
-        assert captured["args"][11] == "snapshot"
+        assert captured["args"][10] == "snapshot"
         assert captured["snapshot_kwargs"]["trigger_type"] == "regenerate"
         assert captured["snapshot_kwargs"]["generation_id"] == 1

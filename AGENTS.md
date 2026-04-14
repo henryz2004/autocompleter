@@ -43,7 +43,7 @@ python dump_pipeline.py --both-modes
 
 ### Data flow
 
-Hotkey or auto-trigger -> `app.py` captures focused element + visible content -> terminal/TUI inputs are normalized via `shell_parser.py` -> `context_store.py` assembles mode-specific context using metadata, cross-app trail, live visible text, subtree XML, semantic retrieval, and optional memory -> `suggestion_engine.py` streams JSON suggestions from the configured LLM with fallback escalation -> `overlay.py` renders suggestions incrementally -> `text_injector.py` injects accepted text via AX/CDP/clipboard/keystrokes.
+Hotkey or auto-trigger -> `app.py` captures the focused element, conversation metadata, and subtree XML near the caret -> terminal/TUI inputs are normalized via `shell_parser.py` when the focused app is a terminal -> `context_store.py` assembles mode-specific context from metadata, cross-app trail, subtree XML, conversation turns, and optional memory -> `suggestion_engine.py` streams JSON suggestions from the configured LLM with fallback escalation -> `overlay.py` renders suggestions incrementally -> `text_injector.py` injects accepted text via AX/CDP/clipboard/keystrokes.
 
 ### Threading model
 
@@ -79,9 +79,10 @@ Shell apps also switch to shell-specific prompts. Terminal buffers can be routed
 1. **Metadata**: app name, window title, URL
 2. **Cross-app trail**: recent app/window snapshots from `context_trail.py`
 3. **Long-term memory**: optional mem0-backed facts/style hints from `memory.py`
-4. **Live local context**: conversation turns, subtree XML from `subtree_context.py`, visible text, or DB fallback
-5. **Semantic retrieval**: optional embeddings lookup from recent context entries
-6. **Cursor/draft state**: `before_cursor`, `after_cursor`, or parsed shell command state
+4. **Live local context**: conversation turns and subtree XML from `subtree_context.py`
+5. **Cursor/draft state**: `before_cursor`, `after_cursor`, or parsed shell command state
+
+`context_store.py` no longer persists flat visible-text history for prompt assembly. The SQLite DB is now primarily for `suggestion_feedback`; cross-app context is held in-memory by `context_trail.py`.
 
 ### Conversation extraction
 
@@ -101,8 +102,9 @@ Browser-hosted chat UIs are dispatched by window title keywords (`Gemini`, `Chat
 `input_observer.py` handles:
 - Focused element capture
 - Placeholder detection across `AXPlaceholderValue`, `AXNumberOfCharacters`, cursor-at-zero heuristics, and app-specific prefixes
-- Visible text extraction from AX trees
 - Conversation extraction caching
+- Browser URL lookup
+- Subtree XML extraction via `get_subtree_context()`
 
 `AXWebArea` and `AXGroup` can be editable or read-only; `app.py` explicitly filters ambiguous empty cases before triggering.
 
@@ -118,10 +120,11 @@ When placeholder text is baked into the field, AX injection is skipped so the ap
 
 ### Persistence and feedback
 
-- `context_store.py`: SQLite context entries plus `suggestion_feedback`
+- `context_store.py`: SQLite `suggestion_feedback` plus context string assembly helpers
+- `context_trail.py`: in-memory rolling snapshots of recently visited apps/windows
 - `latency_tracker.py`: per-trigger latency breakdowns persisted in `latency_metrics`
 - `memory.py`: optional mem0 + FAISS long-term memory store
-- `trigger_dump.py`: optional per-trigger JSON dumps compatible with fixture tooling
+- `trigger_dump.py`: optional per-trigger JSON dumps of AX/context/request state
 
 Feedback is used to compute accept-rate stats, adjust temperature, and feed recently dismissed patterns back into prompts as negative examples.
 
@@ -132,19 +135,24 @@ Feedback is used to compute accept-rate stats, adjust temperature, and feed rece
 - **Dynamic polling**: observer poll interval decays from 0.5s toward 4.0s when idle and resets on activity.
 - **SQLite thread safety**: both context and latency stores use per-thread `sqlite3` connections with WAL mode.
 - **TUI vs shell**: Claude Code-like panes inside terminals should go through `parse_tui_buffer()` so suggestions act like chat/reply rather than command completion.
-- **Context freshness**: visible text from the live window is preferred over DB history; DB content is fallback only.
+- **Subtree-first context**: current prompting relies on subtree XML near the focused element, not flat visible-text scraping.
+- **Cross-app snapshots**: `ContextTrail.record()` now stores subtree-derived summaries keyed by app/window switches rather than raw `VisibleContent`.
 - **Python requirement**: Python `>=3.11` per `pyproject.toml`.
 
 ## Testing
 
 High-signal tests for behavior changes:
 - `tests/test_e2e_pipeline.py`: end-to-end AX fixture coverage across extraction, context assembly, and mode detection
+- `tests/test_subtree_context.py`: subtree XML extraction, pruning, and serialization behavior
 - `tests/test_streaming.py`: streaming JSON parsing, fallback behavior, and error handling
 - `tests/test_conversation_extractors.py`, `tests/test_extractor_regression.py`, `tests/test_whatsapp_extractor.py`: extractor regressions
 - `tests/test_text_injector.py`, `tests/test_cdp_injector.py`: injection behavior
-- `tests/test_context_store.py`, `tests/test_memory.py`, `tests/test_context_trail.py`: context assembly and retrieval
+- `tests/test_context_store.py`, `tests/test_memory.py`, `tests/test_context_trail.py`: context assembly, trail formatting, and retrieval
 - `tests/test_shell_parser.py`: terminal and Claude Code TUI parsing
 - `tests/test_latency_tracker.py`: timing persistence and reporting
+
+Legacy note:
+- `tests/test_embeddings.py` still targets the older persisted-context and semantic-retrieval APIs. If you continue the subtree-only refactor, update or remove that coverage in the same change so the suite stays internally consistent.
 
 ## Debugging
 

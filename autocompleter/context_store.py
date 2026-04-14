@@ -1,88 +1,23 @@
 """Persistent context store backed by SQLite.
 
-Accumulates text content observed through the accessibility API over time.
-Indexes by source (app, URL if available, timestamp). Provides sliced context
-to the suggestion engine: recent observations + relevant historical context.
+Stores suggestion feedback (accepts/dismisses) for temperature adjustment.
+Provides context assembly for the suggestion engine using structured subtree
+XML from the accessibility tree — no flat text storage.
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import re
 import sqlite3
 import threading
 import time
-from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .embeddings import EmbeddingProvider
     from .shell_parser import ParsedTerminalBuffer
 
 logger = logging.getLogger(__name__)
-
-
-def _xmlish_text(text: str) -> str:
-    stripped = re.sub(r"<[^>]+>", " ", text)
-    return " ".join(stripped.split())
-
-
-def _score_subtree_signal(subtree_context: str) -> tuple[int, int]:
-    """Return (meaningful_line_count, total_chars) for subtree XML."""
-    meaningful = 0
-    total_chars = 0
-    for raw_line in subtree_context.splitlines():
-        line = raw_line.strip()
-        if not line or 'focused="true"' in line:
-            continue
-        text = _xmlish_text(line)
-        if len(text) < 20:
-            continue
-        meaningful += 1
-        total_chars += len(text)
-    return meaningful, total_chars
-
-
-def _score_visible_signal(visible_text: list[str] | None) -> tuple[int, int]:
-    """Return (meaningful_item_count, total_chars) for live visible text."""
-    if not visible_text:
-        return 0, 0
-    meaningful = 0
-    total_chars = 0
-    for item in visible_text:
-        text = " ".join(item.split())
-        if len(text) < 20:
-            continue
-        meaningful += 1
-        total_chars += len(text)
-    return meaningful, total_chars
-
-
-def _prefer_visible_text_over_subtree(
-    subtree_context: str | None,
-    visible_text: list[str] | None,
-) -> bool:
-    """Prefer broader live visible text when subtree XML is clearly low-signal."""
-    if not subtree_context or not visible_text:
-        return False
-    subtree_lines, subtree_chars = _score_subtree_signal(subtree_context)
-    visible_lines, visible_chars = _score_visible_signal(visible_text)
-    if visible_lines < 2 or visible_chars < 120:
-        return False
-    return subtree_lines < 2 or subtree_chars < 80
-
-
-@dataclass
-class ContextEntry:
-    id: int | None
-    source_app: str
-    source_url: str
-    content: str
-    timestamp: float
-    entry_type: str  # "visible_text", "user_input", "conversation"
-    window_title: str = ""
 
 
 class ContextStore:
@@ -121,26 +56,6 @@ class ContextStore:
     def _create_tables(self, conn: sqlite3.Connection) -> None:
         conn.executescript(
             """
-            CREATE TABLE IF NOT EXISTS context_entries (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                source_app TEXT NOT NULL,
-                source_url TEXT DEFAULT '',
-                content TEXT NOT NULL,
-                timestamp REAL NOT NULL,
-                entry_type TEXT NOT NULL,
-                window_title TEXT DEFAULT '',
-                embeddings BLOB DEFAULT NULL
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_timestamp
-                ON context_entries(timestamp DESC);
-
-            CREATE INDEX IF NOT EXISTS idx_source_app
-                ON context_entries(source_app);
-
-            CREATE INDEX IF NOT EXISTS idx_entry_type
-                ON context_entries(entry_type);
-
             CREATE TABLE IF NOT EXISTS suggestion_feedback (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp REAL NOT NULL,
@@ -163,144 +78,6 @@ class ContextStore:
                 ON suggestion_feedback(action);
             """
         )
-        # Migrate: add window_title column if missing (existing DBs)
-        try:
-            conn.execute("SELECT window_title FROM context_entries LIMIT 1")
-        except sqlite3.OperationalError:
-            conn.execute(
-                "ALTER TABLE context_entries ADD COLUMN window_title TEXT DEFAULT ''"
-            )
-            conn.commit()
-        # Migrate: add embeddings column if missing (existing DBs)
-        try:
-            conn.execute("SELECT embeddings FROM context_entries LIMIT 1")
-        except sqlite3.OperationalError:
-            conn.execute(
-                "ALTER TABLE context_entries ADD COLUMN embeddings BLOB DEFAULT NULL"
-            )
-            conn.commit()
-
-    def add_entry(
-        self,
-        source_app: str,
-        content: str,
-        entry_type: str,
-        source_url: str = "",
-        window_title: str = "",
-        timestamp: float | None = None,
-    ) -> int:
-        """Store a new context entry. Returns the entry ID."""
-        if timestamp is None:
-            timestamp = time.time()
-
-        conn = self._get_conn()
-
-        # Deduplicate: skip if identical content was stored in the last 5 seconds
-        cursor = conn.execute(
-            """
-            SELECT id FROM context_entries
-            WHERE content = ? AND source_app = ? AND timestamp > ?
-            LIMIT 1
-            """,
-            (content, source_app, timestamp - 5.0),
-        )
-        if cursor.fetchone():
-            return -1
-
-        cursor = conn.execute(
-            """
-            INSERT INTO context_entries
-                (source_app, source_url, content, timestamp, entry_type, window_title)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (source_app, source_url, content, timestamp, entry_type, window_title),
-        )
-        conn.commit()
-        return cursor.lastrowid  # type: ignore[return-value]
-
-    _SELECT_COLS = (
-        "id, source_app, source_url, content, timestamp, entry_type, window_title"
-    )
-
-    def get_recent(self, limit: int = 50) -> list[ContextEntry]:
-        """Get the most recent context entries."""
-        conn = self._get_conn()
-        cursor = conn.execute(
-            f"""
-            SELECT {self._SELECT_COLS}
-            FROM context_entries
-            ORDER BY timestamp DESC
-            LIMIT ?
-            """,
-            (limit,),
-        )
-        return [ContextEntry(*row) for row in cursor.fetchall()]
-
-    def get_by_source(
-        self, source_app: str, limit: int = 30
-    ) -> list[ContextEntry]:
-        """Get recent entries from a specific app."""
-        conn = self._get_conn()
-        cursor = conn.execute(
-            f"""
-            SELECT {self._SELECT_COLS}
-            FROM context_entries
-            WHERE source_app = ?
-            ORDER BY timestamp DESC
-            LIMIT ?
-            """,
-            (source_app, limit),
-        )
-        return [ContextEntry(*row) for row in cursor.fetchall()]
-
-    def search(self, query: str, limit: int = 20) -> list[ContextEntry]:
-        """Simple text search across context entries."""
-        conn = self._get_conn()
-        cursor = conn.execute(
-            f"""
-            SELECT {self._SELECT_COLS}
-            FROM context_entries
-            WHERE content LIKE ?
-            ORDER BY timestamp DESC
-            LIMIT ?
-            """,
-            (f"%{query}%", limit),
-        )
-        return [ContextEntry(*row) for row in cursor.fetchall()]
-
-    def get_sliced_context(
-        self, source_app: str, max_chars: int = 4000
-    ) -> str:
-        """Build a context string for the LLM from recent + relevant entries.
-
-        Returns a text block combining recent entries from the current app
-        with relevant historical entries, trimmed to max_chars.
-        """
-        parts: list[str] = []
-        total_chars = 0
-
-        # Recent entries from the current app (most relevant)
-        app_entries = self.get_by_source(source_app, limit=20)
-        for entry in app_entries:
-            line = f"[{entry.entry_type}] {entry.content}"
-            if total_chars + len(line) > max_chars:
-                break
-            parts.append(line)
-            total_chars += len(line)
-
-        # Fill remaining space with recent entries from any source
-        if total_chars < max_chars:
-            recent = self.get_recent(limit=30)
-            for entry in recent:
-                if entry.source_app == source_app:
-                    continue  # Already included above
-                line = f"[{entry.source_app}] {entry.content}"
-                if total_chars + len(line) > max_chars:
-                    break
-                parts.append(line)
-                total_chars += len(line)
-
-        return "\n".join(parts)
 
     def get_continuation_context(
         self,
@@ -309,10 +86,6 @@ class ContextStore:
         source_app: str,
         window_title: str = "",
         source_url: str = "",
-        max_local_chars: int = 600,
-        visible_text: list[str] | None = None,
-        embedding_provider: Optional[EmbeddingProvider] = None,
-        use_semantic_context: bool = False,
         cross_app_context: str = "",
         subtree_context: str | None = None,
         memory_context: str = "",
@@ -320,14 +93,8 @@ class ContextStore:
         """Build lean context for continuation mode.
 
         Tier 1 (mandatory): before_cursor and after_cursor -- sent raw.
-        Tier 2 (live surroundings): visible text from the current window,
-            passed directly rather than pulled from stale DB entries.
-            Falls back to recent DB entries if visible_text is not provided.
-        Tier 2.5a (cross-app): recent context from other apps the user
-            visited, if provided.
-        Tier 2.5b (semantic): If embedding_provider is given and
-            use_semantic_context is True, append semantically relevant
-            historical entries.
+        Tier 2 (live surroundings): subtree XML from near the focused element.
+        Tier 2.5a (cross-app): recent context from other apps.
         Tier 3 (light metadata): app, window_title, url. No timestamps.
         """
         parts: list[str] = []
@@ -340,7 +107,7 @@ class ContextStore:
             meta_parts.append(f"URL: {source_url}")
         parts.append(" | ".join(meta_parts))
 
-        # Tier 2.5a: cross-app context (between metadata and visible text)
+        # Tier 2.5a: cross-app context
         if cross_app_context:
             parts.append(cross_app_context)
 
@@ -348,84 +115,9 @@ class ContextStore:
         if memory_context:
             parts.append(memory_context)
 
-        # Tier 2: structured subtree context (best), live visible text, or DB fallback
-        local_chars = 0
-        local_parts: list[str] = []
-        use_visible_text = _prefer_visible_text_over_subtree(
-            subtree_context,
-            visible_text,
-        )
-        if subtree_context and not use_visible_text:
+        # Tier 2: subtree XML context
+        if subtree_context:
             parts.append(f"Nearby content:\n{subtree_context}")
-            local_chars = len(subtree_context)
-        elif visible_text:
-            if subtree_context and use_visible_text:
-                logger.debug(
-                    "[CTX] Subtree context looked low-signal; preferring live visible text "
-                    "(subtree_chars=%d, visible_items=%d)",
-                    _score_subtree_signal(subtree_context)[1],
-                    _score_visible_signal(visible_text)[0],
-                )
-            for element in visible_text:
-                snippet = element.strip()
-                if not snippet:
-                    continue
-                # Skip elements that are just the cursor text itself (avoid duplication)
-                if snippet == before_cursor.strip() or snippet == after_cursor.strip():
-                    continue
-                remaining = max_local_chars - local_chars
-                if remaining <= 0:
-                    break
-                snippet = snippet[:remaining]
-                local_parts.append(snippet)
-                local_chars += len(snippet)
-        else:
-            # Fallback: pull from DB
-            app_entries = self.get_by_source(source_app, limit=5)
-            for entry in app_entries:
-                if entry.entry_type == "user_input":
-                    continue  # Skip raw input -- we have cursor state
-                remaining = max_local_chars - local_chars
-                if remaining <= 0:
-                    break
-                snippet = entry.content[:remaining]
-                if snippet.strip():
-                    local_parts.append(snippet.strip())
-                    local_chars += len(snippet)
-        if local_parts:
-            parts.append("Visible context:\n" + "\n".join(local_parts))
-
-        # Tier 2.5: semantic context (optional, secondary)
-        # Only used to supplement the visible context — kept short and recent
-        # so it doesn't override what the user is currently looking at.
-        if use_semantic_context and embedding_provider is not None:
-            query = before_cursor.strip()
-            if query:
-                try:
-                    semantic_entries = self.get_semantically_relevant(
-                        query=query,
-                        provider=embedding_provider,
-                        top_k=2,
-                        max_age_hours=2,
-                    )
-                    # Deduplicate against already-included visible context
-                    existing = set(local_parts)
-                    semantic_parts = [
-                        s for s in semantic_entries if s not in existing
-                    ]
-                    if semantic_parts:
-                        # Cap each entry to prevent stale DB entries from
-                        # overwhelming the current visible context
-                        capped = [s[:300] for s in semantic_parts[:2]]
-                        parts.append(
-                            "Background context (lower priority):\n"
-                            + "\n".join(capped)
-                        )
-                except Exception:
-                    logger.debug(
-                        "Semantic context lookup failed in continuation mode",
-                        exc_info=True,
-                    )
 
         # Tier 1: cursor state (raw, always included)
         parts.append(f"Text before cursor:\n{before_cursor}")
@@ -442,10 +134,6 @@ class ContextStore:
         source_url: str = "",
         draft_text: str = "",
         max_turns: int = 8,
-        visible_text: list[str] | None = None,
-        max_age_seconds: float = 300.0,
-        embedding_provider: Optional[EmbeddingProvider] = None,
-        use_semantic_context: bool = False,
         cross_app_context: str = "",
         subtree_context: str | None = None,
         memory_context: str = "",
@@ -453,14 +141,11 @@ class ContextStore:
         """Build context for reply mode.
 
         Tier 1: Structured recent turns with speaker labels.
-        Tier 1.5: Semantic context blended with conversation turns.
         Tier 2: Draft state if user has typed a partial reply.
         Tier 2.5: Cross-app context from recently visited apps.
         Tier 3: Metadata with timestamps (useful for pacing).
 
-        When conversation_turns is empty, falls back to:
-          1. Live visible_text (if provided)
-          2. Recent DB entries (filtered by max_age_seconds, default 5 min)
+        When conversation_turns is empty, falls back to subtree XML context.
         """
         parts: list[str] = []
 
@@ -481,16 +166,6 @@ class ContextStore:
             parts.append(memory_context)
 
         # Tier 1: speaker-labeled conversation turns (primary).
-        # Conversation extractors identify who said what (User vs Claude /
-        # ChatGPT / Gemini, etc.) via app-specific heuristics (feedback
-        # buttons, action groups, heading text).  This speaker attribution
-        # is *critical* for reply mode — without it the LLM mimics the
-        # dominant voice (usually the AI assistant) instead of the user.
-        #
-        # Subtree context (XML from walking near the focused element) is
-        # rich in visual detail but strips all speaker signals (buttons
-        # are in CHROME_ROLES).  It serves as fallback when extractors
-        # fail or the app has no conversation structure.
         turns = conversation_turns[-max_turns:]
         if turns:
             turn_lines = []
@@ -504,129 +179,27 @@ class ContextStore:
                     turn_lines.append(f"- {speaker}: {text}")
             parts.append("Conversation:\n" + "\n".join(turn_lines))
 
-            # If all turns are from the same speaker (e.g. Gemini only
-            # exposes "You said" headings — assistant responses are not
-            # in the AX tree), supplement with visible text so the LLM
-            # can see what the assistant actually said.
+            # If all turns are from the same speaker, supplement with
+            # subtree context so the LLM can see assistant responses.
             speakers = {getattr(t, "speaker", None) or (t.get("speaker") if isinstance(t, dict) else None) for t in turns}
-            if len(speakers) <= 1 and visible_text:
-                supplement_parts: list[str] = []
-                supplement_total = 0
-                for element in visible_text:
-                    snippet = element.strip()
-                    if not snippet:
-                        continue
-                    if supplement_total + len(snippet) > 1500:
-                        break
-                    supplement_parts.append(snippet)
-                    supplement_total += len(snippet)
-                if supplement_parts:
-                    parts.append(
-                        "Additional visible content (assistant responses may be here):\n"
-                        + "\n".join(supplement_parts)
-                    )
-                    logger.debug(
-                        "[CTX] One-sided conversation (%d turns, speaker=%s) — "
-                        "supplementing with %d visible text elements",
-                        len(turns), speakers.pop() if speakers else "?",
-                        len(supplement_parts),
-                    )
-        elif subtree_context and not _prefer_visible_text_over_subtree(
-            subtree_context,
-            visible_text,
-        ):
-            # Fallback: subtree context (when conversation extractors
-            # couldn't identify structured turns — e.g. unknown app).
-            parts.append(f"Nearby content:\n{subtree_context}")
-        else:
-            # Fallback 1: live visible text from the current window
-            fallback_parts: list[str] = []
-            total = 0
-            if subtree_context and _prefer_visible_text_over_subtree(
-                subtree_context,
-                visible_text,
-            ):
-                logger.debug(
-                    "[CTX] Reply fallback: subtree context looked low-signal; preferring live visible text"
-                )
-            if visible_text:
-                for element in visible_text:
-                    snippet = element.strip()
-                    if not snippet:
-                        continue
-                    if total + len(snippet) > 1500:
-                        break
-                    fallback_parts.append(snippet)
-                    total += len(snippet)
-            # Fallback 2: recent DB entries (time-filtered)
-            if not fallback_parts:
-                cutoff = time.time() - max_age_seconds
-                app_entries = self.get_by_source(source_app, limit=10)
-                for entry in app_entries:
-                    if entry.timestamp < cutoff:
-                        continue
-                    if total + len(entry.content) > 1500:
-                        break
-                    fallback_parts.append(entry.content)
-                    total += len(entry.content)
-            if fallback_parts:
+            if len(speakers) <= 1 and subtree_context:
                 parts.append(
-                    "Visible page content (no conversation detected):\n"
-                    + "\n".join(fallback_parts)
+                    "Additional visible content (assistant responses may be here):\n"
+                    + subtree_context
                 )
-
-        # Tier 1.5: semantic context (optional, secondary)
-        # Only supplements the conversation / visible context — kept short
-        # and recent so it doesn't pull in stale topics.
-        if use_semantic_context and embedding_provider is not None:
-            # Build query from last conversation turn or draft
-            query = ""
-            if turns:
-                last = turns[-1]
-                query = getattr(last, "text", None) or (last.get("text", "") if isinstance(last, dict) else "")
-            elif draft_text.strip():
-                query = draft_text.strip()
-
-            if query:
-                try:
-                    semantic_entries = self.get_semantically_relevant(
-                        query=query,
-                        provider=embedding_provider,
-                        top_k=2,
-                        max_age_hours=2,
-                    )
-                    if semantic_entries:
-                        # Cap each entry to avoid old massive DB entries
-                        # drowning out the actual conversation
-                        capped = [s[:300] for s in semantic_entries[:2]]
-                        parts.append(
-                            "Background context (lower priority):\n"
-                            + "\n".join(capped)
-                        )
-                except Exception:
-                    logger.debug(
-                        "Semantic context lookup failed in reply mode",
-                        exc_info=True,
-                    )
+                logger.debug(
+                    "[CTX] One-sided conversation (%d turns, speaker=%s) — "
+                    "supplementing with subtree context",
+                    len(turns), speakers.pop() if speakers else "?",
+                )
+        elif subtree_context:
+            parts.append(f"Nearby content:\n{subtree_context}")
 
         # Tier 2: draft state
         if draft_text.strip():
             parts.append(f"Draft so far:\n{draft_text}")
 
-        context = "\n\n".join(parts)
-
-        # Diagnostic: warn if visible_text was provided but didn't make it
-        # into the context (helps catch flow bugs where text is found but lost)
-        if visible_text and any(v.strip() for v in visible_text):
-            if "Visible page content" not in context and "Conversation:" not in context and "Nearby content:" not in context:
-                logger.warning(
-                    "[CTX] visible_text had %d elements but none appeared in "
-                    "reply context (%d chars). conversation_turns=%d",
-                    len(visible_text), len(context),
-                    len(conversation_turns),
-                )
-
-        return context
+        return "\n\n".join(parts)
 
     def get_shell_context(
         self,
@@ -832,180 +405,3 @@ class ContextStore:
                 results.append(text)
         return results
 
-    # ---- Semantic context ----
-
-    def _serialize_embedding(self, vector: list[float]) -> bytes:
-        """Serialize an embedding vector to bytes for SQLite storage."""
-        return json.dumps(vector).encode("utf-8")
-
-    def _deserialize_embedding(self, blob: bytes) -> list[float]:
-        """Deserialize an embedding vector from SQLite bytes."""
-        return json.loads(blob.decode("utf-8"))
-
-    def _cache_embedding(self, entry_id: int, vector: list[float]) -> None:
-        """Store a computed embedding in the database."""
-        conn = self._get_conn()
-        conn.execute(
-            "UPDATE context_entries SET embeddings = ? WHERE id = ?",
-            (self._serialize_embedding(vector), entry_id),
-        )
-        conn.commit()
-
-    def get_semantically_relevant(
-        self,
-        query: str,
-        provider: EmbeddingProvider,
-        top_k: int = 5,
-        max_age_hours: float = 24,
-    ) -> list[str]:
-        """Find the most semantically relevant stored entries for a query.
-
-        Uses cached embeddings when available; computes and caches them lazily
-        for entries that don't have them yet.
-
-        Args:
-            query: The text to find relevant context for.
-            provider: An EmbeddingProvider instance.
-            top_k: Number of top results to return.
-            max_age_hours: Only consider entries from the last N hours.
-
-        Returns:
-            List of content strings sorted by semantic relevance.
-        """
-        from .embeddings import cosine_similarity
-
-        if not query.strip():
-            return []
-
-        conn = self._get_conn()
-        cutoff = time.time() - (max_age_hours * 3600)
-
-        cursor = conn.execute(
-            """
-            SELECT id, content, embeddings
-            FROM context_entries
-            WHERE timestamp > ?
-            ORDER BY timestamp DESC
-            LIMIT 200
-            """,
-            (cutoff,),
-        )
-        rows = cursor.fetchall()
-        if not rows:
-            return []
-
-        # Separate entries with and without cached embeddings
-        entries_with_cache: list[tuple[int, str, list[float]]] = []
-        entries_without_cache: list[tuple[int, str, int]] = []  # (id, content, index)
-
-        for row in rows:
-            entry_id, content, emb_blob = row
-            if emb_blob is not None:
-                vector = self._deserialize_embedding(emb_blob)
-                entries_with_cache.append((entry_id, content, vector))
-            else:
-                entries_without_cache.append(
-                    (entry_id, content, len(entries_with_cache) + len(entries_without_cache))
-                )
-
-        # Compute missing embeddings
-        if entries_without_cache:
-            texts_to_embed = [content for _, content, _ in entries_without_cache]
-            # Include query so vocabulary is shared (important for TF-IDF)
-            all_texts = texts_to_embed + [query]
-            all_vectors = provider.embed(all_texts)
-
-            if all_vectors and len(all_vectors) == len(all_texts):
-                for i, (entry_id, content, _) in enumerate(entries_without_cache):
-                    vector = all_vectors[i]
-                    self._cache_embedding(entry_id, vector)
-                    entries_with_cache.append((entry_id, content, vector))
-                query_vector_from_batch = all_vectors[-1]
-            else:
-                query_vector_from_batch = None
-        else:
-            query_vector_from_batch = None
-
-        # Compute query embedding
-        if query_vector_from_batch is not None:
-            query_vector = query_vector_from_batch
-        else:
-            # All entries had cached embeddings; embed query alone with corpus
-            all_contents = [content for _, content, _ in entries_with_cache]
-            all_texts = all_contents + [query]
-            all_vectors = provider.embed(all_texts)
-            if all_vectors and len(all_vectors) == len(all_texts):
-                query_vector = all_vectors[-1]
-            else:
-                return []
-
-        # Score entries by cosine similarity
-        scored: list[tuple[str, float]] = []
-        for _, content, vector in entries_with_cache:
-            score = cosine_similarity(query_vector, vector)
-            scored.append((content, score))
-
-        scored.sort(key=lambda x: x[1], reverse=True)
-
-        # Filter out entries that are just keystroke fragments of the query.
-        # The observer stores incremental snapshots as the user types, so
-        # "hello wor", "hello wo", "hello w" all end up as entries.  These
-        # score highly but add no value — they're just shorter echoes of
-        # what the user already typed.
-        #
-        # Heuristic: a keystroke echo is one where the shorter string makes
-        # up >80% of the longer string's length (near-total overlap).
-        query_norm = query.strip().lower()
-        filtered: list[str] = []
-        for content, _score in scored:
-            content_norm = content.strip().lower()
-            if content_norm and query_norm:
-                shorter = min(len(content_norm), len(query_norm))
-                longer = max(len(content_norm), len(query_norm))
-                # High overlap ratio + substring → keystroke echo
-                if shorter / longer > 0.5:
-                    if content_norm in query_norm or query_norm in content_norm:
-                        continue
-            filtered.append(content)
-            if len(filtered) >= top_k:
-                break
-
-        return filtered
-
-    def prune(self, max_age_hours: int = 72, max_entries: int = 5000) -> int:
-        """Remove old entries to keep the store bounded. Returns count removed."""
-        conn = self._get_conn()
-        cutoff = time.time() - (max_age_hours * 3600)
-
-        # Remove entries older than max_age_hours
-        cursor = conn.execute(
-            "DELETE FROM context_entries WHERE timestamp < ?", (cutoff,)
-        )
-        removed = cursor.rowcount
-
-        # If still over max_entries, remove oldest
-        count_cursor = conn.execute(
-            "SELECT COUNT(*) FROM context_entries"
-        )
-        count = count_cursor.fetchone()[0]
-        if count > max_entries:
-            excess = count - max_entries
-            conn.execute(
-                """
-                DELETE FROM context_entries WHERE id IN (
-                    SELECT id FROM context_entries
-                    ORDER BY timestamp ASC
-                    LIMIT ?
-                )
-                """,
-                (excess,),
-            )
-            removed += excess
-
-        conn.commit()
-        return removed
-
-    def entry_count(self) -> int:
-        conn = self._get_conn()
-        cursor = conn.execute("SELECT COUNT(*) FROM context_entries")
-        return cursor.fetchone()[0]

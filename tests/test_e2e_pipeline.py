@@ -5,10 +5,9 @@ full autocomplete pipeline:
 
   1. Load AX tree → mock AX API calls
   2. Conversation extraction → verify turns (where expected output exists)
-  3. Visible text extraction → verify non-empty text elements
-  4. Subtree context extraction (focus-annotated fixtures) → verify XML
-  5. Context assembly → verify well-formed context string
-  6. Mode detection → verify correct mode assignment
+  3. Subtree context extraction (focus-annotated fixtures) → verify XML
+  4. Context assembly → verify well-formed context string
+  5. Mode detection → verify correct mode assignment
 
 This catches regressions across the entire pipeline — not just individual
 extractors — and ensures new code doesn't crash on any real-world AX tree.
@@ -16,9 +15,8 @@ extractors — and ensures new code doesn't crash on any real-world AX tree.
 from __future__ import annotations
 
 import json
-import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -82,46 +80,6 @@ def _mock_collect_child_text(element, max_depth=5, max_chars=2000, depth=0):
         if child_text:
             parts.append(child_text)
     return "\n".join(parts)
-
-
-# ---------------------------------------------------------------------------
-# Visible text extraction (mirrors input_observer._collect_text)
-# ---------------------------------------------------------------------------
-
-_SKIP_ROLES = frozenset({
-    "AXToolbar", "AXMenuBar", "AXMenu", "AXMenuItem",
-    "AXButton", "AXScrollBar", "AXSlider", "AXIncrementor",
-    "AXPopUpButton", "AXCheckBox", "AXRadioButton",
-    "AXTabGroup", "AXTab",
-})
-
-_CONTENT_ROLES = frozenset({
-    "AXStaticText", "AXTextField", "AXTextArea",
-    "AXWebArea", "AXGroup", "AXCell", "AXRow",
-    "AXHeading", "AXLink", "AXParagraph",
-})
-
-
-def _collect_text_from_mock(
-    element, results: list[str], max_depth=20, max_items=100, depth=0,
-):
-    """Simplified _collect_text for mock elements."""
-    if depth > max_depth or len(results) >= max_items:
-        return
-    role = _ax_get_attribute_dispatcher(element, "AXRole") or ""
-    if role in _SKIP_ROLES:
-        return
-    if role in _CONTENT_ROLES:
-        value = _ax_get_attribute_dispatcher(element, "AXValue")
-        if isinstance(value, str) and len(value.strip()) >= 3:
-            results.append(value.strip()[:500])
-        elif role == "AXStaticText":
-            desc = _ax_get_attribute_dispatcher(element, "AXDescription")
-            if isinstance(desc, str) and len(desc.strip()) >= 3:
-                results.append(desc.strip()[:500])
-    children = _ax_get_attribute_dispatcher(element, "AXChildren") or []
-    for child in children:
-        _collect_text_from_mock(child, results, max_depth, max_items, depth + 1)
 
 
 # ---------------------------------------------------------------------------
@@ -256,45 +214,7 @@ class TestE2EPipeline:
             f"Actual: {[(t.speaker, t.text[:60]) for t in turns]}"
         )
 
-    # ---- Stage 2: Visible text extraction ----
-
-    def test_visible_text_extraction(self, fixture_name):
-        """Non-terminal fixtures should yield visible text elements.
-
-        Some fixtures are legitimately sparse (new-chat screens, Electron
-        apps with AXDescription-only text).  We check that we don't crash
-        and that non-sparse fixtures produce content.
-        """
-        root, metadata, raw_data, expected = self._load(fixture_name)
-        app_name = metadata.get("app", "")
-
-        text_elements: list[str] = []
-        _collect_text_from_mock(root, text_elements)
-
-        # Terminal fixtures and new-chat / empty screens may have no tree text.
-        # Electron apps (ChatGPT, Claude) sometimes have text in AXDescription
-        # on non-AXStaticText roles which our simplified mock doesn't catch.
-        _SPARSE_PATTERNS = {"new-chat", "new_chat"}
-        is_sparse = any(p in fixture_name for p in _SPARSE_PATTERNS)
-
-        if app_name not in _TERMINAL_APPS and not is_sparse:
-            # Electron apps (ChatGPT, Claude) may store all content in
-            # AXDescription on non-content roles (buttons, groups).  Our
-            # simplified mock mirrors _SKIP_ROLES and misses these.
-            # Only flag fixtures > 100KB with zero text as problems — smaller
-            # ones are likely sidebar-only captures or empty screens.
-            fixture_size = (AX_TREES_DIR / f"{fixture_name}.json").stat().st_size
-            if fixture_size > 100_000 and len(text_elements) == 0:
-                pytest.fail(
-                    f"No visible text from {fixture_name} ({app_name}, "
-                    f"{fixture_size:,} bytes)"
-                )
-
-        # Sanity: no element should be empty
-        for elem in text_elements:
-            assert len(elem.strip()) >= 3
-
-    # ---- Stage 3: Subtree context ----
+    # ---- Stage 2: Subtree context ----
 
     def test_subtree_context_extraction(self, fixture_name):
         """Fixtures with focus annotations should produce subtree XML context."""
@@ -325,17 +245,13 @@ class TestE2EPipeline:
         assert len(path) >= 2, "Focus path should have at least root + focused element"
         assert path[-1].get("focused") is True
 
-    # ---- Stage 4: Context assembly ----
+    # ---- Stage 3: Context assembly ----
 
     def test_continuation_context_assembly(self, fixture_name):
         """Context assembly should produce a well-formed context string."""
         root, metadata, raw_data, expected = self._load(fixture_name)
         app_name = metadata.get("app", "")
         window_title = metadata.get("windowTitle", "")
-
-        # Extract visible text
-        text_elements: list[str] = []
-        _collect_text_from_mock(root, text_elements, max_items=50)
 
         # Extract conversation turns
         extractor = get_extractor(app_name)
@@ -371,7 +287,6 @@ class TestE2EPipeline:
                 after_cursor="",
                 source_app=app_name,
                 window_title=window_title,
-                visible_text=text_elements[:20] if text_elements else None,
                 subtree_context=subtree_ctx,
             )
 
@@ -380,9 +295,9 @@ class TestE2EPipeline:
             assert f"App: {app_name}" in context
             assert "Text before cursor:" in context
 
-            # Visible text should appear in context if we had any
-            if text_elements:
-                assert "Visible context:" in context or "Nearby content:" in context
+            # Subtree context should appear as "Nearby content:" if available
+            if subtree_ctx:
+                assert "Nearby content:" in context
         finally:
             store.close()
 
@@ -415,9 +330,11 @@ class TestE2EPipeline:
             for t in turns
         ]
 
-        # Extract visible text for fallback
-        text_elements: list[str] = []
-        _collect_text_from_mock(root, text_elements, max_items=50)
+        # Extract subtree context for focus-annotated fixtures
+        tree = raw_data["tree"]
+        subtree_ctx = None
+        if _has_focus_annotations(tree):
+            subtree_ctx = extract_context_from_tree(tree, token_budget=1200)
 
         store = ContextStore(Path("/tmp/test_e2e_pipeline_reply.db"))
         store.open()
@@ -426,7 +343,7 @@ class TestE2EPipeline:
                 conversation_turns=conversation_turns,
                 source_app=app_name,
                 window_title=window_title,
-                visible_text=text_elements[:20] if text_elements else None,
+                subtree_context=subtree_ctx,
             )
 
             assert isinstance(context, str)
@@ -439,17 +356,14 @@ class TestE2EPipeline:
                 assert any(
                     t["speaker"] in context for t in conversation_turns
                 ), f"No turn speakers found in reply context for {fixture_name}"
-            elif text_elements:
-                # Non-chat apps: should have visible text fallback
-                assert (
-                    "Visible page content" in context
-                    or "Visible text" in context
-                    or len(context) > 20
-                )
+            else:
+                # Non-chat apps without turns: context is metadata
+                # (plus subtree context if available)
+                assert f"App: {app_name}" in context or len(context) > 20
         finally:
             store.close()
 
-    # ---- Stage 5: Mode detection ----
+    # ---- Stage 4: Mode detection ----
 
     def test_mode_detection_continuation(self, fixture_name):
         """With text before cursor, mode should be CONTINUATION."""
@@ -461,7 +375,7 @@ class TestE2EPipeline:
         mode = detect_mode(before_cursor="")
         assert mode == AutocompleteMode.REPLY
 
-    # ---- Stage 6: Quality metrics ----
+    # ---- Stage 5: Quality metrics ----
 
     def test_chat_app_has_conversation_turns(self, fixture_name):
         """Chat app fixtures with expected output should have conversation turns."""
@@ -512,8 +426,11 @@ class TestE2EPipeline:
         if app_name in _TERMINAL_APPS:
             pytest.skip("Terminal fixture — text is in AXValue not tree children")
 
-        text_elements: list[str] = []
-        _collect_text_from_mock(root, text_elements, max_items=50)
+        # Extract subtree context for focus-annotated fixtures
+        tree = raw_data["tree"]
+        subtree_ctx = None
+        if _has_focus_annotations(tree):
+            subtree_ctx = extract_context_from_tree(tree, token_budget=1200)
 
         store = ContextStore(Path("/tmp/test_e2e_pipeline_nonempty.db"))
         store.open()
@@ -523,17 +440,17 @@ class TestE2EPipeline:
                 after_cursor="",
                 source_app=app_name,
                 window_title=metadata.get("windowTitle", ""),
-                visible_text=text_elements[:20] if text_elements else None,
+                subtree_context=subtree_ctx,
             )
             assert isinstance(context, str)
             assert len(context) > 0
 
-            # Fixtures with visible text should produce substantial context.
-            # New-chat / empty screens with no extractable text get a pass.
-            if text_elements:
+            # Fixtures with subtree context should produce substantial context.
+            # Fixtures without focus annotations get a pass.
+            if subtree_ctx:
                 assert len(context) > 80, (
                     f"Context too short for {fixture_name} with "
-                    f"{len(text_elements)} visible elements: {len(context)} chars\n"
+                    f"subtree context: {len(context)} chars\n"
                     f"Context: {context[:300]}"
                 )
         finally:
