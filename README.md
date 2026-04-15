@@ -28,7 +28,7 @@ cd autocompleter
 python3.11 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-pip install -e .[dev]
+pip install -e '.[dev]'
 cp .env.example .env
 ```
 
@@ -39,7 +39,7 @@ Then edit `.env` with your provider settings and API key.
 For the current friend beta, the intended path is:
 
 1. Copy `.env.example` to `.env`
-2. Paste in the shared beta proxy URL and beta key
+2. Paste in the beta proxy URL, install id, and install key
 3. Run `python -m autocompleter`
 
 Telemetry is enabled by default for the beta, but you can opt out by setting:
@@ -57,6 +57,8 @@ AUTOCOMPLETER_PROXY_ENABLED=0
 Then fill in the relevant BYO provider credentials below it in `.env`.
 
 See [docs/friend-beta.md](docs/friend-beta.md) for the beta-specific setup flow.
+If you want to run the included beta backend from this repo, see [docs/backend-beta.md](docs/backend-beta.md).
+For the Supabase dev/prod migration workflow, see [docs/supabase-environments.md](docs/supabase-environments.md).
 
 ## Configuration
 
@@ -159,6 +161,8 @@ See also:
 - [PRIVACY.md](PRIVACY.md)
 - [docs/data-flows.md](docs/data-flows.md)
 - [docs/friend-beta.md](docs/friend-beta.md)
+- [docs/backend-beta.md](docs/backend-beta.md)
+- [docs/supabase-environments.md](docs/supabase-environments.md)
 
 ## Project Layout
 

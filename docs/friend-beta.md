@@ -10,7 +10,7 @@ cd autocompleter
 python3.11 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-pip install -e .[dev]
+pip install -e '.[dev]'
 cp .env.example .env
 ```
 
@@ -22,9 +22,10 @@ Edit `.env` and set these fields:
 AUTOCOMPLETER_BETA_MODE=1
 AUTOCOMPLETER_PROXY_ENABLED=1
 AUTOCOMPLETER_PROXY_BASE_URL=<shared beta proxy url>
-AUTOCOMPLETER_PROXY_API_KEY=<shared beta key>
+AUTOCOMPLETER_PROXY_API_KEY=<install key>
 AUTOCOMPLETER_TELEMETRY_ENABLED=1
-AUTOCOMPLETER_TELEMETRY_URL=<telemetry endpoint>
+AUTOCOMPLETER_TELEMETRY_URL=<proxy base url>/telemetry/events
+AUTOCOMPLETER_INSTALL_ID=<install id>
 ```
 
 Then run:
@@ -63,3 +64,5 @@ OPENAI_API_KEY=<your key>
 ```
 
 Requests sent to your own provider are governed by that provider's terms and privacy practices, not Autocompleter's.
+
+If you want to run the included beta backend yourself, see [docs/backend-beta.md](backend-beta.md).

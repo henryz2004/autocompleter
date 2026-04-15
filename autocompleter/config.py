@@ -80,6 +80,7 @@ class Config:
     # Telemetry
     telemetry_enabled: bool = False
     telemetry_url: str = ""
+    telemetry_api_key: str = ""
     install_id: str = ""
 
     # Sentinel to distinguish "not provided" from "explicitly set to empty"
@@ -164,6 +165,14 @@ class Config:
     @property
     def telemetry_active(self) -> bool:
         return self.telemetry_enabled and bool(self.telemetry_url.strip())
+
+    @property
+    def effective_telemetry_api_key(self) -> str:
+        if self.telemetry_api_key:
+            return self.telemetry_api_key
+        if self.proxy_api_key:
+            return self.proxy_api_key
+        return ""
 
     def _resolve_install_id(self) -> str:
         install_id_path = self.data_dir / "install_id"
@@ -251,6 +260,7 @@ def load_config() -> Config:
         )),
         telemetry_enabled=_env_bool("AUTOCOMPLETER_TELEMETRY_ENABLED"),
         telemetry_url=os.environ.get("AUTOCOMPLETER_TELEMETRY_URL", ""),
+        telemetry_api_key=os.environ.get("AUTOCOMPLETER_TELEMETRY_API_KEY", ""),
         install_id=os.environ.get("AUTOCOMPLETER_INSTALL_ID", ""),
     )
     return config
