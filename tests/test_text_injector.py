@@ -280,38 +280,64 @@ class TestInjectViaAxCursorUpdate:
 class TestInjectPassthrough:
 
     def test_inject_passes_insertion_point(self, injector):
-        """inject() should forward insertion_point to _inject_via_ax."""
-        with patch.object(injector, "_inject_via_ax", return_value=True) as mock_ax:
+        """Cursor-aware injects should try AX first."""
+        with patch.object(injector, "_inject_via_ax", return_value=True) as mock_ax, \
+             patch.object(injector, "_inject_via_cdp") as mock_cdp, \
+             patch.object(injector, "_inject_via_clipboard") as mock_clip, \
+             patch.object(injector, "_inject_via_keystrokes") as mock_keys:
             result = injector.inject("text", insertion_point=7)
         assert result is True
-        mock_ax.assert_called_once_with("text", insertion_point=7)
+        mock_ax.assert_called_once_with("text", insertion_point=7, replace=False)
+        mock_cdp.assert_not_called()
+        mock_clip.assert_not_called()
+        mock_keys.assert_not_called()
 
     def test_inject_passes_none_by_default(self, injector):
-        """When insertion_point is omitted, None is forwarded."""
-        with patch.object(injector, "_inject_via_ax", return_value=True) as mock_ax:
-            result = injector.inject("text")
+        """Normal injects skip AX and prefer keystrokes first."""
+        with patch.object(injector, "_inject_via_ax") as mock_ax, \
+             patch.object(injector, "_inject_via_cdp") as mock_cdp, \
+             patch.object(injector, "_inject_via_clipboard") as mock_clip, \
+             patch.object(injector, "_inject_via_keystrokes", return_value=True) as mock_keys:
+            result = injector.inject("text", app_name="Slack", app_pid=55)
         assert result is True
-        mock_ax.assert_called_once_with("text", insertion_point=None)
+        mock_ax.assert_not_called()
+        mock_keys.assert_called_once_with("text")
+        mock_cdp.assert_not_called()
+        mock_clip.assert_not_called()
 
     def test_inject_skips_ax_when_replace(self, injector):
-        """When replace=True, _inject_via_ax is skipped entirely."""
-        with patch.object(injector, "_inject_via_ax") as mock_ax, \
+        """Replace flows go through AX before any fallbacks."""
+        with patch.object(injector, "_inject_via_ax", return_value=True) as mock_ax, \
+             patch.object(injector, "_inject_via_cdp") as mock_cdp, \
              patch.object(injector, "_inject_via_clipboard", return_value=True):
             result = injector.inject("text", replace=True, insertion_point=5)
         assert result is True
-        mock_ax.assert_not_called()
+        mock_ax.assert_called_once_with("text", insertion_point=5, replace=True)
+        mock_cdp.assert_not_called()
 
-    def test_codex_skips_ax_and_prefers_keystrokes_over_clipboard(self, injector):
+    def test_chromium_tries_cdp_after_keystrokes_fail(self, injector):
         with patch.object(injector, "_inject_via_ax") as mock_ax, \
-             patch.object(injector, "_inject_via_cdp", return_value=False) as mock_cdp, \
-             patch.object(injector, "_inject_via_keystrokes", return_value=True) as mock_keys, \
+             patch.object(injector, "_inject_via_cdp", return_value=True) as mock_cdp, \
+             patch.object(injector, "_inject_via_keystrokes", return_value=False) as mock_keys, \
              patch.object(injector, "_inject_via_clipboard", return_value=True) as mock_clip:
-            result = injector.inject("text", insertion_point=5, app_name="Codex", app_pid=1234)
+            result = injector.inject("text", app_name="Google Chrome", app_pid=1234)
         assert result is True
         mock_ax.assert_not_called()
-        mock_cdp.assert_called_once_with("text", app_name="Codex", app_pid=1234)
         mock_keys.assert_called_once_with("text")
+        mock_cdp.assert_called_once_with("text", app_name="Google Chrome", app_pid=1234)
         mock_clip.assert_not_called()
+
+    def test_clipboard_used_only_after_keystrokes_and_cdp_fail(self, injector):
+        with patch.object(injector, "_inject_via_ax") as mock_ax, \
+             patch.object(injector, "_inject_via_cdp", return_value=False) as mock_cdp, \
+             patch.object(injector, "_inject_via_keystrokes", return_value=False) as mock_keys, \
+             patch.object(injector, "_inject_via_clipboard", return_value=True) as mock_clip:
+            result = injector.inject("text", app_name="Codex", app_pid=1234)
+        assert result is True
+        mock_ax.assert_not_called()
+        mock_keys.assert_called_once_with("text")
+        mock_cdp.assert_called_once_with("text", app_name="Codex", app_pid=1234)
+        mock_clip.assert_called_once_with("text")
 
 
 # ===================================================================
@@ -342,20 +368,25 @@ class TestClipboardAndKeystrokesUnaffected:
     def test_fallback_to_clipboard_when_ax_fails(self, injector):
         """When AX fails, inject() falls back to clipboard without insertion_point."""
         with patch.object(injector, "_inject_via_ax", return_value=False), \
+             patch.object(injector, "_inject_via_cdp", return_value=False), \
+             patch.object(injector, "_inject_via_keystrokes", return_value=False), \
              patch.object(injector, "_inject_via_clipboard", return_value=True) as mock_clip:
             result = injector.inject("text", insertion_point=5)
         assert result is True
         # Clipboard called with just text, no insertion_point
         mock_clip.assert_called_once_with("text")
 
-    def test_fallback_to_keystrokes_when_all_fail(self, injector):
-        """When AX and clipboard fail, inject() falls back to keystrokes."""
+    def test_fallback_to_keystrokes_before_other_normal_paths(self, injector):
+        """Keystrokes are the first non-AX path for normal inserts."""
         with patch.object(injector, "_inject_via_ax", return_value=False), \
-             patch.object(injector, "_inject_via_clipboard", return_value=False), \
+             patch.object(injector, "_inject_via_cdp") as mock_cdp, \
+             patch.object(injector, "_inject_via_clipboard") as mock_clip, \
              patch.object(injector, "_inject_via_keystrokes", return_value=True) as mock_keys:
             result = injector.inject("text", insertion_point=5)
         assert result is True
         mock_keys.assert_called_once_with("text")
+        mock_cdp.assert_not_called()
+        mock_clip.assert_not_called()
 
 
 # ===================================================================

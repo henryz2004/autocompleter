@@ -51,8 +51,28 @@ class TestContextStore:
             source_app="Slack",
             subtree_context=subtree,
         )
-        assert "Nearby content:" in context
+        assert "Nearby content from the focused region:" in context
         assert "project deadline" in context
+
+    def test_continuation_context_includes_focused_state_and_overview(self, store):
+        context = store.get_continuation_context(
+            before_cursor="",
+            after_cursor="",
+            source_app="Codex",
+            tree_overview="<focusPath><TextArea focused=\"true\"/></focusPath>",
+            focused_state={
+                "role": "AXTextArea",
+                "insertion_point": 0,
+                "selection_length": 0,
+                "value_length": 0,
+                "placeholder_detected": True,
+                "raw_placeholder_value": "Ask for follow-up changes",
+            },
+        )
+        assert "Focused input state:" in context
+        assert "placeholder_detected=true" in context
+        assert "Focused path overview:" in context
+        assert "<focusPath>" in context
 
     def test_continuation_context_omits_empty_after_cursor(self, store):
         context = store.get_continuation_context(
@@ -114,7 +134,7 @@ class TestContextStore:
             source_app="UnknownApp",
             subtree_context=subtree_xml,
         )
-        assert "Nearby content:" in context
+        assert "Nearby content from the focused region:" in context
         assert subtree_xml in context
         assert "Conversation:" not in context
 

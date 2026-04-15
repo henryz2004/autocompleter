@@ -139,15 +139,13 @@ class TestOverlayHeightCalculation:
     def test_empty_suggestions(self):
         cfg = self._make_config()
         h = _compute_overlay_height([], cfg)
-        # Just padding + hint bar
-        assert h == cfg.padding * 2 + cfg.hint_bar_height
+        assert h == cfg.hint_bar_height
 
     def test_single_short_suggestion(self):
         cfg = self._make_config()
         suggestions = [Suggestion(text="Hello", index=0)]
         h = _compute_overlay_height(suggestions, cfg)
-        # padding * 2 + at least item_height
-        assert h >= cfg.padding * 2 + cfg.item_height
+        assert h >= cfg.item_height + cfg.hint_bar_height
 
     def test_multiple_short_suggestions(self):
         cfg = self._make_config()
@@ -157,8 +155,7 @@ class TestOverlayHeightCalculation:
             Suggestion(text="Three", index=2),
         ]
         h = _compute_overlay_height(suggestions, cfg)
-        # Should be at least padding*2 + 3 * item_height
-        min_expected = cfg.padding * 2 + 3 * cfg.item_height
+        min_expected = 3 * cfg.item_height + cfg.hint_bar_height
         assert h >= min_expected
 
     def test_clamped_to_max_height(self):
@@ -350,13 +347,13 @@ class TestOverlayVaryingSuggestionCounts:
     def test_zero_suggestions(self):
         cfg = self._make_config()
         h = _compute_overlay_height([], cfg)
-        assert h == cfg.padding * 2 + cfg.hint_bar_height
+        assert h == cfg.hint_bar_height
 
     def test_one_short_suggestion(self):
         cfg = self._make_config()
         suggestions = [Suggestion(text="Hi", index=0)]
         h = _compute_overlay_height(suggestions, cfg)
-        expected_min = cfg.padding * 2 + cfg.item_height
+        expected_min = cfg.item_height + cfg.hint_bar_height
         assert h >= expected_min
 
     def test_two_mixed_suggestions(self):
@@ -368,7 +365,7 @@ class TestOverlayVaryingSuggestionCounts:
         heights = _compute_item_heights(suggestions, cfg)
         h = _compute_overlay_height(suggestions, cfg)
         assert len(heights) == 2
-        assert h >= cfg.padding * 2 + sum(heights)  # or equal, since not clamped to max
+        assert h >= sum(heights) + cfg.hint_bar_height
 
     def test_three_varied_suggestions(self):
         cfg = self._make_config()
@@ -384,6 +381,5 @@ class TestOverlayVaryingSuggestionCounts:
         total_h = _compute_overlay_height(suggestions, cfg)
         assert len(heights) == 3
         assert total_h <= cfg.max_height
-        # Total should be at least the sum of individual heights + padding + hint bar
-        raw_sum = cfg.padding * 2 + sum(heights) + cfg.hint_bar_height
+        raw_sum = sum(heights) + cfg.hint_bar_height
         assert total_h == min(raw_sum, cfg.max_height)

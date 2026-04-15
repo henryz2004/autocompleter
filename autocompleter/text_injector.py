@@ -36,6 +36,9 @@ from .cdp_injector import CDPConnection, find_debug_port, is_chromium_app
 class TextInjector:
     """Injects text into the currently focused input field."""
 
+    _CLIPBOARD_SETTLE_DELAY_S = 0.03
+    _KEYSTROKE_DELAY_S = 0.002
+
     def __init__(self):
         if HAS_INJECTION:
             self._system_wide = AXUIElementCreateSystemWide()
@@ -48,26 +51,34 @@ class TextInjector:
     ) -> bool:
         """Inject text into the currently focused input.
 
-        Uses simulated keystrokes as the primary strategy.  AX value
-        setting and CDP are avoided because they bypass the app's normal
-        input handling — rich text editors (Claude Desktop, ChatGPT,
-        ProseMirror/React apps) break when their internal state is mutated
-        externally.  Keystrokes go through the standard input pipeline so
-        the app processes them natively.
-
-        Falls back to clipboard paste if keystrokes fail.
+        Strategy:
+        1. For cursor-aware/replace flows, try AX first.
+        2. For normal accepts, prefer native keystrokes.
+        3. For Chromium apps, try CDP insertText before touching the clipboard.
+        4. Fall back to clipboard paste only if other strategies fail.
 
         Returns True if injection succeeded.
         """
         if not text:
             return False
 
-        # Primary: simulated keystrokes (works with all rich text editors)
+        if replace or insertion_point is not None:
+            if self._inject_via_ax(
+                text,
+                insertion_point=insertion_point,
+                replace=replace,
+            ):
+                logger.debug("Injected text via AX value setting")
+                return True
+
         if self._inject_via_keystrokes(text):
             logger.debug("Injected text via simulated keystrokes")
             return True
 
-        # Fallback: clipboard paste (Cmd+V)
+        if self._inject_via_cdp(text, app_name=app_name, app_pid=app_pid):
+            logger.debug("Injected text via CDP")
+            return True
+
         if self._inject_via_clipboard(text):
             logger.debug("Injected text via clipboard paste")
             return True
@@ -242,7 +253,7 @@ class TextInjector:
         pasteboard.clearContents()
         pasteboard.setString_forType_(text, AppKit.NSPasteboardTypeString)
         self._simulate_cmd_v()
-        time.sleep(0.1)
+        time.sleep(self._CLIPBOARD_SETTLE_DELAY_S)
         return True
 
     def _inject_via_keystrokes(self, text: str) -> bool:
@@ -253,7 +264,7 @@ class TextInjector:
         try:
             for char in text:
                 self._type_character(char)
-                time.sleep(0.01)  # Small delay between characters
+                time.sleep(self._KEYSTROKE_DELAY_S)
             return True
         except Exception:
             logger.exception("Failed to inject via keystrokes")

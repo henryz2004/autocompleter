@@ -88,7 +88,9 @@ class ContextStore:
         source_url: str = "",
         cross_app_context: str = "",
         subtree_context: str | None = None,
+        tree_overview: str | None = None,
         memory_context: str = "",
+        focused_state: dict[str, object] | None = None,
     ) -> str:
         """Build lean context for continuation mode.
 
@@ -109,6 +111,10 @@ class ContextStore:
             meta_parts.append(f"URL: {source_url}")
         parts.append(" | ".join(meta_parts))
 
+        state_block = self._format_focused_state(focused_state)
+        if state_block:
+            parts.append(state_block)
+
         # Cross-app
         if cross_app_context:
             parts.append(cross_app_context)
@@ -117,9 +123,12 @@ class ContextStore:
         if memory_context:
             parts.append(memory_context)
 
+        if tree_overview:
+            parts.append(f"Focused path overview:\n{tree_overview}")
+
         # Subtree
         if subtree_context:
-            parts.append(f"Nearby content:\n{subtree_context}")
+            parts.append(f"Nearby content from the focused region:\n{subtree_context}")
 
         # Cursor state
         parts.append(f"Text before cursor:\n{before_cursor}")
@@ -138,7 +147,9 @@ class ContextStore:
         max_turns: int = 8,
         cross_app_context: str = "",
         subtree_context: str | None = None,
+        tree_overview: str | None = None,
         memory_context: str = "",
+        focused_state: dict[str, object] | None = None,
     ) -> str:
         """Build context for reply mode.
 
@@ -160,6 +171,10 @@ class ContextStore:
             meta_parts.append(f"URL: {source_url}")
         parts.append(" | ".join(meta_parts))
 
+        state_block = self._format_focused_state(focused_state)
+        if state_block:
+            parts.append(state_block)
+
         # Tier 2.5a: cross-app context
         if cross_app_context:
             parts.append(cross_app_context)
@@ -167,6 +182,9 @@ class ContextStore:
         # Tier 2.5b: long-term memory
         if memory_context:
             parts.append(memory_context)
+
+        if tree_overview:
+            parts.append(f"Focused path overview:\n{tree_overview}")
 
         # Tier 1: speaker-labeled conversation turns (primary).
         turns = conversation_turns[-max_turns:]
@@ -198,13 +216,55 @@ class ContextStore:
         else:
             # Fallback: subtree context when no structured turns detected
             if subtree_context:
-                parts.append(f"Nearby content:\n{subtree_context}")
+                parts.append(f"Nearby content from the focused region:\n{subtree_context}")
 
         # Tier 2: draft state
         if draft_text.strip():
             parts.append(f"Draft so far:\n{draft_text}")
 
         return "\n\n".join(parts)
+
+    @staticmethod
+    def _format_focused_state(
+        focused_state: dict[str, object] | None,
+    ) -> str:
+        """Render explicit focused-field state for the prompt/debug payload."""
+        if not focused_state:
+            return ""
+
+        parts: list[str] = []
+        role = focused_state.get("role")
+        if role:
+            parts.append(f"role={role}")
+        insertion_point = focused_state.get("insertion_point")
+        if insertion_point is not None:
+            parts.append(f"cursor={insertion_point}")
+        selection_length = focused_state.get("selection_length")
+        if selection_length is not None:
+            parts.append(f"selection={selection_length}")
+        value_length = focused_state.get("value_length")
+        if value_length is not None:
+            parts.append(f"value_length={value_length}")
+        placeholder_detected = focused_state.get("placeholder_detected")
+        if placeholder_detected is not None:
+            parts.append(
+                "placeholder_detected=true"
+                if placeholder_detected
+                else "placeholder_detected=false"
+            )
+        raw_placeholder = focused_state.get("raw_placeholder_value")
+        if isinstance(raw_placeholder, str) and raw_placeholder.strip():
+            parts.append(f"raw_placeholder={raw_placeholder!r}")
+
+        if not parts:
+            return ""
+
+        lines = ["Focused input state:", " | ".join(parts)]
+        if focused_state.get("placeholder_detected"):
+            lines.append(
+                "The focused field currently looks like placeholder or UI copy, not user-authored draft text."
+            )
+        return "\n".join(lines)
 
     def get_shell_context(
         self,

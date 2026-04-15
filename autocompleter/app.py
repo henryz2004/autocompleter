@@ -383,6 +383,8 @@ class Autocompleter:
         list | None,
         str,
         str | None,
+        str | None,
+        dict | None,
     ]:
         """Capture the live context payload used for a trigger/regenerate."""
         mode = detect_mode(before_cursor=focused.before_cursor)
@@ -406,8 +408,27 @@ class Autocompleter:
         self._latency_tracker.mark("caret_ready")
 
         self._latency_tracker.mark("subtree_start")
-        subtree_context = self.observer.get_subtree_context(token_budget=500)
+        tree_context_bundle = self.observer.get_context_bundle(
+            focused,
+            token_budget=500,
+            overview_token_budget=120,
+        )
         self._latency_tracker.mark("subtree_ready")
+        subtree_context = (
+            tree_context_bundle.bottom_up_context
+            if tree_context_bundle is not None
+            else self.observer.get_subtree_context(token_budget=500)
+        )
+        tree_overview_context = (
+            tree_context_bundle.top_down_context
+            if tree_context_bundle is not None
+            else None
+        )
+        context_tree = (
+            tree_context_bundle.tree
+            if tree_context_bundle is not None
+            else None
+        )
 
         visible = self.observer.get_visible_content()
         window_title = visible.window_title if visible else ""
@@ -433,6 +454,19 @@ class Autocompleter:
             conversation_turns,
             cross_app_context,
             subtree_context,
+            tree_overview_context,
+            context_tree,
+        )
+
+    @staticmethod
+    def _expand_live_trigger_context(captured: tuple) -> tuple:
+        """Normalize older 9-field trigger tuples to the richer 11-field form."""
+        if len(captured) == 11:
+            return captured
+        if len(captured) == 9:
+            return (*captured, None, None)
+        raise ValueError(
+            f"Unexpected live trigger context shape: expected 9 or 11 fields, got {len(captured)}"
         )
 
     # Error backoff: max sleep multiplier
@@ -594,7 +628,11 @@ class Autocompleter:
             conversation_turns,
             cross_app_context,
             subtree_context,
-        ) = self._capture_live_trigger_context(focused, trigger_type="manual")
+            tree_overview_context,
+            context_tree,
+        ) = self._expand_live_trigger_context(
+            self._capture_live_trigger_context(focused, trigger_type="manual")
+        )
         logger.info(f"Mode: {mode.value} (before_cursor len={len(focused.before_cursor.strip())})")
 
         # Show loading indicator immediately
@@ -607,6 +645,11 @@ class Autocompleter:
             logger.info(
                 f"[CTX] Subtree context: {len(subtree_context)} chars "
                 f"(~{len(subtree_context) // 4} tokens)"
+            )
+        if tree_overview_context:
+            logger.info(
+                f"[CTX] Focus path overview: {len(tree_overview_context)} chars "
+                f"(~{len(tree_overview_context) // 4} tokens)"
             )
 
         logger.info(
@@ -632,8 +675,12 @@ class Autocompleter:
             snapshot.before_cursor = focused.before_cursor
             snapshot.after_cursor = focused.after_cursor
             snapshot.insertion_point = focused.insertion_point
+            snapshot.selection_length = getattr(focused, "selection_length", 0)
             snapshot.value_length = len(focused.value)
             snapshot.placeholder_detected = focused.placeholder_detected
+            snapshot.raw_value = getattr(focused, "raw_value", focused.value)
+            snapshot.raw_placeholder_value = getattr(focused, "raw_placeholder_value", "")
+            snapshot.raw_number_of_characters = getattr(focused, "raw_number_of_characters", None)
             snapshot.request["live_context_variant"] = LIVE_REPLY_VARIANT.name if mode == AutocompleteMode.REPLY else LIVE_CONTINUATION_VARIANT.name
             if conversation_turns:
                 snapshot.conversation_turns = [
@@ -656,6 +703,8 @@ class Autocompleter:
             conversation_turns=conversation_turns,
             cross_app_context=cross_app_context,
             subtree_context=subtree_context,
+            tree_overview_context=tree_overview_context,
+            context_tree=context_tree,
             trigger_type="manual",
         )
 
@@ -667,8 +716,15 @@ class Autocompleter:
                 focused, x, y, caret_height, mode,
                 window_title, source_url, conversation_turns,
                 gen_id, cross_app_context,
-                snapshot, subtree_context, 0.0, None, "manual",
+                snapshot, subtree_context,
             ),
+            kwargs={
+                "tree_overview_context": tree_overview_context,
+                "context_tree": context_tree,
+                "temperature_boost": 0.0,
+                "extra_negative_patterns": None,
+                "trigger_type": "manual",
+            },
             daemon=True,
         ).start()
 
@@ -686,6 +742,7 @@ class Autocompleter:
         generation_id: int = 0,
         cross_app_context: str = "",
         subtree_context: str | None = None,
+        tree_overview_context: str | None = None,
     ) -> None:
         """Run the LLM call on a worker thread and show the overlay."""
         app_name = focused.app_name
@@ -727,7 +784,9 @@ class Autocompleter:
                 source_url=source_url,
                 cross_app_context=cross_app_context,
                 subtree_context=subtree_context,
+                tree_overview=tree_overview_context,
                 memory_context=memory_context,
+                focused_state=self._focused_state_payload(focused),
             )
         else:
             context = self.context_store.get_reply_context(
@@ -738,7 +797,9 @@ class Autocompleter:
                 draft_text=effective_before_cursor if focused.insertion_point is not None else "",
                 cross_app_context=cross_app_context,
                 subtree_context=subtree_context,
+                tree_overview=tree_overview_context,
                 memory_context=memory_context,
+                focused_state=self._focused_state_payload(focused),
             )
 
         live_variant = (
@@ -839,6 +900,8 @@ class Autocompleter:
         cross_app_context: str = "",
         snapshot: TriggerSnapshot | None = None,
         subtree_context: str | None = None,
+        tree_overview_context: str | None = None,
+        context_tree: dict | None = None,
         temperature_boost: float = 0.0,
         extra_negative_patterns: list[str] | None = None,
         trigger_type: str = "",
@@ -848,7 +911,8 @@ class Autocompleter:
             self._generate_and_show_streaming_inner(
                 focused, x, y, caret_height, mode, window_title, source_url,
                 conversation_turns, generation_id,
-                cross_app_context, snapshot, subtree_context, temperature_boost,
+                cross_app_context, snapshot, subtree_context, tree_overview_context,
+                context_tree, temperature_boost,
                 extra_negative_patterns, trigger_type,
             )
         except Exception:
@@ -868,6 +932,8 @@ class Autocompleter:
         cross_app_context: str = "",
         snapshot: TriggerSnapshot | None = None,
         subtree_context: str | None = None,
+        tree_overview_context: str | None = None,
+        context_tree: dict | None = None,
         temperature_boost: float = 0.0,
         extra_negative_patterns: list[str] | None = None,
         trigger_type: str = "",
@@ -910,7 +976,9 @@ class Autocompleter:
                 source_url=source_url,
                 cross_app_context=cross_app_context,
                 subtree_context=subtree_context,
+                tree_overview=tree_overview_context,
                 memory_context=memory_context,
+                focused_state=self._focused_state_payload(focused),
             )
         else:
             context = self.context_store.get_reply_context(
@@ -921,7 +989,9 @@ class Autocompleter:
                 draft_text=effective_before_cursor if focused.insertion_point is not None else "",
                 cross_app_context=cross_app_context,
                 subtree_context=subtree_context,
+                tree_overview=tree_overview_context,
                 memory_context=memory_context,
+                focused_state=self._focused_state_payload(focused),
             )
 
         live_variant = (
@@ -941,6 +1011,23 @@ class Autocompleter:
         # Populate snapshot with detection results and context
         is_terminal = is_shell_app(app_name)
         if snapshot:
+            selection_debug_payload: dict = {}
+            if context_tree:
+                try:
+                    from autocompleter.subtree_context import build_context_bundle_from_tree
+
+                    debug_bundle = build_context_bundle_from_tree(
+                        context_tree,
+                        token_budget=500,
+                        overview_token_budget=120,
+                    )
+                    selection_debug_payload = (
+                        debug_bundle.selection_debug
+                        if debug_bundle is not None and debug_bundle.selection_debug
+                        else {}
+                    )
+                except Exception:
+                    logger.debug("Failed to build bottom-up selection debug", exc_info=True)
             snapshot.mode = mode.value
             snapshot.use_shell = is_terminal
             snapshot.use_tui = is_terminal
@@ -949,6 +1036,13 @@ class Autocompleter:
                 snapshot.tui_name = "tui"
                 snapshot.tui_user_input = effective_before_cursor
             snapshot.context = context
+            snapshot.context_inputs = {
+                "focusedState": self._focused_state_payload(focused),
+                "topDownOverview": tree_overview_context or "",
+                "bottomUpContext": subtree_context or "",
+                "contextTree": context_tree or {},
+                "bottomUpSelectionDebug": selection_debug_payload,
+            }
             if conversation_turns:
                 snapshot.conversation_turns = [
                         {"speaker": t.speaker, "text": t.text, "timestamp": getattr(t, "timestamp", "")}
@@ -1191,10 +1285,29 @@ class Autocompleter:
         )
         cross_app_context = ContextTrail.format_cross_app_context(cross_app_snapshots)
 
-        # Fetch subtree context (XML from walking up from focused element)
+        # Fetch focus-aware tree context for prompt assembly.
         self._latency_tracker.mark("subtree_start")
-        subtree_context = self.observer.get_subtree_context(token_budget=500)
+        tree_context_bundle = self.observer.get_context_bundle(
+            focused,
+            token_budget=500,
+            overview_token_budget=120,
+        )
         self._latency_tracker.mark("subtree_ready")
+        subtree_context = (
+            tree_context_bundle.bottom_up_context
+            if tree_context_bundle is not None
+            else self.observer.get_subtree_context(token_budget=500)
+        )
+        tree_overview_context = (
+            tree_context_bundle.top_down_context
+            if tree_context_bundle is not None
+            else None
+        )
+        context_tree = (
+            tree_context_bundle.tree
+            if tree_context_bundle is not None
+            else None
+        )
 
         # Save trigger state so _on_regenerate can replay (same as manual trigger)
         self._last_trigger_args = dict(
@@ -1206,6 +1319,8 @@ class Autocompleter:
             conversation_turns=conversation_turns,
             cross_app_context=cross_app_context,
             subtree_context=subtree_context,
+            tree_overview_context=tree_overview_context,
+            context_tree=context_tree,
             trigger_type="auto",
         )
 
@@ -1218,8 +1333,15 @@ class Autocompleter:
                 focused, x, y, caret_height, mode,
                 window_title, source_url, conversation_turns,
                 gen_id, cross_app_context,
-                None, subtree_context, 0.0, None, "auto",
+                None, subtree_context,
             ),
+            kwargs={
+                "tree_overview_context": tree_overview_context,
+                "context_tree": context_tree,
+                "temperature_boost": 0.0,
+                "extra_negative_patterns": None,
+                "trigger_type": "auto",
+            },
             daemon=True,
         ).start()
 
@@ -1310,7 +1432,11 @@ class Autocompleter:
             conversation_turns,
             cross_app_context,
             subtree_context,
-        ) = self._capture_live_trigger_context(focused, trigger_type="regenerate")
+            tree_overview_context,
+            context_tree,
+        ) = self._expand_live_trigger_context(
+            self._capture_live_trigger_context(focused, trigger_type="regenerate")
+        )
 
         self._last_trigger_args = dict(
             focused=focused,
@@ -1323,6 +1449,8 @@ class Autocompleter:
             conversation_turns=conversation_turns,
             cross_app_context=cross_app_context,
             subtree_context=subtree_context,
+            tree_overview_context=tree_overview_context,
+            context_tree=context_tree,
             trigger_type="regenerate",
         )
 
@@ -1366,6 +1494,8 @@ class Autocompleter:
                 "temperature_boost": 0.5,
                 "extra_negative_patterns": prev_texts,
                 "trigger_type": "regenerate",
+                "tree_overview_context": tree_overview_context,
+                "context_tree": context_tree,
             },
             daemon=True,
         ).start()
@@ -1487,8 +1617,12 @@ class Autocompleter:
         snapshot.before_cursor = focused.before_cursor
         snapshot.after_cursor = focused.after_cursor
         snapshot.insertion_point = focused.insertion_point
+        snapshot.selection_length = getattr(focused, "selection_length", 0)
         snapshot.value_length = len(focused.value)
         snapshot.placeholder_detected = focused.placeholder_detected
+        snapshot.raw_value = getattr(focused, "raw_value", focused.value)
+        snapshot.raw_placeholder_value = getattr(focused, "raw_placeholder_value", "")
+        snapshot.raw_number_of_characters = getattr(focused, "raw_number_of_characters", None)
         snapshot.mode = mode.value
         snapshot.request["live_context_variant"] = (
             LIVE_REPLY_VARIANT.name
@@ -1509,6 +1643,18 @@ class Autocompleter:
             daemon=True,
         ).start()
         return snapshot
+
+    @staticmethod
+    def _focused_state_payload(focused) -> dict[str, object]:
+        """Serialize focused-field state for prompt assembly and dumps."""
+        return {
+            "role": focused.role,
+            "insertion_point": focused.insertion_point,
+            "selection_length": getattr(focused, "selection_length", 0),
+            "value_length": len(focused.value),
+            "placeholder_detected": focused.placeholder_detected,
+            "raw_placeholder_value": getattr(focused, "raw_placeholder_value", ""),
+        }
 
     def _record_accepted_suggestion(
         self,
@@ -1555,22 +1701,24 @@ class Autocompleter:
             logger.debug("Failed to record accepted feedback", exc_info=True)
 
     @staticmethod
-    def _build_post_accept_focused_state(live_focused):
-        """Build a focused state for follow-up: empty draft, ready for next input.
-
-        After accepting a suggestion the text is committed (sent in chat apps,
-        inserted in editors).  The follow-up suggests what to type *next*, so
-        the draft starts empty.
-        """
+    def _build_post_accept_focused_state(
+        live_focused,
+        accepted_text: str,
+        before_cursor: str,
+        after_cursor: str,
+    ):
+        """Build a synthetic post-accept field state without waiting for UI sync."""
+        synthetic_before = before_cursor + accepted_text
+        synthetic_value = synthetic_before + after_cursor
         return FocusedElement(
             app_name=live_focused.app_name,
             app_pid=live_focused.app_pid,
             role=live_focused.role,
-            value="",
+            value=synthetic_value,
             selected_text="",
             position=live_focused.position,
             size=live_focused.size,
-            insertion_point=0,
+            insertion_point=len(synthetic_before),
             selection_length=0,
             placeholder_detected=False,
         )
@@ -1589,24 +1737,17 @@ class Autocompleter:
 
         focused_for_generation = self._build_post_accept_focused_state(
             live_focused=focused,
+            accepted_text=accepted_text,
+            before_cursor=self._trigger_before_cursor,
+            after_cursor=self._trigger_after_cursor,
         )
 
         prev = self._last_trigger_args
 
-        # Update conversation turns with the committed text (what was just
-        # typed + accepted).  If conversation_turns exist we append a "You"
-        # turn so the LLM knows what was just said.  For non-chat apps the
-        # list is empty/None so nothing changes — no app-specific branching.
-        committed_text = self._trigger_before_cursor + accepted_text
-        prev_turns = prev.get("conversation_turns") or []
-        if prev_turns:
-            from .conversation_extractors import ConversationTurn
-            conversation_turns = list(prev_turns)
-            conversation_turns.append(
-                ConversationTurn(speaker="You", text=committed_text, timestamp=None)
-            )
-        else:
-            conversation_turns = prev_turns
+        # Keep the existing conversation context unchanged. The follow-up should
+        # continue from the synthetic post-accept draft, not wait for or infer a
+        # committed message from the live app state.
+        conversation_turns = list(prev.get("conversation_turns") or [])
 
         self._trigger_time = time.time()
         self._latency_tracker.start(generation_id=self._generation_id + 1)
@@ -1649,6 +1790,8 @@ class Autocompleter:
             conversation_turns=conversation_turns,
             cross_app_context=prev["cross_app_context"],
             subtree_context=prev["subtree_context"],
+            tree_overview_context=prev.get("tree_overview_context"),
+            context_tree=prev.get("context_tree"),
             trigger_type="post_accept",
         )
 
@@ -1674,10 +1817,14 @@ class Autocompleter:
                 prev["cross_app_context"],
                 snapshot,
                 prev["subtree_context"],
-                0.0,
-                None,
-                "post_accept",
             ),
+            kwargs={
+                "tree_overview_context": prev.get("tree_overview_context"),
+                "context_tree": prev.get("context_tree"),
+                "temperature_boost": 0.0,
+                "extra_negative_patterns": None,
+                "trigger_type": "post_accept",
+            },
             daemon=True,
         ).start()
 
@@ -1700,7 +1847,11 @@ class Autocompleter:
             self._trigger_before_cursor,
             self._trigger_after_cursor,
         )
-        success = self.injector.inject(text)
+        success = self.injector.inject(
+            text,
+            app_name=app_name,
+            app_pid=app_pid,
+        )
         if not success:
             logger.warning("Failed to inject suggestion")
             return
@@ -1723,7 +1874,11 @@ class Autocompleter:
                     self._trigger_before_cursor,
                     self._trigger_after_cursor,
                 )
-                success = self.injector.inject(partial_text)
+                success = self.injector.inject(
+                    partial_text,
+                    app_name=app_name,
+                    app_pid=app_pid,
+                )
                 if success:
                     logger.info(f"Partial inject: {partial_text[:60]}")
                     focused = self.observer.get_focused_element()

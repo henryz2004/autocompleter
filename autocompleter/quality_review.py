@@ -125,7 +125,10 @@ def _is_semantic_block(block: str) -> bool:
 
 
 def _is_nearby_block(block: str) -> bool:
-    return block.startswith("Nearby content:")
+    return (
+        block.startswith("Nearby content:")
+        or block.startswith("Nearby content from the focused region:")
+    )
 
 
 def _is_visible_context_block(block: str) -> bool:

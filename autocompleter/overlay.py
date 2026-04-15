@@ -105,7 +105,7 @@ def _compute_overlay_height(
 ) -> float:
     """Compute total overlay height with dynamic per-item sizing."""
     item_heights = _compute_item_heights(suggestions, config, expanded_index)
-    total = config.padding * 2 + sum(item_heights) + config.hint_bar_height
+    total = sum(item_heights) + config.hint_bar_height
     return min(total, config.max_height)
 
 
@@ -186,7 +186,7 @@ if HAS_APPKIT:
             pt = self.convertPoint_fromView_(event.locationInWindow(), None)
             # Determine which suggestion was clicked by walking item rects
             cfg = self._config
-            y = self.bounds().size.height - cfg.padding
+            y = self.bounds().size.height
             for i in range(len(self._suggestions)):
                 item_h = (
                     self._item_heights[i]
@@ -201,7 +201,7 @@ if HAS_APPKIT:
                     if callback:
                         callback(i)
                     return
-            # Click was in the hint bar or padding — ignore
+            # Click was in the hint bar — ignore
             return
 
         def drawRect_(self, rect):
@@ -237,7 +237,7 @@ if HAS_APPKIT:
             paragraph_style = AppKit.NSMutableParagraphStyle.alloc().init()
             paragraph_style.setLineBreakMode_(AppKit.NSLineBreakByWordWrapping)
 
-            y = self.bounds().size.height - cfg.padding
+            y = self.bounds().size.height
 
             for i, suggestion in enumerate(self._suggestions):
                 item_h = (
@@ -255,9 +255,15 @@ if HAS_APPKIT:
 
                 # Highlight selected item
                 if i == self._selected_index:
+                    highlight_rect = NSMakeRect(
+                        0,
+                        y,
+                        self.bounds().size.width,
+                        item_h,
+                    )
                     highlight_path = (
                         AppKit.NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(
-                            item_rect, 4.0, 4.0
+                            highlight_rect, 0.0, 0.0
                         )
                     )
                     highlight.set()
@@ -635,8 +641,7 @@ class SuggestionOverlay:
 
         # Recompute height using the view's current item heights
         new_height = (
-            self._config.padding * 2
-            + sum(self._view._item_heights)
+            sum(self._view._item_heights)
             + self._config.hint_bar_height
         )
         new_height = min(new_height, self._config.max_height)

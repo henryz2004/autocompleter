@@ -45,8 +45,30 @@ def _extract_block_body(context: str, header: str) -> str:
     return ""
 
 
+def _focused_state_payload(data: dict) -> dict:
+    context_inputs = data.get("contextInputs") or {}
+    focused_state = context_inputs.get("focusedState")
+    if isinstance(focused_state, dict) and focused_state:
+        return focused_state
+
+    focused = data.get("focused") or {}
+    return {
+        "role": focused.get("role", ""),
+        "insertion_point": focused.get("insertionPoint"),
+        "selection_length": focused.get("selectionLength", 0),
+        "value_length": focused.get("valueLength"),
+        "placeholder_detected": focused.get("placeholderDetected"),
+        "raw_placeholder_value": focused.get("rawPlaceholderValue", ""),
+    }
+
+
+def _context_inputs(data: dict) -> dict:
+    return data.get("contextInputs") or {}
+
+
 def _rebuild_context(data: dict) -> str:
     original_context = data.get("context") or ""
+    context_inputs = _context_inputs(data)
     with tempfile.TemporaryDirectory(prefix="autocompleter-review-") as tmpdir:
         store = ContextStore(Path(tmpdir) / "review.db")
         store.open()
@@ -60,11 +82,22 @@ def _rebuild_context(data: dict) -> str:
                 cross_app_context = (
                     "[Recent activity from other apps]\n" + cross_app_context
                 )
-            subtree_context = _extract_block_body(original_context, "Nearby content:")
-            visible_text = data.get("visibleTextElements") or None
+            subtree_context = (
+                context_inputs.get("bottomUpContext")
+                or _extract_block_body(
+                    original_context,
+                    "Nearby content from the focused region:",
+                )
+                or _extract_block_body(original_context, "Nearby content:")
+            )
+            tree_overview = (
+                context_inputs.get("topDownOverview")
+                or _extract_block_body(original_context, "Focused path overview:")
+            )
             source_app = data.get("app") or "Unknown"
             window_title = data.get("windowTitle") or ""
             source_url = (data.get("focused") or {}).get("sourceUrl", "")
+            focused_state = _focused_state_payload(data)
 
             if mode == AutocompleteMode.CONTINUATION:
                 return store.get_continuation_context(
@@ -73,9 +106,10 @@ def _rebuild_context(data: dict) -> str:
                     source_app=source_app,
                     window_title=window_title,
                     source_url=source_url,
-                    visible_text=visible_text,
                     cross_app_context=cross_app_context,
                     subtree_context=subtree_context or None,
+                    tree_overview=tree_overview or None,
+                    focused_state=focused_state,
                 )
 
             return store.get_reply_context(
@@ -84,9 +118,10 @@ def _rebuild_context(data: dict) -> str:
                 window_title=window_title,
                 source_url=source_url,
                 draft_text=(data.get("focused") or {}).get("beforeCursor", ""),
-                visible_text=visible_text,
                 cross_app_context=cross_app_context,
                 subtree_context=subtree_context or None,
+                tree_overview=tree_overview or None,
+                focused_state=focused_state,
             )
         finally:
             store.close()

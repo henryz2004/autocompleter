@@ -3,10 +3,10 @@
 
 Shows every stage of the autocompleter pipeline for the frontmost app:
   A. Focused element (cursor state, placeholder detection)
-  B. Visible text elements
-  C. Conversation extraction (per-app extractor output)
+  B. Window metadata + conversation extraction
+  C. Focus-aware tree context (top-down + bottom-up)
   D. Mode detection (CONTINUATION vs REPLY)
-  E. Assembled context string (what the LLM sees)
+  E. Assembled context string (raw + cleaned)
   F. LLM prompts (system + user)
   G. Raw AX tree
 
@@ -24,6 +24,7 @@ Press Ctrl+C to quit.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import tempfile
 import time
@@ -34,18 +35,15 @@ sys.path.insert(0, ".")
 import AppKit
 from autocompleter.ax_utils import dump_ax_tree
 from autocompleter.context_store import ContextStore
-from autocompleter.conversation_extractors import get_extractor
 from autocompleter.hotkey import HotkeyListener
 from autocompleter.input_observer import InputObserver
-from autocompleter.suggestion_engine import (
-    SYSTEM_PROMPT_COMPLETION,
-    SYSTEM_PROMPT_REPLY,
-    USER_PROMPT_TEMPLATE_COMPLETION,
-    USER_PROMPT_TEMPLATE_REPLY,
-    AutocompleteMode,
-    MODE_THRESHOLD_CHARS,
-    detect_mode,
+from autocompleter.prompts import build_messages
+from autocompleter.quality_review import (
+    LIVE_CONTINUATION_VARIANT,
+    LIVE_REPLY_VARIANT,
+    apply_quality_variant_to_context,
 )
+from autocompleter.suggestion_engine import AutocompleteMode, MODE_THRESHOLD_CHARS, detect_mode
 
 
 def _indent(text: str, prefix: str = "  | ") -> str:
@@ -56,6 +54,18 @@ def _indent(text: str, prefix: str = "  | ") -> str:
 def _section(f, title: str) -> None:
     """Write a section header."""
     f.write(f"\n=== {title} ===\n")
+
+
+def _json_safe(value):
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, set):
+        return sorted(_json_safe(v) for v in value)
+    return f"<nonserializable:{type(value).__name__}>"
 
 
 def _dump_focused_element(f, focused) -> None:
@@ -91,30 +101,14 @@ def _dump_focused_element(f, focused) -> None:
     f.write(f"  Position: {pos_str}  |  Size: {size_str}\n")
 
 
-def _dump_visible_content(f, visible) -> None:
-    """Dump section B: visible text elements."""
-    _section(f, "B. VISIBLE TEXT ELEMENTS")
-    f.write(f"  Window: \"{visible.window_title}\"  |  URL: \"{visible.url}\"\n")
-    f.write(f"  Count: {len(visible.text_elements)} elements\n")
-    for i, elem in enumerate(visible.text_elements):
-        display = elem.replace("\n", "\\n")
-        if len(display) > 120:
-            display = display[:120] + "..."
-        f.write(f"  [{i}]: \"{display}\"\n")
-        if i >= 29:
-            f.write(f"  ... ({len(visible.text_elements) - 30} more elements)\n")
-            break
-
-
 def _dump_conversation(f, visible) -> None:
-    """Dump section C: conversation extraction."""
-    _section(f, "C. CONVERSATION EXTRACTION")
-    extractor = get_extractor(visible.app_name)
-    f.write(f"  Extractor used: {type(extractor).__name__}\n")
+    """Dump section B: window metadata + conversation extraction."""
+    _section(f, "B. WINDOW METADATA + CONVERSATION")
+    f.write(f"  Window: \"{visible.window_title}\"  |  URL: \"{visible.url}\"\n")
 
     turns = visible.conversation_turns
     if turns is None:
-        f.write("  No conversation turns extracted (returned None)\n")
+        f.write("  Conversation turns: None (extractor returned None)\n")
     elif len(turns) == 0:
         f.write("  Conversation turns: 0 (empty list)\n")
     else:
@@ -146,30 +140,48 @@ def _dump_context(f, context: str, mode: AutocompleteMode) -> None:
     f.write(_indent(context) + "\n")
 
 
-def _dump_prompts(f, context: str, mode: AutocompleteMode, num_suggestions: int) -> None:
+def _dump_prompts(
+    f,
+    context: str,
+    mode: AutocompleteMode,
+    num_suggestions: int,
+    prompt_placeholder_aware: bool,
+) -> None:
     """Dump section F: LLM prompts."""
     _section(f, "F. LLM PROMPTS")
-
-    if mode == AutocompleteMode.CONTINUATION:
-        system = SYSTEM_PROMPT_COMPLETION.format(num_suggestions=num_suggestions)
-        user_msg = USER_PROMPT_TEMPLATE_COMPLETION.format(
-            context=context or "(no context yet)",
-            num_suggestions=num_suggestions,
-        )
-    else:
-        system = SYSTEM_PROMPT_REPLY.format(
-            num_suggestions=num_suggestions,
-            max_suggestion_lines=10,
-        )
-        user_msg = USER_PROMPT_TEMPLATE_REPLY.format(
-            context=context or "(no context yet)",
-            num_suggestions=num_suggestions,
-        )
+    system, user_msg = build_messages(
+        mode=mode,
+        context=context,
+        num_suggestions=num_suggestions,
+        max_suggestion_lines=10,
+        prompt_placeholder_aware=prompt_placeholder_aware,
+    )
 
     f.write(f"  --- SYSTEM PROMPT ({mode.name.lower()}, {num_suggestions} suggestions) ---\n")
     f.write(_indent(system) + "\n")
     f.write(f"  --- USER PROMPT ---\n")
     f.write(_indent(user_msg) + "\n")
+
+
+def _dump_tree_context(f, tree_bundle) -> None:
+    """Dump section C: top-down and bottom-up focused-region context."""
+    _section(f, "C. FOCUS-AWARE TREE CONTEXT")
+    if not tree_bundle:
+        f.write("  (no tree context bundle available)\n")
+        return
+
+    f.write("  --- TOP-DOWN FOCUS PATH OVERVIEW ---\n")
+    f.write(_indent(tree_bundle.top_down_context or "(empty)") + "\n")
+    f.write("  --- BOTTOM-UP FOCUSED-REGION CONTEXT ---\n")
+    f.write(_indent(tree_bundle.bottom_up_context or "(empty)") + "\n")
+    if tree_bundle.selection_debug:
+        selection_debug = json.dumps(_json_safe(tree_bundle.selection_debug), indent=2)
+        f.write("  --- BOTTOM-UP SELECTION DEBUG ---\n")
+        f.write(_indent(selection_debug) + "\n")
+    if tree_bundle.tree:
+        tree_json = json.dumps(_json_safe(tree_bundle.tree), indent=2)
+        f.write("  --- CONTEXT TREE JSON ---\n")
+        f.write(_indent(tree_json) + "\n")
 
 
 def _dump_ax_tree_section(f, max_depth: int) -> None:
@@ -238,35 +250,32 @@ def on_trigger(out_path: str | None, max_depth: int, num_suggestions: int, both_
             _section(f, "A. FOCUSED ELEMENT")
             f.write(f"  ERROR: {e}\n")
 
-        # --- B. Visible content ---
+        # --- B. Window metadata + conversation ---
         visible = None
         try:
             visible = observer.get_visible_content()
             if visible:
-                _dump_visible_content(f, visible)
-            else:
-                _section(f, "B. VISIBLE TEXT ELEMENTS")
-                f.write("  (no visible content returned)\n")
-        except Exception as e:
-            _section(f, "B. VISIBLE TEXT ELEMENTS")
-            f.write(f"  ERROR: {e}\n")
-
-        # --- C. Conversation extraction ---
-        try:
-            if visible:
                 _dump_conversation(f, visible)
             else:
-                _section(f, "C. CONVERSATION EXTRACTION")
-                f.write("  (skipped — no visible content)\n")
+                _section(f, "B. WINDOW METADATA + CONVERSATION")
+                f.write("  (no visible content returned)\n")
         except Exception as e:
-            _section(f, "C. CONVERSATION EXTRACTION")
+            _section(f, "B. WINDOW METADATA + CONVERSATION")
             f.write(f"  ERROR: {e}\n")
 
-        # --- D/E/F require cursor state ---
+        # --- C/D/E/F require cursor state ---
         if focused:
             before_cursor = focused.before_cursor
             after_cursor = focused.after_cursor
             detected_mode = detect_mode(before_cursor=before_cursor)
+            tree_bundle = None
+
+            try:
+                tree_bundle = observer.get_context_bundle(focused)
+                _dump_tree_context(f, tree_bundle)
+            except Exception as e:
+                _section(f, "C. FOCUS-AWARE TREE CONTEXT")
+                f.write(f"  ERROR: {e}\n")
 
             # --- D. Mode detection ---
             try:
@@ -289,9 +298,26 @@ def on_trigger(out_path: str | None, max_depth: int, num_suggestions: int, both_
                     for t in visible.conversation_turns
                 ]
 
-            visible_texts = visible.text_elements if visible else None
             source_url = visible.url if visible else ""
             window_title = visible.window_title if visible else ""
+            subtree_context = (
+                tree_bundle.bottom_up_context
+                if tree_bundle is not None
+                else None
+            )
+            tree_overview = (
+                tree_bundle.top_down_context
+                if tree_bundle is not None
+                else None
+            )
+            focused_state = {
+                "role": focused.role,
+                "insertion_point": focused.insertion_point,
+                "selection_length": focused.selection_length,
+                "value_length": len(focused.value),
+                "placeholder_detected": focused.placeholder_detected,
+                "raw_placeholder_value": focused.raw_placeholder_value,
+            }
 
             modes_to_show = [detected_mode]
             if both_modes:
@@ -300,28 +326,40 @@ def on_trigger(out_path: str | None, max_depth: int, num_suggestions: int, both_
                 modes_to_show.append(other)
 
             for mode in modes_to_show:
+                live_variant = (
+                    LIVE_CONTINUATION_VARIANT
+                    if mode == AutocompleteMode.CONTINUATION
+                    else LIVE_REPLY_VARIANT
+                )
                 # --- E. Assembled context ---
                 try:
                     if mode == AutocompleteMode.CONTINUATION:
-                        context = ctx_store.get_continuation_context(
+                        raw_context = ctx_store.get_continuation_context(
                             before_cursor=before_cursor,
                             after_cursor=after_cursor,
                             source_app=app_name,
                             window_title=window_title,
                             source_url=source_url,
-                            visible_text=visible_texts,
                             cross_app_context="",
+                            subtree_context=subtree_context,
+                            tree_overview=tree_overview,
+                            focused_state=focused_state,
                         )
                     else:
-                        context = ctx_store.get_reply_context(
+                        raw_context = ctx_store.get_reply_context(
                             conversation_turns=turn_dicts,
                             source_app=app_name,
                             window_title=window_title,
                             source_url=source_url,
                             draft_text=before_cursor,
-                            visible_text=visible_texts,
                             cross_app_context="",
+                            subtree_context=subtree_context,
+                            tree_overview=tree_overview,
+                            focused_state=focused_state,
                         )
+                    context = apply_quality_variant_to_context(raw_context, live_variant)
+                    _section(f, f"E0. RAW CONTEXT — {mode.name}")
+                    f.write(_indent(raw_context) + "\n")
                     _dump_context(f, context, mode)
                 except Exception as e:
                     _section(f, f"E. ASSEMBLED CONTEXT — {mode.name}")
@@ -330,13 +368,21 @@ def on_trigger(out_path: str | None, max_depth: int, num_suggestions: int, both_
 
                 # --- F. LLM prompts ---
                 try:
-                    _dump_prompts(f, context, mode, num_suggestions)
+                    _dump_prompts(
+                        f,
+                        context,
+                        mode,
+                        num_suggestions,
+                        prompt_placeholder_aware=live_variant.prompt_placeholder_aware,
+                    )
                 except Exception as e:
                     _section(f, "F. LLM PROMPTS")
                     f.write(f"  ERROR: {e}\n")
 
             ctx_store.close()
         else:
+            _section(f, "C. FOCUS-AWARE TREE CONTEXT")
+            f.write("  (skipped — no focused element)\n")
             _section(f, "D. MODE DETECTION")
             f.write("  (skipped — no focused element)\n")
             _section(f, "E. ASSEMBLED CONTEXT")

@@ -72,8 +72,12 @@ class TriggerSnapshot:
     before_cursor: str = ""
     after_cursor: str = ""
     insertion_point: int | None = None
+    selection_length: int = 0
     value_length: int = 0
     placeholder_detected: bool = False
+    raw_value: str = ""
+    raw_placeholder_value: str = ""
+    raw_number_of_characters: int | None = None
 
     # AX tree (serialized)
     ax_tree: dict | None = None
@@ -89,6 +93,7 @@ class TriggerSnapshot:
 
     # Context
     context: str = ""
+    context_inputs: dict[str, Any] = field(default_factory=dict)
     conversation_turns: list[dict[str, str]] = field(default_factory=list)
     request: dict[str, Any] = field(default_factory=dict)
     latency: dict[str, Any] = field(default_factory=dict)
@@ -155,7 +160,12 @@ class TriggerDumper:
             if window is None:
                 return
 
-            snapshot.ax_tree = serialize_ax_tree(window, max_depth=20)
+            focused_el = ax_get_attribute(app_el, "AXFocusedUIElement")
+            snapshot.ax_tree = serialize_ax_tree(
+                window,
+                max_depth=20,
+                focused_element=focused_el,
+            )
         except Exception:
             logger.debug("Failed to capture AX tree for dump", exc_info=True)
 
@@ -180,11 +190,16 @@ class TriggerDumper:
             "focused": {
                 "role": snapshot.role,
                 "insertionPoint": snapshot.insertion_point,
+                "selectionLength": snapshot.selection_length,
                 "valueLength": snapshot.value_length,
                 "placeholderDetected": snapshot.placeholder_detected,
                 "beforeCursor": snapshot.before_cursor,
                 "afterCursor": snapshot.after_cursor,
                 "sourceUrl": snapshot.source_url,
+                "rawValue": snapshot.raw_value,
+                "rawValueLength": len(snapshot.raw_value or ""),
+                "rawPlaceholderValue": snapshot.raw_placeholder_value,
+                "rawNumberOfCharacters": snapshot.raw_number_of_characters,
             },
 
             # Detection results
@@ -200,6 +215,7 @@ class TriggerDumper:
 
             # Context sent to LLM
             "context": snapshot.context,
+            "contextInputs": snapshot.context_inputs,
             "conversationTurns": snapshot.conversation_turns,
             "request": snapshot.request,
             "latency": snapshot.latency,

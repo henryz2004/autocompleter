@@ -7,10 +7,12 @@ from pathlib import Path
 import pytest
 
 from autocompleter.subtree_context import (
+    build_context_bundle_from_tree,
     CHROME_ROLES,
     CONTENT_ROLES,
     count_text_nodes,
     extract_context_from_tree,
+    extract_focus_path_overview,
     find_focused_path,
     subtree_to_xml,
     text_char_count,
@@ -148,6 +150,24 @@ class TestSubtreeToXml:
         xml = subtree_to_xml(node)
         assert 'focused="true"' in xml
 
+    def test_focused_empty_input_is_preserved(self):
+        node = {
+            "role": "AXTextArea",
+            "value": "",
+            "title": "",
+            "focused": True,
+            "placeholderDetected": True,
+            "cursorPosition": 0,
+            "selectionLength": 0,
+            "valueLength": 0,
+            "children": [],
+        }
+        xml = subtree_to_xml(node)
+        assert "<TextArea" in xml
+        assert 'placeholder_detected="true"' in xml
+        assert 'cursor="0"' in xml
+        assert 'value_length="0"' in xml
+
     def test_escapes_special_chars(self):
         node = {"role": "AXStaticText", "value": '<script>"alert"</script>', "title": "", "children": []}
         xml = subtree_to_xml(node)
@@ -240,6 +260,294 @@ class TestExtractContextSynthetic:
         assert xml is not None
         # Should not contain all 20 messages
         assert xml.count("Message") < 20
+
+    def test_focus_path_overview_includes_focused_metadata(self):
+        tree = {
+            "role": "AXWindow",
+            "title": "Codex",
+            "ancestorOfFocused": True,
+            "children": [
+                {
+                    "role": "AXGroup",
+                    "description": "Automation folders",
+                    "children": [
+                        {"role": "AXStaticText", "value": "Threads", "children": []},
+                    ],
+                },
+                {
+                    "role": "AXGroup",
+                    "ancestorOfFocused": True,
+                    "children": [
+                        {
+                            "role": "AXTextArea",
+                            "value": "",
+                            "focused": True,
+                            "placeholderDetected": True,
+                            "cursorPosition": 0,
+                            "selectionLength": 0,
+                            "valueLength": 0,
+                            "children": [],
+                        },
+                    ],
+                },
+            ],
+        }
+        overview = extract_focus_path_overview(tree, token_budget=120)
+        assert overview is not None
+        assert "<focusPath>" in overview
+        assert 'placeholder_detected="true"' in overview
+        assert "Threads" in overview
+
+    def test_context_bundle_contains_both_views(self):
+        tree = {
+            "role": "AXWindow",
+            "title": "Codex",
+            "ancestorOfFocused": True,
+            "children": [
+                {"role": "AXStaticText", "value": "Recent thread", "children": []},
+                {
+                    "role": "AXGroup",
+                    "ancestorOfFocused": True,
+                    "children": [
+                        {
+                            "role": "AXTextArea",
+                            "value": "",
+                            "focused": True,
+                            "placeholderDetected": True,
+                            "cursorPosition": 0,
+                            "selectionLength": 0,
+                            "valueLength": 0,
+                            "children": [],
+                        },
+                    ],
+                },
+            ],
+        }
+        bundle = build_context_bundle_from_tree(tree, token_budget=120, overview_token_budget=80)
+        assert bundle is not None
+        assert bundle.top_down_context is not None
+        assert bundle.bottom_up_context is not None
+        assert "Recent thread" in bundle.bottom_up_context
+        assert "<focusPath>" in bundle.top_down_context
+
+    def test_transcript_branch_beats_sidebar_chrome(self):
+        tree = {
+            "role": "AXWindow",
+            "title": "Codex",
+            "ancestorOfFocused": True,
+            "children": [
+                {
+                    "role": "AXGroup",
+                    "description": "Automation folders",
+                    "children": [
+                        {"role": "AXStaticText", "value": "Threads", "children": []},
+                        {"role": "AXStaticText", "value": "Clean up app pipeline", "children": []},
+                    ],
+                },
+                {
+                    "role": "AXWebArea",
+                    "ancestorOfFocused": True,
+                    "children": [
+                        {
+                            "role": "AXGroup",
+                            "children": [
+                                {
+                                    "role": "AXGroup",
+                                    "children": [
+                                        {
+                                            "role": "AXStaticText",
+                                            "value": "The stall was caused by the worker thread never starting the generation call.",
+                                            "children": [],
+                                        },
+                                        {"role": "AXStaticText", "value": "3:03 PM", "children": []},
+                                        {"role": "AXButton", "description": "Copy message", "children": []},
+                                        {"role": "AXButton", "description": "Fork from this message", "children": []},
+                                    ],
+                                },
+                                {
+                                    "role": "AXGroup",
+                                    "children": [
+                                        {
+                                            "role": "AXStaticText",
+                                            "value": "The root cause was still present in normal trigger paths, so I fixed the remaining launch sites too.",
+                                            "children": [],
+                                        },
+                                        {"role": "AXStaticText", "value": "3:04 PM", "children": []},
+                                        {"role": "AXButton", "description": "Copy message", "children": []},
+                                    ],
+                                },
+                            ],
+                        },
+                        {
+                            "role": "AXGroup",
+                            "ancestorOfFocused": True,
+                            "children": [
+                                {
+                                    "role": "AXTextArea",
+                                    "value": "",
+                                    "focused": True,
+                                    "placeholderDetected": True,
+                                    "cursorPosition": 0,
+                                    "selectionLength": 0,
+                                    "valueLength": 0,
+                                    "children": [],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        }
+        bundle = build_context_bundle_from_tree(tree, token_budget=200, overview_token_budget=80)
+        assert bundle is not None
+        assert bundle.bottom_up_context is not None
+        assert "The stall was caused" in bundle.bottom_up_context
+        assert "The root cause was still present" in bundle.bottom_up_context
+        assert "Threads" not in bundle.bottom_up_context
+        assert "Clean up app pipeline" not in bundle.bottom_up_context
+        assert bundle.selection_debug is not None
+        assert bundle.selection_debug["strategy"] == "transcript_branch"
+        assert any(item["selected"] for item in bundle.selection_debug["messageObjects"])
+
+    def test_long_message_keeps_multiple_recent_message_objects(self):
+        tree = {
+            "role": "AXWindow",
+            "ancestorOfFocused": True,
+            "children": [
+                {
+                    "role": "AXWebArea",
+                    "ancestorOfFocused": True,
+                    "children": [
+                        {
+                            "role": "AXGroup",
+                            "children": [
+                                {
+                                    "role": "AXGroup",
+                                    "children": [
+                                        {
+                                            "role": "AXStaticText",
+                                            "value": "Earlier summary: " + ("really long context " * 80),
+                                            "children": [],
+                                        },
+                                        {"role": "AXStaticText", "value": "2:59 PM", "children": []},
+                                    ],
+                                },
+                                {
+                                    "role": "AXGroup",
+                                    "children": [
+                                        {
+                                            "role": "AXStaticText",
+                                            "value": "Recent fix: I updated the evaluate_invocations path to use the richer dump schema.",
+                                            "children": [],
+                                        },
+                                        {"role": "AXStaticText", "value": "3:00 PM", "children": []},
+                                    ],
+                                },
+                                {
+                                    "role": "AXGroup",
+                                    "children": [
+                                        {
+                                            "role": "AXStaticText",
+                                            "value": "Latest note: the next capture should show the selected transcript rows cleanly.",
+                                            "children": [],
+                                        },
+                                        {"role": "AXStaticText", "value": "3:01 PM", "children": []},
+                                    ],
+                                },
+                            ],
+                        },
+                        {
+                            "role": "AXGroup",
+                            "ancestorOfFocused": True,
+                            "children": [
+                                {
+                                    "role": "AXTextArea",
+                                    "value": "why is it still doing that ",
+                                    "focused": True,
+                                    "cursorPosition": 27,
+                                    "selectionLength": 0,
+                                    "valueLength": 27,
+                                    "children": [],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        }
+        bundle = build_context_bundle_from_tree(tree, token_budget=180, overview_token_budget=80)
+        assert bundle is not None
+        assert bundle.bottom_up_context is not None
+        assert "Latest note" in bundle.bottom_up_context
+        assert "Recent fix" in bundle.bottom_up_context
+        selected = [
+            item for item in (bundle.selection_debug or {}).get("messageObjects", [])
+            if item.get("selected")
+        ]
+        assert len(selected) >= 2
+
+    def test_generic_chat_transcript_uses_ordered_recent_rows(self):
+        tree = {
+            "role": "AXWindow",
+            "ancestorOfFocused": True,
+            "children": [
+                {
+                    "role": "AXGroup",
+                    "ancestorOfFocused": True,
+                    "children": [
+                        {
+                            "role": "AXList",
+                            "subrole": "AXContentList",
+                            "children": [
+                                {
+                                    "role": "AXGroup",
+                                    "children": [
+                                        {"role": "AXStaticText", "value": "oldest message in the thread", "children": []},
+                                        {"role": "AXStaticText", "value": "9:41 AM", "children": []},
+                                    ],
+                                },
+                                {
+                                    "role": "AXGroup",
+                                    "children": [
+                                        {"role": "AXStaticText", "value": "middle message with useful context", "children": []},
+                                        {"role": "AXStaticText", "value": "9:42 AM", "children": []},
+                                    ],
+                                },
+                                {
+                                    "role": "AXGroup",
+                                    "children": [
+                                        {"role": "AXStaticText", "value": "latest reply closest to the draft input", "children": []},
+                                        {"role": "AXStaticText", "value": "9:43 AM", "children": []},
+                                    ],
+                                },
+                            ],
+                        },
+                        {
+                            "role": "AXGroup",
+                            "ancestorOfFocused": True,
+                            "children": [
+                                {
+                                    "role": "AXTextArea",
+                                    "value": "draft reply",
+                                    "focused": True,
+                                    "cursorPosition": 11,
+                                    "selectionLength": 0,
+                                    "valueLength": 11,
+                                    "children": [],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        }
+        bundle = build_context_bundle_from_tree(tree, token_budget=160, overview_token_budget=80)
+        assert bundle is not None
+        assert bundle.bottom_up_context is not None
+        assert "latest reply closest to the draft input" in bundle.bottom_up_context
+        assert "middle message with useful context" in bundle.bottom_up_context
+        assert bundle.selection_debug is not None
+        assert bundle.selection_debug["strategy"] == "transcript_branch"
 
 
 # ---------------------------------------------------------------------------

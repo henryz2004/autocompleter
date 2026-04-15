@@ -320,6 +320,8 @@ def serialize_ax_tree(
     max_children: int = 50,
     depth: int = 0,
     focused_element=None,
+    focused_value_override: str | None = None,
+    focused_metadata: dict[str, object] | None = None,
 ) -> dict | None:
     """Recursively serialize the AX tree to a JSON-compatible dict.
 
@@ -368,6 +370,13 @@ def serialize_ax_tree(
 
     if is_focused:
         node["focused"] = True
+        if focused_value_override is not None:
+            node["value"] = focused_value_override
+            node["valueLength"] = len(focused_value_override)
+        if focused_metadata:
+            for key, value in focused_metadata.items():
+                if value is None or isinstance(value, (str, int, float, bool)):
+                    node[key] = value
         # Capture cursor / selection range for the focused element.
         try:
             if HAS_ACCESSIBILITY:
@@ -389,7 +398,13 @@ def serialize_ax_tree(
     if children:
         for child in children[:max_children]:
             child_node = serialize_ax_tree(
-                child, max_depth, max_children, depth + 1, focused_element
+                child,
+                max_depth,
+                max_children,
+                depth + 1,
+                focused_element,
+                focused_value_override,
+                focused_metadata,
             )
             if child_node is not None:
                 node["children"].append(child_node)

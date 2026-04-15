@@ -376,7 +376,7 @@ class TestE2EPipeline:
             assert "Text before cursor:" in context
 
             if subtree_ctx:
-                assert "Nearby content:" in context
+                assert "Nearby content from the focused region:" in context
         finally:
             store.close()
 
@@ -435,7 +435,7 @@ class TestE2EPipeline:
                     t["speaker"] in context for t in conversation_turns
                 ), f"No turn speakers found in reply context for {fixture_name}"
             elif subtree_ctx:
-                assert "Nearby content:" in context
+                assert "Nearby content from the focused region:" in context
             else:
                 assert f"App: {app_name}" in context
         finally:

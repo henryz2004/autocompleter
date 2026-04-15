@@ -47,6 +47,9 @@ class FocusedElement:
     insertion_point: int | None = None  # Caret position in value (chars from start)
     selection_length: int = 0  # Length of selected text range (0 = no selection)
     placeholder_detected: bool = False  # True when value was cleared due to placeholder detection
+    raw_value: str = ""
+    raw_placeholder_value: str = ""
+    raw_number_of_characters: int | None = None
 
     # Zero-width characters injected by some apps (e.g. Discord \ufeff BOM)
     # that should be stripped from text sent to the LLM.
@@ -191,6 +194,7 @@ class InputObserver:
         #      + short value — catches Electron apps like Claude Desktop that
         #      don't properly expose their placeholder string.
         #   4. App-specific known placeholder prefixes (Gemini Desktop etc.)
+        raw_value = value
         placeholder_raw = ax_get_attribute(focused, "AXPlaceholderValue")
         placeholder = placeholder_raw or ""
         num_chars = ax_get_attribute(focused, "AXNumberOfCharacters")
@@ -257,6 +261,9 @@ class InputObserver:
             insertion_point=insertion_point,
             selection_length=selection_length,
             placeholder_detected=placeholder_detected,
+            raw_value=raw_value,
+            raw_placeholder_value=placeholder,
+            raw_number_of_characters=num_chars,
         )
 
     def get_visible_content(self) -> VisibleContent | None:
@@ -350,6 +357,57 @@ class InputObserver:
             return xml
         except Exception:
             logger.debug("Subtree context extraction failed", exc_info=True)
+            return None
+
+    def get_context_bundle(
+        self,
+        focused_state: FocusedElement,
+        token_budget: int = 500,
+        overview_token_budget: int = 120,
+    ):
+        """Build the focus-aware tree context bundle used by prompts/dumps."""
+        if not HAS_ACCESSIBILITY:
+            return None
+
+        workspace = AppKit.NSWorkspace.sharedWorkspace()
+        front_app = workspace.frontmostApplication()
+        if front_app is None:
+            return None
+
+        pid = front_app.processIdentifier()
+        app_element = AXUIElementCreateApplication(pid)
+
+        window = ax_get_attribute(app_element, "AXFocusedWindow")
+        if window is None:
+            windows = ax_get_attribute(app_element, "AXWindows")
+            if windows and len(windows) > 0:
+                window = windows[0]
+            else:
+                return None
+
+        focused_el = ax_get_attribute(app_element, "AXFocusedUIElement")
+        if focused_el is None:
+            return None
+
+        try:
+            from .subtree_context import build_context_bundle_live
+
+            return build_context_bundle_live(
+                window,
+                focused_el,
+                focused_value=focused_state.value,
+                placeholder_detected=focused_state.placeholder_detected,
+                insertion_point=focused_state.insertion_point,
+                selection_length=focused_state.selection_length,
+                raw_value=focused_state.raw_value,
+                raw_placeholder_value=focused_state.raw_placeholder_value,
+                raw_number_of_characters=focused_state.raw_number_of_characters,
+                max_depth=40,
+                token_budget=token_budget,
+                overview_token_budget=overview_token_budget,
+            )
+        except Exception:
+            logger.debug("Tree context bundle extraction failed", exc_info=True)
             return None
 
     _MAX_CHILDREN_PER_NODE = 50
