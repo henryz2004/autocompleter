@@ -549,6 +549,70 @@ class TestExtractContextSynthetic:
         assert bundle.selection_debug is not None
         assert bundle.selection_debug["strategy"] == "transcript_branch"
 
+    def test_flat_transcript_stream_groups_messages_around_timestamps(self):
+        tree = {
+            "role": "AXWindow",
+            "ancestorOfFocused": True,
+            "children": [
+                {
+                    "role": "AXGroup",
+                    "ancestorOfFocused": True,
+                    "children": [
+                        {
+                            "role": "AXGroup",
+                            "children": [
+                                {"role": "AXGroup", "children": [
+                                    {"role": "AXStaticText", "value": "we should include multiple message-like objects no?", "children": []},
+                                    {"role": "AXStaticText", "value": "7:26 PM", "children": []},
+                                    {"role": "AXButton", "description": "Copy message", "children": []},
+                                    {"role": "AXButton", "description": "Fork from this message", "children": []},
+                                    {"role": "AXGroup", "children": [
+                                        {"role": "AXStaticText", "value": "Yes, I think so.", "children": []},
+                                    ]},
+                                    {"role": "AXGroup", "children": [
+                                        {"role": "AXStaticText", "value": "The cleaner rule is:", "children": []},
+                                    ]},
+                                    {"role": "AXList", "children": [
+                                        {"role": "AXStaticText", "value": "use one branch only", "children": []},
+                                        {"role": "AXStaticText", "value": "but include multiple message-like objects when available", "children": []},
+                                    ]},
+                                    {"role": "AXStaticText", "value": "7:28 PM", "children": []},
+                                    {"role": "AXButton", "description": "Copy", "children": []},
+                                ]},
+                            ],
+                        },
+                        {
+                            "role": "AXGroup",
+                            "ancestorOfFocused": True,
+                            "children": [
+                                {
+                                    "role": "AXTextArea",
+                                    "value": "",
+                                    "focused": True,
+                                    "placeholderDetected": True,
+                                    "cursorPosition": 0,
+                                    "selectionLength": 0,
+                                    "valueLength": 0,
+                                    "children": [],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        }
+        bundle = build_context_bundle_from_tree(tree, token_budget=180, overview_token_budget=80)
+        assert bundle is not None
+        assert bundle.bottom_up_context is not None
+        assert "we should include multiple message-like objects no?" in bundle.bottom_up_context
+        assert "The cleaner rule is:" in bundle.bottom_up_context
+        assert bundle.bottom_up_context.count("7:26 PM") <= 1
+        selected = [
+            item for item in (bundle.selection_debug or {}).get("messageObjects", [])
+            if item.get("selected")
+        ]
+        assert len(selected) >= 2
+
 
 # ---------------------------------------------------------------------------
 # extract_context_from_tree — real fixtures
