@@ -23,6 +23,7 @@ try:
 except ImportError:
     HAS_APPKIT = False
 
+from . import __version__
 from .config import Config, load_config
 from .context_store import ContextStore
 from .context_trail import ContextTrail
@@ -37,6 +38,7 @@ from .quality_review import (
 )
 from .shell_parser import strip_tmux_split_panes
 from .suggestion_engine import AutocompleteMode, Suggestion, SuggestionEngine, detect_mode, is_shell_app
+from .telemetry import TelemetryClient, bucket_latency_ms, bucket_length, categorize_app
 from .memory import MemoryStore
 from .text_injector import TextInjector
 from .trigger_dump import TriggerDumper, TriggerSnapshot
@@ -177,6 +179,13 @@ class Autocompleter:
         self.hotkey_listener = HotkeyListener()
         self.context_trail = ContextTrail()
         self.memory = MemoryStore(self.config)
+        self.telemetry = TelemetryClient(
+            enabled=self.config.telemetry_enabled,
+            url=self.config.telemetry_url,
+            install_id=self.config.install_id,
+            beta_mode=self.config.beta_mode,
+            app_version=__version__,
+        )
 
         self._running = False
         self._observer_thread: threading.Thread | None = None
@@ -214,6 +223,33 @@ class Autocompleter:
             callback=lambda: self._run_on_main(self._fire_auto_trigger),
         )
 
+    def _emit_telemetry(self, event: str, **payload: object) -> None:
+        telemetry = getattr(self, "telemetry", None)
+        if telemetry is None:
+            return
+        telemetry.emit(event, **payload)
+
+    def _emit_error_telemetry(self, component: str, exc: BaseException) -> None:
+        self._emit_telemetry(
+            "error_occurred",
+            component=component,
+            error_type=type(exc).__name__,
+        )
+
+    def _emit_trigger_telemetry(
+        self,
+        *,
+        mode: AutocompleteMode,
+        trigger_type: str,
+        app_name: str,
+    ) -> None:
+        self._emit_telemetry(
+            "trigger_fired",
+            mode=mode.value,
+            trigger_type=trigger_type,
+            app_category=categorize_app(app_name),
+        )
+
     def start(self) -> None:
         """Start the autocompleter."""
         logger.info("Starting autocompleter...")
@@ -237,6 +273,7 @@ class Autocompleter:
         # Open the context store
         self.context_store.open()
         logger.info(f"Context store opened at {self.config.db_path}")
+        self._emit_telemetry("app_started")
 
         # Run daily memory consolidation in background if due.
         if self.memory.enabled:
@@ -295,7 +332,8 @@ class Autocompleter:
         logger.info(
             f"Autocompleter running. Trigger: {self.config.hotkey} | "
             f"Auto-trigger: {auto_state} | "
-            f"Provider: {self.config.llm_provider} | Model: {self.config.llm_model}"
+            f"Provider: {self.config.effective_llm_provider} | "
+            f"Model: {self.config.effective_llm_model}"
         )
         print(f"Autocompleter running. Press {self.config.hotkey} to get suggestions.")
         print(f"Press {self.config.regenerate_hotkey} to regenerate suggestions.")
@@ -316,6 +354,9 @@ class Autocompleter:
         self.hotkey_listener.stop()
         self.overlay.hide()
         self.context_store.close()
+        telemetry = getattr(self, "telemetry", None)
+        if telemetry is not None:
+            telemetry.stop()
 
     def _run_appkit_loop(self) -> None:
         """Run the AppKit event loop (needed for overlay rendering)."""
@@ -360,6 +401,7 @@ class Autocompleter:
                 fn()
             except Exception:
                 logger.exception("Error in main-thread callback")
+                self._emit_error_telemetry("main_queue_callback", sys.exc_info()[1] or RuntimeError("unknown"))
 
     def _run_simple_loop(self) -> None:
         """Simple fallback loop when AppKit is not available."""
@@ -488,6 +530,7 @@ class Autocompleter:
             except Exception:
                 self._observe_consecutive_errors += 1
                 logger.exception("Error in observer loop")
+                self._emit_error_telemetry("observer_loop", sys.exc_info()[1] or RuntimeError("unknown"))
                 if self._observe_consecutive_errors == 5:
                     logger.warning(
                         "Observer: 5 consecutive errors — AX permissions "
@@ -596,6 +639,11 @@ class Autocompleter:
             subtree_context,
         ) = self._capture_live_trigger_context(focused, trigger_type="manual")
         logger.info(f"Mode: {mode.value} (before_cursor len={len(focused.before_cursor.strip())})")
+        self._emit_trigger_telemetry(
+            mode=mode,
+            trigger_type="manual",
+            app_name=focused.app_name,
+        )
 
         # Show loading indicator immediately
         self._run_on_main(lambda: self.overlay.show(
@@ -808,6 +856,12 @@ class Autocompleter:
             logger.info(f"  [{i}]: {s.text[:120]}")
 
         self._current_suggestions = suggestions
+        self._emit_telemetry(
+            "suggestions_returned",
+            count=len(suggestions),
+            latency_bucket_ms=bucket_latency_ms(elapsed * 1000),
+            fallback_used=False,
+        )
 
         # Dispatch overlay show to main thread (re-check generation to avoid race)
         def _show():
@@ -820,8 +874,8 @@ class Autocompleter:
         record = self._latency_tracker.finish(
             app_name=app_name,
             mode=mode.value,
-            provider=self.config.llm_provider,
-            model=self.config.llm_model,
+            provider=self.config.effective_llm_provider,
+            model=self.config.effective_llm_model,
             suggestion_count=len(suggestions),
         )
         self._latency_store.save(record)
@@ -853,6 +907,7 @@ class Autocompleter:
             )
         except Exception:
             logger.error("Worker thread crashed", exc_info=True)
+            self._emit_error_telemetry("streaming_worker", sys.exc_info()[1] or RuntimeError("unknown"))
             self._run_on_main(self.overlay.hide)
 
     def _generate_and_show_streaming_inner(
@@ -1040,6 +1095,7 @@ class Autocompleter:
 
         except Exception:
             logger.exception(f"Error during streaming generation {generation_id}")
+            self._emit_error_telemetry("streaming_generation", sys.exc_info()[1] or RuntimeError("unknown"))
 
         elapsed = time.time() - t0
         self._latency_tracker.mark("llm_done")
@@ -1058,8 +1114,8 @@ class Autocompleter:
             record = self._latency_tracker.finish(
                 app_name=app_name,
                 mode=mode.value,
-                provider=self.config.llm_provider,
-                model=self.config.llm_model,
+                provider=self.config.effective_llm_provider,
+                model=self.config.effective_llm_model,
                 suggestion_count=0,
                 trigger_type=trigger_type,
                 use_shell=is_terminal,
@@ -1089,6 +1145,12 @@ class Autocompleter:
             logger.info(f"  [{i}]: {s.text[:120]}")
 
         self._current_suggestions = suggestions
+        self._emit_telemetry(
+            "suggestions_returned",
+            count=len(suggestions),
+            latency_bucket_ms=bucket_latency_ms(elapsed * 1000),
+            fallback_used=fallback_used,
+        )
 
         # Save trigger dump with suggestions
         if snapshot and self._dumper:
@@ -1099,8 +1161,8 @@ class Autocompleter:
         record = self._latency_tracker.finish(
             app_name=app_name,
             mode=mode.value,
-            provider=self.config.llm_provider,
-            model=self.config.llm_model,
+            provider=self.config.effective_llm_provider,
+            model=self.config.effective_llm_model,
             suggestion_count=len(suggestions),
             trigger_type=trigger_type,
             use_shell=is_terminal,
@@ -1157,6 +1219,11 @@ class Autocompleter:
         mode = detect_mode(before_cursor=focused.before_cursor)
         self._trigger_mode = mode.value
         self._trigger_app = focused.app_name
+        self._emit_trigger_telemetry(
+            mode=mode,
+            trigger_type="auto",
+            app_name=focused.app_name,
+        )
 
         caret_pos = _get_caret_screen_position()
         caret_height = 20.0
@@ -1311,6 +1378,11 @@ class Autocompleter:
             cross_app_context,
             subtree_context,
         ) = self._capture_live_trigger_context(focused, trigger_type="regenerate")
+        self._emit_trigger_telemetry(
+            mode=mode,
+            trigger_type="regenerate",
+            app_name=focused.app_name,
+        )
 
         self._last_trigger_args = dict(
             focused=focused,
@@ -1624,6 +1696,11 @@ class Autocompleter:
         self._replace_on_inject = focused_for_generation.placeholder_detected
         if is_shell_app(focused_for_generation.app_name):
             self._replace_on_inject = True
+        self._emit_trigger_telemetry(
+            mode=mode,
+            trigger_type="post_accept",
+            app_name=focused_for_generation.app_name,
+        )
 
         self._generation_id += 1
         gen_id = self._generation_id
@@ -1707,6 +1784,12 @@ class Autocompleter:
 
         logger.info(f"Injected: {text[:60]}")
         self._record_accepted_suggestion(suggestion, app_name, focused)
+        self._emit_telemetry(
+            "suggestion_accepted",
+            suggestion_rank=suggestion.index + 1,
+            mode=self._trigger_mode,
+            accepted_length_bucket=bucket_length(len(text)),
+        )
         self._start_post_accept_followup(text)
 
     def _on_partial_accept(self) -> bool:
@@ -1728,6 +1811,11 @@ class Autocompleter:
                     logger.info(f"Partial inject: {partial_text[:60]}")
                     focused = self.observer.get_focused_element()
                     app_name = focused.app_name if focused else "Unknown"
+                    self._emit_telemetry(
+                        "partial_accept_used",
+                        suggestion_rank=suggestion.index + 1,
+                        accepted_length_bucket=bucket_length(len(partial_text)),
+                    )
                 else:
                     logger.warning("Failed to inject partial suggestion")
 
@@ -1776,6 +1864,12 @@ class Autocompleter:
                     )
                 except Exception:
                     logger.debug("Failed to record dismissed feedback", exc_info=True)
+            if set_cooldown and self._current_suggestions:
+                self._emit_telemetry(
+                    "suggestion_dismissed",
+                    count_shown=len(self._current_suggestions),
+                    mode=self._trigger_mode,
+                )
             self.overlay.hide()
 
         self._run_on_main(_dismiss)

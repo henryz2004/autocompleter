@@ -229,15 +229,15 @@ class SuggestionEngine:
         if self._client is None:
             import instructor
 
-            if self.config.llm_provider == "anthropic":
+            if self.config.effective_llm_provider == "anthropic":
                 import anthropic
                 raw = anthropic.Anthropic(api_key=self.config.anthropic_api_key)
                 self._client = instructor.from_anthropic(raw)
             else:
                 import openai
-                kwargs: dict = {"api_key": self.config.openai_api_key}
-                if self.config.llm_base_url:
-                    kwargs["base_url"] = self.config.llm_base_url
+                kwargs: dict = {"api_key": self.config.effective_openai_api_key}
+                if self.config.effective_llm_base_url:
+                    kwargs["base_url"] = self.config.effective_llm_base_url
                 raw = openai.OpenAI(**kwargs)
                 self._client = instructor.from_openai(raw)
         return self._client
@@ -245,16 +245,16 @@ class SuggestionEngine:
     def _get_raw_client(self):
         """Get a raw provider client for true text streaming."""
         if self._raw_client is None:
-            if self.config.llm_provider == "anthropic":
+            if self.config.effective_llm_provider == "anthropic":
                 import anthropic
                 self._raw_client = anthropic.Anthropic(
                     api_key=self.config.anthropic_api_key,
                 )
             else:
                 import openai
-                kwargs: dict = {"api_key": self.config.openai_api_key}
-                if self.config.llm_base_url:
-                    kwargs["base_url"] = self.config.llm_base_url
+                kwargs: dict = {"api_key": self.config.effective_openai_api_key}
+                if self.config.effective_llm_base_url:
+                    kwargs["base_url"] = self.config.effective_llm_base_url
                 self._raw_client = openai.OpenAI(**kwargs)
         return self._raw_client
 
@@ -269,12 +269,12 @@ class SuggestionEngine:
             # Double-check after acquiring lock
             if self._fallback_client is not None:
                 return self._fallback_client
-            if not self.config.fallback_api_key:
+            if not self.config.effective_fallback_api_key:
                 return None
             import openai
-            kwargs: dict = {"api_key": self.config.fallback_api_key}
-            if self.config.fallback_base_url:
-                kwargs["base_url"] = self.config.fallback_base_url
+            kwargs: dict = {"api_key": self.config.effective_fallback_api_key}
+            if self.config.effective_fallback_base_url:
+                kwargs["base_url"] = self.config.effective_fallback_base_url
             self._fallback_client = openai.OpenAI(**kwargs)
         return self._fallback_client
 
@@ -399,7 +399,7 @@ class SuggestionEngine:
             )
 
         logger.debug(
-            f"--- LLM REQUEST ({self.config.llm_provider}/{self.config.llm_model}, "
+            f"--- LLM REQUEST ({self.config.effective_llm_provider}/{self.config.effective_llm_model}, "
             f"mode={mode.value}, temp={temperature}, max_tok={max_tokens}) ---"
         )
         logger.debug(f"System prompt ({len(system)} chars): {system[:200]!r}...")
@@ -549,19 +549,19 @@ class SuggestionEngine:
                 )
 
         logger.debug(
-            f"--- LLM STREAM REQUEST ({self.config.llm_provider}/{self.config.llm_model}, "
+            f"--- LLM STREAM REQUEST ({self.config.effective_llm_provider}/{self.config.effective_llm_model}, "
             f"mode={mode.value}, temp={temperature}, max_tok={max_tokens}) ---"
         )
         if event_callback is not None:
             event_callback(
                 "request_built",
                 {
-                    "provider": self.config.llm_provider,
-                    "base_url": self.config.llm_base_url,
-                    "model": self.config.llm_model,
-                    "fallback_provider": self.config.fallback_provider,
-                    "fallback_base_url": self.config.fallback_base_url,
-                    "fallback_model": self.config.fallback_model,
+                    "provider": self.config.effective_llm_provider,
+                    "base_url": self.config.effective_llm_base_url,
+                    "model": self.config.effective_llm_model,
+                    "fallback_provider": self.config.effective_fallback_provider,
+                    "fallback_base_url": self.config.effective_fallback_base_url,
+                    "fallback_model": self.config.effective_fallback_model,
                     "mode": mode.value,
                     "temperature": temperature,
                     "max_tokens": max_tokens,
@@ -729,14 +729,14 @@ class SuggestionEngine:
 
         # Start primary provider
         primary_client = self._get_raw_client()
-        if self.config.llm_provider == "anthropic":
+        if self.config.effective_llm_provider == "anthropic":
             primary_fn = self._stream_anthropic_to_queue
         else:
             primary_fn = self._stream_openai_to_queue
 
-        primary_extra = _extra_body_for_url(self.config.llm_base_url)
+        primary_extra = _extra_body_for_url(self.config.effective_llm_base_url)
         primary_args = [
-            primary_client, self.config.llm_model, system, user_msg,
+            primary_client, self.config.effective_llm_model, system, user_msg,
             temperature, max_tokens, out_q, cancel_primary, "primary",
         ]
         if primary_fn == self._stream_openai_to_queue and primary_extra:
@@ -750,12 +750,12 @@ class SuggestionEngine:
         primary_thread.start()
 
         # Pre-compute fallback extra_body for Qwen3 thinking-mode suppression
-        fallback_extra = _extra_body_for_url(self.config.fallback_base_url)
+        fallback_extra = _extra_body_for_url(self.config.effective_fallback_base_url)
 
         def _start_fallback(client) -> threading.Thread:
             """Create and start a fallback streaming thread."""
             args = (
-                client, self.config.fallback_model,
+                client, self.config.effective_fallback_model,
                 system, user_msg, temperature, max_tokens,
                 out_q, cancel_fallback, "fallback",
             )
@@ -795,14 +795,14 @@ class SuggestionEngine:
                                 f"Primary provider didn't respond in "
                                 f"{self.config.escalation_timeout_ms}ms, "
                                 f"escalating to fallback "
-                                f"({self.config.fallback_model})"
+                                f"({self.config.effective_fallback_model})"
                             )
                             if event_callback is not None:
                                 event_callback(
                                     "fallback_started",
                                     {
                                         "reason": "timeout",
-                                        "model": self.config.fallback_model,
+                                        "model": self.config.effective_fallback_model,
                                     },
                                 )
                             _start_fallback(fallback_client)
@@ -832,7 +832,7 @@ class SuggestionEngine:
                                         "fallback_started",
                                         {
                                             "reason": "rate_limit",
-                                            "model": self.config.fallback_model,
+                                            "model": self.config.effective_fallback_model,
                                         },
                                     )
                                 _start_fallback(fallback_client)
@@ -857,7 +857,7 @@ class SuggestionEngine:
                                     "fallback_started",
                                     {
                                         "reason": "error",
-                                        "model": self.config.fallback_model,
+                                        "model": self.config.effective_fallback_model,
                                     },
                                 )
                             _start_fallback(fallback_client)
@@ -886,7 +886,7 @@ class SuggestionEngine:
                     loser_cancel.set()
                     logger.info(
                         f"Provider '{tag}' won the race "
-                        f"(model={self.config.llm_model if tag == 'primary' else self.config.fallback_model})"
+                        f"(model={self.config.effective_llm_model if tag == 'primary' else self.config.effective_fallback_model})"
                     )
                     if event_callback is not None:
                         event_callback(
@@ -894,9 +894,9 @@ class SuggestionEngine:
                             {
                                 "provider": tag,
                                 "model": (
-                                    self.config.llm_model
+                                    self.config.effective_llm_model
                                     if tag == "primary"
-                                    else self.config.fallback_model
+                                    else self.config.effective_fallback_model
                                 ),
                             },
                         )

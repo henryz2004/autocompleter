@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -26,6 +27,12 @@ class Config:
     llm_model: str = "qwen-3-235b-a22b-instruct-2507"
     max_tokens: int = 200
     temperature: float = 0.7
+
+    # Beta proxy
+    beta_mode: bool = False
+    proxy_enabled: bool = False
+    proxy_base_url: str = ""
+    proxy_api_key: str = ""
 
     # Fallback provider (used when primary doesn't respond in time)
     fallback_provider: str = "openai"  # same convention as llm_provider
@@ -70,6 +77,11 @@ class Config:
     memory_embedder_model: str = "text-embedding-3-small"
     memory_decay_rate: float = 0.01  # Exponential decay λ (half-life ~69h). 0 = no decay.
 
+    # Telemetry
+    telemetry_enabled: bool = False
+    telemetry_url: str = ""
+    install_id: str = ""
+
     # Sentinel to distinguish "not provided" from "explicitly set to empty"
     _UNSET: str = "__UNSET__"
 
@@ -100,6 +112,71 @@ class Config:
                 self.fallback_api_key = os.environ.get(env_var, "")
             if not self.fallback_api_key:
                 self.fallback_api_key = os.environ.get("GROQ_API_KEY", "")
+        if not self.install_id:
+            self.install_id = self._resolve_install_id()
+
+    @property
+    def effective_llm_provider(self) -> str:
+        if self.proxy_enabled:
+            return "openai"
+        return self.llm_provider
+
+    @property
+    def effective_llm_base_url(self) -> str:
+        if self.proxy_enabled:
+            return self.proxy_base_url
+        return self.llm_base_url
+
+    @property
+    def effective_openai_api_key(self) -> str:
+        if self.proxy_enabled:
+            return self.proxy_api_key
+        return self.openai_api_key
+
+    @property
+    def effective_llm_model(self) -> str:
+        return self.llm_model
+
+    @property
+    def effective_fallback_provider(self) -> str:
+        if self.proxy_enabled:
+            return ""
+        return self.fallback_provider
+
+    @property
+    def effective_fallback_base_url(self) -> str:
+        if self.proxy_enabled:
+            return ""
+        return self.fallback_base_url
+
+    @property
+    def effective_fallback_model(self) -> str:
+        if self.proxy_enabled:
+            return ""
+        return self.fallback_model
+
+    @property
+    def effective_fallback_api_key(self) -> str:
+        if self.proxy_enabled:
+            return ""
+        return self.fallback_api_key
+
+    @property
+    def telemetry_active(self) -> bool:
+        return self.telemetry_enabled and bool(self.telemetry_url.strip())
+
+    def _resolve_install_id(self) -> str:
+        install_id_path = self.data_dir / "install_id"
+        try:
+            if install_id_path.is_file():
+                existing = install_id_path.read_text(encoding="utf-8").strip()
+                if existing:
+                    return existing
+            generated = str(uuid.uuid4())
+            install_id_path.write_text(generated, encoding="utf-8")
+            return generated
+        except Exception:
+            return str(uuid.uuid4())
 
 
 def _load_dotenv() -> None:
@@ -122,6 +199,10 @@ def _load_dotenv() -> None:
 def load_config() -> Config:
     """Load configuration, using .env file, environment variables, and defaults."""
     _load_dotenv()
+
+    def _env_bool(name: str, default: str = "") -> bool:
+        return os.environ.get(name, default).lower() in ("1", "true")
+
     config = Config(
         llm_provider=os.environ.get("AUTOCOMPLETER_LLM_PROVIDER", "openai"),
         llm_base_url=os.environ.get(
@@ -130,6 +211,10 @@ def load_config() -> Config:
         llm_model=os.environ.get(
             "AUTOCOMPLETER_LLM_MODEL", "qwen-3-235b-a22b-instruct-2507"
         ),
+        beta_mode=_env_bool("AUTOCOMPLETER_BETA_MODE"),
+        proxy_enabled=_env_bool("AUTOCOMPLETER_PROXY_ENABLED"),
+        proxy_base_url=os.environ.get("AUTOCOMPLETER_PROXY_BASE_URL", ""),
+        proxy_api_key=os.environ.get("AUTOCOMPLETER_PROXY_API_KEY", ""),
         fallback_provider=os.environ.get(
             "AUTOCOMPLETER_FALLBACK_PROVIDER", "openai"
         ),
@@ -147,12 +232,8 @@ def load_config() -> Config:
         followup_after_accept_enabled=os.environ.get(
             "AUTOCOMPLETER_FOLLOWUP_AFTER_ACCEPT", "1"
         ).lower() in ("1", "true"),
-        auto_trigger_enabled=os.environ.get(
-            "AUTOCOMPLETER_AUTO_TRIGGER", ""
-        ).lower() in ("1", "true"),
-        memory_enabled=os.environ.get(
-            "AUTOCOMPLETER_MEMORY", ""
-        ).lower() in ("1", "true"),
+        auto_trigger_enabled=_env_bool("AUTOCOMPLETER_AUTO_TRIGGER"),
+        memory_enabled=_env_bool("AUTOCOMPLETER_MEMORY"),
         memory_llm_provider=os.environ.get(
             "AUTOCOMPLETER_MEMORY_LLM_PROVIDER", "groq"
         ),
@@ -168,5 +249,8 @@ def load_config() -> Config:
         memory_decay_rate=float(os.environ.get(
             "AUTOCOMPLETER_MEMORY_DECAY_RATE", "0.01"
         )),
+        telemetry_enabled=_env_bool("AUTOCOMPLETER_TELEMETRY_ENABLED"),
+        telemetry_url=os.environ.get("AUTOCOMPLETER_TELEMETRY_URL", ""),
+        install_id=os.environ.get("AUTOCOMPLETER_INSTALL_ID", ""),
     )
     return config
