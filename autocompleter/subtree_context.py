@@ -94,6 +94,7 @@ _MAX_MESSAGE_OBJECT_CHARS = 700
 _MAX_BRANCH_DEBUG_CANDIDATES = 8
 
 _TIMESTAMP_RE = re.compile(r"\b\d{1,2}:\d{2}(?:\s?[AaPp][Mm])?\b")
+_SPEAKER_HEADING_RE = re.compile(r"\bsaid\b", re.IGNORECASE)
 _ACTION_KEYWORDS = (
     "copy",
     "copy message",
@@ -396,7 +397,26 @@ def _is_aggregate_message_container(
     role = node.get("role", "")
     if role in {"AXWebArea", "AXScrollArea", "AXList", "AXOutline"}:
         return True
+    if role == "AXGroup" and not _node_strings(node):
+        return True
     return False
+
+
+def _has_message_heading_cue(node: dict, max_depth: int = 3) -> bool:
+    def _walk(current: dict, depth: int) -> bool:
+        if depth > max_depth:
+            return False
+        role = current.get("role", "")
+        if role == "AXHeading":
+            for text in _node_strings(current):
+                if _SPEAKER_HEADING_RE.search(text):
+                    return True
+        for child in current.get("children", []):
+            if _walk(child, depth + 1):
+                return True
+        return False
+
+    return _walk(node, 0)
 
 
 def _count_immediate_message_children(
@@ -409,6 +429,90 @@ def _count_immediate_message_children(
         if _looks_like_message_object(child, child_summary):
             count += 1
     return count
+
+
+def _make_synthetic_message_object(
+    children: list[dict],
+    memo: dict[int, _SubtreeSummary],
+) -> _MessageObject | None:
+    synthetic = {
+        "role": "AXGroup",
+        "title": "",
+        "description": "",
+        "value": "",
+        "children": children,
+    }
+    summary = _summarize_subtree(synthetic, memo)
+    if summary.text_chars < _MIN_MESSAGE_TEXT_CHARS:
+        return None
+    return _MessageObject(
+        node=synthetic,
+        summary=summary,
+        preview=_preview_text(synthetic),
+    )
+
+
+def _segment_flat_message_stream(
+    node: dict,
+    memo: dict[int, _SubtreeSummary],
+) -> list[_MessageObject]:
+    """Segment flattened transcript children into ordered message objects.
+
+    Some apps expose a transcript as a flat sequence of direct children:
+    prose blocks, then timestamp/action controls, then the next prose block.
+    When that pattern is present, convert it into synthetic grouped messages
+    before falling back to container-level message detection.
+    """
+    children = node.get("children", [])
+    if len(children) < 4:
+        return []
+
+    strong_text_children = 0
+    boundary_children = 0
+    for child in children:
+        summary = _summarize_subtree(child, memo)
+        if summary.long_text_nodes >= 1 or summary.medium_text_nodes >= 1:
+            strong_text_children += 1
+        if summary.timestamp_nodes > 0 or summary.action_nodes > 0:
+            boundary_children += 1
+    if strong_text_children < 2 or boundary_children < 1:
+        return []
+
+    segments: list[list[dict]] = []
+    current: list[dict] = []
+    current_has_text = False
+    saw_boundary_after_text = False
+
+    for child in children:
+        summary = _summarize_subtree(child, memo)
+        has_text = summary.long_text_nodes >= 1 or summary.medium_text_nodes >= 1
+        has_boundary = summary.timestamp_nodes > 0 or summary.action_nodes > 0
+
+        if has_text and current_has_text and saw_boundary_after_text:
+            segments.append(current)
+            current = [child]
+            current_has_text = True
+            saw_boundary_after_text = False
+            continue
+
+        if has_text or has_boundary or current:
+            current.append(child)
+
+        if has_text:
+            current_has_text = True
+        if current_has_text and has_boundary:
+            saw_boundary_after_text = True
+
+    if current:
+        segments.append(current)
+
+    message_objects: list[_MessageObject] = []
+    for segment in segments:
+        obj = _make_synthetic_message_object(segment, memo)
+        if obj is not None:
+            message_objects.append(obj)
+
+    return message_objects
 
 
 def _score_transcript_branch(
@@ -436,6 +540,10 @@ def _score_transcript_branch(
         or summary.long_text_nodes >= 2
         or (
             summary.long_text_nodes >= 1
+            and (summary.timestamp_nodes > 0 or summary.action_nodes > 0)
+        )
+        or (
+            summary.medium_text_nodes >= 3
             and (summary.timestamp_nodes > 0 or summary.action_nodes > 0)
         )
     )
@@ -494,10 +602,17 @@ def _collect_message_objects(
         child_objects.extend(_collect_message_objects(child, memo))
 
     summary = _summarize_subtree(node, memo)
+    segmented_objects = _segment_flat_message_stream(node, memo)
+    if segmented_objects:
+        return segmented_objects
+    if child_objects and len(node.get("children", [])) == 1 and not _node_strings(node):
+        return child_objects
     if is_root and child_objects:
         return child_objects
     if not _looks_like_message_object(node, summary, child_message_count=len(child_objects)):
         return child_objects
+    if child_objects and _has_message_heading_cue(node):
+        return [_MessageObject(node=node, summary=summary, preview=_preview_text(node))]
     if _is_aggregate_message_container(node, len(child_objects)):
         return child_objects
     return [_MessageObject(node=node, summary=summary, preview=_preview_text(node))]
@@ -535,34 +650,78 @@ def _compact_message_object_xml(node: dict, max_chars: int) -> str:
     tag = (node.get("role") or "AXGroup").removeprefix("AX") or "Group"
     opening = f"    <{tag}>"
     closing = f"    </{tag}>"
-    snippets: list[str] = []
     total = len(opening) + len(closing) + 2
+    snippet_candidates: list[tuple[int, int, str]] = []
 
-    def _walk(current: dict) -> None:
-        nonlocal total
-        if total >= max_chars or len(snippets) >= 8:
+    def _walk(current: dict, depth: int = 0) -> None:
+        if len(snippet_candidates) >= 24:
             return
         role = current.get("role", "")
         if role in CHROME_ROLES:
             return
-        snippet = ""
         if role in CONTENT_ROLES:
             text = _normalize_text(current.get("value")) or _normalize_text(current.get("title")) or _normalize_text(current.get("description"))
             if text:
                 tag_name = role.removeprefix("AX")
                 snippet = f"      <{tag_name}>{_esc(text[:220])}</{tag_name}>"
-        if snippet and total + len(snippet) + 1 <= max_chars:
-            snippets.append(snippet)
-            total += len(snippet) + 1
+                is_timestamp = bool(_TIMESTAMP_RE.fullmatch(text))
+                score = len(text)
+                if is_timestamp:
+                    score -= 120
+                if len(text) >= _MIN_MESSAGE_TEXT_CHARS:
+                    score += 80
+                if len(text) >= _LONG_MESSAGE_TEXT_CHARS:
+                    score += 80
+                snippet_candidates.append((score, depth, snippet))
         for child in current.get("children", []):
-            if total >= max_chars or len(snippets) >= 8:
+            if len(snippet_candidates) >= 24:
                 break
-            _walk(child)
+            _walk(child, depth + 1)
 
     _walk(node)
+    if not snippet_candidates:
+        return ""
+    snippet_candidates.sort(key=lambda item: (item[0], -item[1]), reverse=True)
+
+    snippets: list[str] = []
+    saw_substantive_text = False
+    for score, _depth, snippet in snippet_candidates:
+        is_timestamp = ">" in snippet and bool(_TIMESTAMP_RE.fullmatch(snippet.split(">", 1)[1].rsplit("<", 1)[0]))
+        if is_timestamp and not saw_substantive_text:
+            continue
+        if total + len(snippet) + 1 > max_chars:
+            continue
+        snippets.append(snippet)
+        total += len(snippet) + 1
+        if not is_timestamp:
+            saw_substantive_text = True
+        if len(snippets) >= 8:
+            break
     if not snippets:
+        # If all we had was timestamp-level metadata, return nothing rather than
+        # polluting the prompt with a bare clock value.
         return ""
     return "\n".join([opening, *snippets, closing])
+
+
+def _serialized_xml_has_meaningful_prose(xml: str) -> bool:
+    """Return True when serialized XML includes at least one prose-bearing line."""
+    non_timestamp_lines: list[str] = []
+    for raw_line in xml.splitlines():
+        text = re.sub(r"<[^>]+>", " ", raw_line)
+        text = _normalize_text(text)
+        if not text:
+            continue
+        if _TIMESTAMP_RE.fullmatch(text):
+            continue
+        non_timestamp_lines.append(text)
+        if len(text) >= _MIN_MESSAGE_TEXT_CHARS:
+            return True
+    if len(non_timestamp_lines) >= 2:
+        combined = " ".join(non_timestamp_lines)
+        if len(combined) >= 12:
+            return True
+    return False
 
 
 def _extract_transcript_context(
@@ -596,6 +755,8 @@ def _extract_transcript_context(
             break
         xml = _serialize_message_object(obj.node, remaining)
         if not xml.strip():
+            continue
+        if not _serialized_xml_has_meaningful_prose(xml):
             continue
         if total_chars + len(xml) > char_budget and selected_xmls_rev:
             continue
@@ -722,6 +883,8 @@ def subtree_to_xml(
 
     has_value = isinstance(val, str) and val.strip()
     has_title = isinstance(title, str) and title.strip()
+    desc = node.get("description", "")
+    has_desc = isinstance(desc, str) and desc.strip()
     has_own_content = has_value or has_title
     is_focused = node.get("focused", False)
 
@@ -747,14 +910,20 @@ def subtree_to_xml(
 
     # Content roles → inline text element.
     if role in CONTENT_ROLES:
-        text = val.strip()[:300] if has_value else ""
+        raw_text = ""
+        if has_value:
+            raw_text = val.strip()
+        elif has_title:
+            raw_text = title.strip()
+        elif has_desc:
+            raw_text = desc.strip()
+        text = raw_text[:300]
         attrs: list[str] = []
         if has_title and title.strip() != text:
             attrs.append(f'title="{_esc(title.strip()[:100])}"')
         # AXDescription often carries speaker/timestamp metadata in chat apps
         # (e.g. "Your iMessage, Hello, 3:15 PM" or "Daniel, Hi there, 3:04 PM").
-        desc = node.get("description", "")
-        if isinstance(desc, str) and desc.strip() and desc.strip() != text:
+        if has_desc and desc.strip() != text:
             attrs.append(f'desc="{_esc(desc.strip()[:200])}"')
         attrs.extend(_focus_attrs(node))
         attr_str = (" " + " ".join(attrs)) if attrs else ""
@@ -764,8 +933,7 @@ def subtree_to_xml(
     attrs = []
     if has_title:
         attrs.append(f'title="{_esc(title.strip()[:100])}"')
-    desc = node.get("description", "")
-    if isinstance(desc, str) and desc.strip():
+    if has_desc:
         attrs.append(f'desc="{_esc(desc.strip()[:200])}"')
     attrs.extend(_focus_attrs(node))
     attr_str = (" " + " ".join(attrs)) if attrs else ""

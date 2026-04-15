@@ -10,6 +10,7 @@ from autocompleter.suggestion_engine import (
     AutocompleteMode,
     Suggestion,
     SuggestionEngine,
+    build_messages,
     detect_mode,
     MODE_THRESHOLD_CHARS,
     postprocess_suggestion_texts,
@@ -52,6 +53,36 @@ class TestModeDetection:
 
 
 class TestSuggestionEngine:
+    def test_continuation_prompt_stays_in_user_voice(self):
+        system, user = build_messages(
+            mode=AutocompleteMode.CONTINUATION,
+            context="Text before cursor:\ni think we should ",
+            num_suggestions=3,
+            source_app="Codex",
+        )
+
+        assert "Write AS the user" in system
+        assert "You ARE the author, not a respondent." in system
+        assert "SAME voice, person, and perspective" in system
+        assert "Continue writing from the cursor position as the same author" in user
+
+    def test_reply_prompt_requires_user_side_message_not_assistant_voice(self):
+        system, user = build_messages(
+            mode=AutocompleteMode.REPLY,
+            context=(
+                "App: Codex | Channel: Codex\n\n"
+                "Conversation:\n"
+                "- User: can you add that\n"
+                "- Codex: I can add a regression test for that.\n"
+            ),
+            num_suggestions=3,
+            source_app="Codex",
+        )
+
+        assert "You suggest messages the user might type next." in system
+        assert "Mirror how the USER actually writes, not the assistant." in system
+        assert "Generate exactly 3 distinct suggestions for what the user might type next." in user
+
     def test_debounce_blocks_rapid_requests(self, engine):
         engine._last_request_time = time.time()
         assert not engine.can_request()
