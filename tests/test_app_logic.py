@@ -356,3 +356,196 @@ class TestRegenerateDiversity:
         assert captured["args"][10] == "snapshot"
         assert captured["snapshot_kwargs"]["trigger_type"] == "regenerate"
         assert captured["snapshot_kwargs"]["generation_id"] == 1
+
+
+class TestTelemetryHooks:
+    def test_start_emits_app_started(self, monkeypatch):
+        app = Autocompleter.__new__(Autocompleter)
+        events = []
+
+        class FakeThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None):
+                self.target = target
+
+            def start(self):
+                return None
+
+        monkeypatch.setattr(app_module.threading, "Thread", FakeThread)
+        monkeypatch.setattr(app_module, "HAS_APPKIT", False)
+
+        app.config = SimpleNamespace(
+            db_path="/tmp/context.db",
+            hotkey="ctrl+space",
+            regenerate_hotkey="ctrl+r",
+            llm_provider="openai",
+            llm_model="ignored",
+            effective_llm_provider="openai",
+            effective_llm_model="beta-model",
+        )
+        app.observer = SimpleNamespace(check_accessibility_permissions=lambda: True)
+        app.context_store = SimpleNamespace(open=lambda: None, close=lambda: None)
+        app.memory = SimpleNamespace(enabled=False)
+        app.overlay = SimpleNamespace(set_dismiss_callback=lambda cb: None, hide=lambda: None)
+        app.hotkey_listener = SimpleNamespace(
+            set_unhandled_key_callback=lambda cb: None,
+            register=lambda *args, **kwargs: None,
+            start=lambda: None,
+            stop=lambda: None,
+        )
+        app.telemetry = SimpleNamespace(emit=lambda event, **payload: events.append((event, payload)), stop=lambda: None)
+        app._auto_trigger_enabled = False
+        app._auto_trigger_debouncer = SimpleNamespace(stop=lambda: None, cancel=lambda: None, poke=lambda: None)
+        app._observe_loop = lambda: None
+        app._run_simple_loop = lambda: None
+
+        app.start()
+
+        assert ("app_started", {}) in events
+
+    def test_emit_trigger_telemetry_buckets_app_category(self):
+        app = Autocompleter.__new__(Autocompleter)
+        events = []
+        app.telemetry = SimpleNamespace(emit=lambda event, **payload: events.append((event, payload)))
+
+        app._emit_trigger_telemetry(
+            mode=app_module.AutocompleteMode.REPLY,
+            trigger_type="manual",
+            app_name="Slack",
+        )
+
+        assert events == [(
+            "trigger_fired",
+            {
+                "mode": "reply",
+                "trigger_type": "manual",
+                "app_category": "chat",
+            },
+        )]
+
+    def test_accept_selected_suggestion_emits_accepted_event(self):
+        app = Autocompleter.__new__(Autocompleter)
+        events = []
+        followup = []
+        focused = FocusedElement(
+            app_name="Slack",
+            app_pid=1,
+            role="AXTextArea",
+            value="hello",
+            selected_text="",
+            position=None,
+            size=None,
+            insertion_point=5,
+        )
+
+        app.observer = SimpleNamespace(get_focused_element=lambda: focused)
+        app.overlay = SimpleNamespace(accept_selection=lambda: app_module.Suggestion(text=" world", index=1))
+        app.injector = SimpleNamespace(inject=lambda text: True)
+        app.telemetry = SimpleNamespace(emit=lambda event, **payload: events.append((event, payload)))
+        app.memory = SimpleNamespace(enabled=False)
+        app.context_store = SimpleNamespace(record_feedback=lambda **kwargs: None)
+        app._trigger_before_cursor = "hello"
+        app._trigger_after_cursor = ""
+        app._trigger_mode = "reply"
+        app._trigger_app = "Slack"
+        app._current_suggestions = [app_module.Suggestion(text="a", index=0), app_module.Suggestion(text=" world", index=1)]
+        app._trigger_time = None
+        app._start_post_accept_followup = lambda text: followup.append(text)
+
+        app._accept_selected_suggestion()
+
+        assert followup == [" world"]
+        assert events == [(
+            "suggestion_accepted",
+            {
+                "suggestion_rank": 2,
+                "mode": "reply",
+                "accepted_length_bucket": "1-10",
+            },
+        )]
+
+    def test_partial_accept_emits_partial_event(self):
+        app = Autocompleter.__new__(Autocompleter)
+        events = []
+        injected = []
+        focused = FocusedElement(
+            app_name="Slack",
+            app_pid=1,
+            role="AXTextArea",
+            value="hello",
+            selected_text="",
+            position=None,
+            size=None,
+            insertion_point=5,
+        )
+
+        app.overlay = SimpleNamespace(
+            is_visible=True,
+            accept_selection=lambda: app_module.Suggestion(text="Hello world. Next sentence", index=0),
+        )
+        app.injector = SimpleNamespace(inject=lambda text: injected.append(text) or True)
+        app.observer = SimpleNamespace(get_focused_element=lambda: focused)
+        app.telemetry = SimpleNamespace(emit=lambda event, **payload: events.append((event, payload)))
+        app._trigger_before_cursor = ""
+        app._trigger_after_cursor = ""
+        app._run_on_main = lambda fn: fn()
+
+        assert app._on_partial_accept() is True
+        assert injected == ["Hello world."]
+        assert events == [(
+            "partial_accept_used",
+            {
+                "suggestion_rank": 1,
+                "accepted_length_bucket": "11-30",
+            },
+        )]
+
+    def test_dismiss_emits_single_event(self):
+        app = Autocompleter.__new__(Autocompleter)
+        events = []
+        hidden = []
+
+        app.overlay = SimpleNamespace(is_visible=True, hide=lambda: hidden.append(True))
+        app._auto_trigger_debouncer = SimpleNamespace(cancel=lambda: None)
+        app._generation_id = 0
+        app._last_trigger_args = {"x": 1}
+        app._current_suggestions = [
+            app_module.Suggestion(text="one", index=0),
+            app_module.Suggestion(text="two", index=1),
+        ]
+        app._trigger_mode = "reply"
+        app._trigger_app = "Slack"
+        app._trigger_time = None
+        app.context_store = SimpleNamespace(record_feedback=lambda **kwargs: None)
+        app.telemetry = SimpleNamespace(emit=lambda event, **payload: events.append((event, payload)))
+        app._run_on_main = lambda fn: fn()
+
+        assert app._on_nav_dismiss() is True
+        assert hidden == [True]
+        assert events == [(
+            "suggestion_dismissed",
+            {
+                "count_shown": 2,
+                "mode": "reply",
+            },
+        )]
+
+    def test_streaming_worker_error_emits_error_event(self):
+        app = Autocompleter.__new__(Autocompleter)
+        events = []
+        hidden = []
+
+        app.telemetry = SimpleNamespace(emit=lambda event, **payload: events.append((event, payload)))
+        app.overlay = SimpleNamespace(hide=lambda: hidden.append(True))
+        app._run_on_main = lambda fn: fn()
+        app._generate_and_show_streaming_inner = lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("boom"))
+
+        app._generate_and_show_streaming(SimpleNamespace(app_name="Slack"), 1.0, 2.0)
+
+        assert hidden == [True]
+        assert events == [(
+            "error_occurred",
+            {
+                "component": "streaming_worker",
+                "error_type": "ValueError",
+            },
+        )]

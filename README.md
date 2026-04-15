@@ -34,6 +34,29 @@ cp .env.example .env
 
 Then edit `.env` with your provider settings and API key.
 
+## Friend Beta
+
+For the current friend beta, the intended path is:
+
+1. Copy `.env.example` to `.env`
+2. Paste in the shared beta proxy URL and beta key
+3. Run `python -m autocompleter`
+
+Telemetry is enabled by default for the beta, but you can opt out by setting:
+
+```bash
+AUTOCOMPLETER_TELEMETRY_ENABLED=0
+```
+
+If you prefer to use your own provider instead of the beta proxy, set:
+
+```bash
+AUTOCOMPLETER_PROXY_ENABLED=0
+```
+
+Then fill in the relevant BYO provider credentials below it in `.env`.
+
+See [docs/friend-beta.md](docs/friend-beta.md) for the beta-specific setup flow.
 ## Configuration
 
 Configuration is loaded from environment variables and an optional local `.env` file in the repo root.
@@ -134,6 +157,7 @@ See also:
 
 - [PRIVACY.md](PRIVACY.md)
 - [docs/data-flows.md](docs/data-flows.md)
+- [docs/friend-beta.md](docs/friend-beta.md)
 
 ## Project Layout
 
