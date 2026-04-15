@@ -27,6 +27,8 @@ env/
 
 # Environment
 .env
+.env.backend.dev
+.env.backend.prod
 
 # Local replay/regression captures (large, not committed)
 tests/fixtures/replay_sessions/

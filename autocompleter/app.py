@@ -185,6 +185,7 @@ class Autocompleter:
             install_id=self.config.install_id,
             beta_mode=self.config.beta_mode,
             app_version=__version__,
+            api_key=self.config.effective_telemetry_api_key,
         )
 
         self._running = False

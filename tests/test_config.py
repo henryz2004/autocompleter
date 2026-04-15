@@ -65,6 +65,14 @@ class TestBetaProxyConfig:
         assert cfg.telemetry_active is False
         assert cfg.effective_llm_base_url == "https://proxy.example/v1"
 
+    def test_telemetry_auth_defaults_to_proxy_install_key(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("AUTOCOMPLETER_PROXY_API_KEY", "proxy-key")
+
+        cfg = load_config()
+
+        assert cfg.effective_telemetry_api_key == "proxy-key"
+
     def test_install_id_is_created_and_reused(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.delenv("AUTOCOMPLETER_INSTALL_ID", raising=False)

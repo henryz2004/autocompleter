@@ -90,3 +90,36 @@ class TestTelemetryClient:
         client.emit("app_started")
         client.flush()
         client.stop()
+
+    def test_send_payload_includes_bearer_auth_when_configured(self, monkeypatch):
+        client = TelemetryClient(
+            enabled=True,
+            url="https://telemetry.example/events",
+            install_id="install-123",
+            beta_mode=True,
+            app_version="0.1.0",
+            api_key="install-key",
+        )
+
+        captured = {}
+
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        def fake_urlopen(req, timeout):
+            captured["authorization"] = req.headers.get("Authorization")
+            captured["timeout"] = timeout
+            return FakeResponse()
+
+        monkeypatch.setattr("autocompleter.telemetry.request.urlopen", fake_urlopen)
+
+        client._send_payload({"event": "app_started"})
+
+        assert captured["authorization"] == "Bearer install-key"
+        assert captured["timeout"] == 2.0
