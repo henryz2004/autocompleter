@@ -28,12 +28,12 @@ For the beta backend and Supabase integration, prefer the modern Supabase API ke
 ## Install
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/henryz2004/autocompleter.git
 cd autocompleter
 python3.11 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-pip install -e '.[dev]'
+pip install -e .
 cp .env.example .env
 ```
 
@@ -45,10 +45,12 @@ For the current friend beta, the intended path is:
 
 1. Install `uv` with `curl -LsSf https://astral.sh/uv/install.sh | sh`
 2. Restart your terminal or run `source "$HOME/.local/bin/env"`
-3. Run `make friend-beta-run`
-4. Fill in `.env` with the beta proxy URL, install id, and install key if the launcher created it
-5. Grant Accessibility access to your terminal app in macOS
-6. Run `make friend-beta-run` again
+3. `git clone https://github.com/henryz2004/autocompleter.git`
+4. `cd autocompleter`
+5. Run `make friend-beta-run`
+6. Fill in `.env` with the beta `AUTOCOMPLETER_INSTALL_ID` and `AUTOCOMPLETER_PROXY_API_KEY` values if the launcher created it
+7. Grant Accessibility access to your terminal app in macOS
+8. Run `make friend-beta-run` again
 
 Telemetry is enabled by default for the beta, but you can opt out by setting:
 
@@ -133,6 +135,12 @@ python -m autocompleter --consolidate-memory
 - Accept suggestion 1-3 directly: `1`, `2`, `3`
 
 ## Development
+
+If you want the backend/test tooling too, install the dev extras:
+
+```bash
+./venv/bin/python -m pip install -e '.[dev]'
+```
 
 Run the test suite:
 
