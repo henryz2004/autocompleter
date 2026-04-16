@@ -117,8 +117,19 @@ class SupabaseStore:
     async def record_proxy_request(self, row: dict[str, Any]) -> None:
         await self._insert_row("beta_proxy_requests", row, return_representation=False)
 
+    async def record_proxy_attempt(self, row: dict[str, Any]) -> None:
+        await self._insert_row("beta_proxy_attempts", row, return_representation=False)
+
     async def record_telemetry_event(self, row: dict[str, Any]) -> None:
         await self._insert_row("beta_telemetry_events", row, return_representation=False)
+
+    async def upsert_invocation(self, row: dict[str, Any]) -> None:
+        await self._upsert_row(
+            "beta_invocations",
+            row,
+            on_conflict="invocation_id",
+            return_representation=False,
+        )
 
     async def _select_rows(
         self,
@@ -146,6 +157,28 @@ class SupabaseStore:
             f"{self.config.supabase_rest_url}/{table}",
             json=row,
             headers=headers,
+        )
+        response.raise_for_status()
+        if not return_representation:
+            return row
+        payload = response.json()
+        return payload[0] if isinstance(payload, list) else payload
+
+    async def _upsert_row(
+        self,
+        table: str,
+        row: dict[str, Any],
+        *,
+        on_conflict: str,
+        return_representation: bool = True,
+    ) -> dict[str, Any]:
+        prefer = "resolution=merge-duplicates"
+        prefer += ",return=representation" if return_representation else ",return=minimal"
+        response = await self._client.post(
+            f"{self.config.supabase_rest_url}/{table}",
+            params={"on_conflict": on_conflict},
+            json=row,
+            headers=self._headers(prefer=prefer),
         )
         response.raise_for_status()
         if not return_representation:
@@ -186,7 +219,9 @@ class InMemoryStore:
     def __init__(self) -> None:
         self.installs: dict[str, InstallRecord] = {}
         self.proxy_requests: list[dict[str, Any]] = []
+        self.proxy_attempts: list[dict[str, Any]] = []
         self.telemetry_events: list[dict[str, Any]] = []
+        self.invocations: dict[str, dict[str, Any]] = {}
 
     async def close(self) -> None:
         return None
@@ -236,5 +271,14 @@ class InMemoryStore:
     async def record_proxy_request(self, row: dict[str, Any]) -> None:
         self.proxy_requests.append(dict(row))
 
+    async def record_proxy_attempt(self, row: dict[str, Any]) -> None:
+        self.proxy_attempts.append(dict(row))
+
     async def record_telemetry_event(self, row: dict[str, Any]) -> None:
         self.telemetry_events.append(dict(row))
+
+    async def upsert_invocation(self, row: dict[str, Any]) -> None:
+        invocation_id = str(row["invocation_id"])
+        existing = dict(self.invocations.get(invocation_id, {}))
+        existing.update(row)
+        self.invocations[invocation_id] = existing

@@ -83,7 +83,10 @@ class TestBackendProxy:
         with TestClient(app) as client:
             response = client.post(
                 "/v1/chat/completions",
-                headers={"Authorization": f"Bearer {install_key}"},
+                headers={
+                    "Authorization": f"Bearer {install_key}",
+                    "X-Autocompleter-Invocation-Id": "inv-123",
+                },
                 json={
                     "model": "beta-model",
                     "messages": [{"role": "user", "content": "hello backend"}],
@@ -94,15 +97,24 @@ class TestBackendProxy:
 
         assert response.status_code == 200
         assert response.json()["choices"][0]["message"]["content"] == "hello there"
+        assert response.headers["X-Autocompleter-Invocation-Id"] == "inv-123"
+        assert response.headers["X-Autocompleter-Request-Id"]
         assert len(calls) == 1
         assert len(store.proxy_requests) == 1
+        assert len(store.proxy_attempts) == 1
         row = store.proxy_requests[0]
+        assert row["invocation_id"] == "inv-123"
         assert row["fallback_used"] is False
         assert row["status"] == "success"
+        assert row["attempt_count"] == 1
         assert row["input_chars_estimate"] >= len("hello backend")
         assert row["output_chars_estimate"] == len("hello there")
         assert "messages" not in row
         assert "prompt" not in row
+        attempt = store.proxy_attempts[0]
+        assert attempt["request_id"] == row["request_id"]
+        assert attempt["attempt_number"] == 1
+        assert attempt["is_fallback_attempt"] is False
 
     def test_streaming_proxy_passthrough_and_server_side_fallback(self):
         calls: list[str] = []
@@ -139,7 +151,10 @@ class TestBackendProxy:
             with client.stream(
                 "POST",
                 "/v1/chat/completions",
-                headers={"Authorization": f"Bearer {install_key}"},
+                headers={
+                    "Authorization": f"Bearer {install_key}",
+                    "X-Autocompleter-Invocation-Id": "inv-456",
+                },
                 json={
                     "model": "beta-model",
                     "messages": [{"role": "user", "content": "hello backend"}],
@@ -156,7 +171,12 @@ class TestBackendProxy:
         assert "primary.example" in calls[0]
         assert "fallback.example" in calls[1]
         assert len(store.proxy_requests) == 1
+        assert len(store.proxy_attempts) == 2
         row = store.proxy_requests[0]
+        assert row["invocation_id"] == "inv-456"
         assert row["fallback_used"] is True
         assert row["status"] == "success"
+        assert row["attempt_count"] == 2
         assert row["output_chars_estimate"] == len("hi there")
+        assert store.proxy_attempts[0]["is_fallback_attempt"] is False
+        assert store.proxy_attempts[1]["is_fallback_attempt"] is True

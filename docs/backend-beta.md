@@ -86,10 +86,18 @@ Start with:
 The backend expects these tables:
 
 - `beta_installs`
+- `beta_invocations`
 - `beta_proxy_requests`
+- `beta_proxy_attempts`
 - `beta_telemetry_events`
 
-The backend stores install/auth data, telemetry events, and metadata-only proxy request rows. It does not persist raw prompt or completion bodies by default.
+The backend stores install/auth data, invocation-level product analytics, metadata-only proxy request rows, per-attempt upstream metadata, and raw telemetry events. It does not persist raw prompt or completion bodies by default.
+
+Current correlation model:
+
+- the desktop client sends one `invocation_id` per autocomplete lifecycle
+- the proxy stores one logical `beta_proxy_requests` row per LLM call plus one `beta_proxy_attempts` row per upstream attempt
+- telemetry events upsert `beta_invocations` so request performance can be joined directly to accept/dismiss/no-suggestion outcomes
 
 For the recommended dev vs prod workflow, see [docs/supabase-environments.md](supabase-environments.md).
 

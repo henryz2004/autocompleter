@@ -14,7 +14,11 @@ from .auth import require_admin, require_install
 from .config import BackendConfig, load_backend_config
 from .proxy import ChatCompletionRequest, ProxyService
 from .store import InstallRecord, SupabaseStore
-from .telemetry import TelemetryEventPayload, build_telemetry_row
+from .telemetry import (
+    TelemetryEventPayload,
+    build_invocation_row,
+    build_telemetry_row,
+)
 
 
 class CreateInstallKeyRequest(BaseModel):
@@ -81,6 +85,12 @@ def create_app(
             payload=payload.model_dump(mode="json"),
         )
         await backend_store.record_telemetry_event(row)
+        invocation_row = build_invocation_row(
+            install_id=install.install_id,
+            payload=payload.model_dump(mode="json"),
+        )
+        if invocation_row is not None:
+            await backend_store.upsert_invocation(invocation_row)
         return {"accepted": True, "event_id": row["event_id"]}
 
     @app.post("/admin/install-keys")
