@@ -46,10 +46,10 @@ Edit `.env` and set these fields:
 ```bash
 AUTOCOMPLETER_BETA_MODE=1
 AUTOCOMPLETER_PROXY_ENABLED=1
-AUTOCOMPLETER_PROXY_BASE_URL=<shared beta proxy url>
+AUTOCOMPLETER_PROXY_BASE_URL=https://autocompleter-beta-backend.onrender.com/v1
 AUTOCOMPLETER_PROXY_API_KEY=<install key>
 AUTOCOMPLETER_TELEMETRY_ENABLED=1
-AUTOCOMPLETER_TELEMETRY_URL=<proxy base url>/telemetry/events
+AUTOCOMPLETER_TELEMETRY_URL=https://autocompleter-beta-backend.onrender.com/v1/telemetry/events
 AUTOCOMPLETER_INSTALL_ID=<install id>
 ```
 
