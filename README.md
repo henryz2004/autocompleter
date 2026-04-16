@@ -4,6 +4,11 @@
 
 This project is early and macOS-specific. It is designed for local use on your machine, with your own model provider credentials.
 
+For the beta backend and Supabase integration, prefer the modern Supabase API key types:
+
+- `sb_publishable_...` for client-side use
+- `sb_secret_...` for backend/server-side use
+
 ## What It Does
 
 - Works across native macOS apps, browsers, chat apps, and terminals.

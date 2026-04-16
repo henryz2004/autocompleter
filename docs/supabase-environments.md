@@ -45,7 +45,7 @@ Start from:
 These should contain different values for:
 
 - `AUTOCOMPLETER_SUPABASE_URL`
-- `AUTOCOMPLETER_SUPABASE_SERVICE_ROLE_KEY`
+- `AUTOCOMPLETER_SUPABASE_SECRET_KEY`
 - upstream provider keys
 - `AUTOCOMPLETER_BACKEND_ADMIN_SECRET`
 - `SUPABASE_PROJECT_REF`
@@ -147,7 +147,7 @@ Commit:
 
 Do not commit:
 
-- service-role keys
+- secret keys
 - admin secrets
 - real install keys
 - production data

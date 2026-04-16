@@ -15,7 +15,7 @@ def make_config() -> BackendConfig:
     return BackendConfig(
         admin_secret="admin-secret",
         supabase_url="https://supabase.example.co",
-        supabase_service_role_key="service-role-key",
+        supabase_secret_key="sb_secret_test",
         request_timeout_s=5.0,
         stream_timeout_s=20.0,
         allow_upstream_override_headers=False,
@@ -61,4 +61,3 @@ class TestSupabaseStore:
         assert row["key_hash"] == key_hash
         assert "install_key" not in row
         assert plaintext_key not in json.dumps(row)
-

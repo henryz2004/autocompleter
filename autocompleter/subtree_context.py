@@ -91,7 +91,10 @@ _MIN_TEXT_NODES_FOR_NAV_CHECK = 5
 _MIN_MESSAGE_TEXT_CHARS = 20
 _LONG_MESSAGE_TEXT_CHARS = 80
 _MAX_MESSAGE_OBJECT_CHARS = 700
+_MAX_TRANSCRIPT_MESSAGE_OBJECTS = 6
 _MAX_BRANCH_DEBUG_CANDIDATES = 8
+_TINY_OVERVIEW_TOKEN_BUDGET = 60
+_TINY_OVERVIEW_MAX_SIBLINGS = 0
 
 _TIMESTAMP_RE = re.compile(r"\b\d{1,2}:\d{2}(?:\s?[AaPp][Mm])?\b")
 _SPEAKER_HEADING_RE = re.compile(r"\bsaid\b", re.IGNORECASE)
@@ -121,6 +124,16 @@ _NAV_KEYWORDS = (
     "filter sidebar",
     "filter chats",
 )
+_STATUS_NOISE_TEXT = frozenset({
+    "copy",
+    "copy message",
+    "undo",
+    "commit",
+    "local",
+    "main",
+    "full access",
+    "high",
+})
 
 
 @dataclass
@@ -242,6 +255,89 @@ def _node_strings(node: dict) -> list[str]:
     return strings
 
 
+def _preferred_node_text(node: dict) -> str:
+    for key in ("value", "title", "description"):
+        text = _normalize_text(node.get(key))
+        if text:
+            return text
+    return ""
+
+
+def _is_timestamp_text(text: str) -> bool:
+    return bool(_TIMESTAMP_RE.fullmatch(text))
+
+
+def _looks_like_action_label(text: str) -> bool:
+    lowered = text.lower().strip()
+    if lowered in _STATUS_NOISE_TEXT:
+        return True
+    return lowered in _ACTION_KEYWORDS
+
+
+def _is_action_text(text: str) -> bool:
+    return _looks_like_action_label(text)
+
+
+def _is_status_text(text: str) -> bool:
+    return text.lower() in _STATUS_NOISE_TEXT
+
+
+def _is_transcript_noise_text(text: str) -> bool:
+    if not text:
+        return True
+    if _is_timestamp_text(text):
+        return True
+    if _is_action_text(text):
+        return True
+    if _is_status_text(text) and len(text) <= 24:
+        return True
+    return False
+
+
+def _join_text_fragments(fragments: list[str]) -> str:
+    if not fragments:
+        return ""
+
+    merged = fragments[0]
+    for fragment in fragments[1:]:
+        if not fragment:
+            continue
+        if fragment == merged or fragment.lower() == merged.lower():
+            continue
+        if fragment.startswith((",", ".", ":", ";", "!", "?", ")", "]", "}")):
+            merged += fragment
+            continue
+        if merged.endswith(("(", "[", "{", "“", '"', "'")):
+            merged += fragment
+            continue
+        merged += " " + fragment
+    return merged.strip()
+
+
+def _trim_middle(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    marker_overhead = len("[trimmed middle  chars]")
+    if max_chars <= marker_overhead + 20:
+        return text[:max_chars]
+
+    available = max_chars - marker_overhead
+    head = max(int(available * 0.6), 24)
+    tail = max(available - head, 18)
+    if head + tail >= len(text):
+        head = max_chars // 2
+        tail = max_chars - head
+    trimmed_chars = max(len(text) - head - tail, 0)
+    marker = f"[trimmed middle {trimmed_chars} chars]"
+    available = max_chars - len(marker) - 2
+    head = max(int(available * 0.6), 24)
+    tail = max(available - head, 18)
+    if head + tail >= len(text):
+        head = max_chars // 2
+        tail = max_chars - head
+    return f"{text[:head].rstrip()} {marker} {text[-tail:].lstrip()}".strip()
+
+
 def _contains_keyword(text: str, keywords: tuple[str, ...]) -> bool:
     lower = text.lower()
     return any(keyword in lower for keyword in keywords)
@@ -251,9 +347,14 @@ def _is_nav_like_node(node: dict) -> bool:
     role = node.get("role", "")
     subrole = _normalize_text(node.get("subrole", ""))
     role_desc = _normalize_text(node.get("roleDescription", ""))
+    if role in CONTENT_ROLES:
+        preferred = _preferred_node_text(node)
+        if len(preferred) >= _MIN_MESSAGE_TEXT_CHARS:
+            return False
     if "AXLandmarkNavigation" in subrole or "AXLandmarkComplementary" in subrole:
         return True
-    combined = " ".join([role, subrole, role_desc, *_node_strings(node)]).lower()
+    short_node_strings = [text for text in _node_strings(node) if len(text) <= 40]
+    combined = " ".join([role, subrole, role_desc, *short_node_strings]).lower()
     return _contains_keyword(combined, _NAV_KEYWORDS)
 
 
@@ -286,7 +387,7 @@ def _summarize_subtree(
             summary = _SubtreeSummary(
                 **{**summary.__dict__, "timestamp_nodes": summary.timestamp_nodes + 1}
             )
-        if _contains_keyword(text, _ACTION_KEYWORDS):
+        if _looks_like_action_label(text):
             summary = _SubtreeSummary(
                 **{**summary.__dict__, "action_nodes": summary.action_nodes + 1}
             )
@@ -375,13 +476,17 @@ def _looks_like_message_object(
         return False
     if _is_nav_like_node(node):
         return False
-    if summary.text_chars < _MIN_MESSAGE_TEXT_CHARS:
+    if summary.text_chars < 8:
         return False
     if summary.long_text_nodes >= 1:
         return True
     if summary.medium_text_nodes >= 2:
         return True
     if summary.medium_text_nodes >= 1 and (summary.timestamp_nodes > 0 or summary.action_nodes > 0):
+        return True
+    if summary.text_chars >= _MIN_MESSAGE_TEXT_CHARS and summary.text_nodes >= 2 and summary.nav_nodes == 0:
+        return True
+    if summary.text_chars >= 8 and (summary.timestamp_nodes > 0 or summary.action_nodes > 0):
         return True
     if child_message_count >= 1 and summary.text_chars >= _LONG_MESSAGE_TEXT_CHARS:
         return True
@@ -443,7 +548,7 @@ def _make_synthetic_message_object(
         "children": children,
     }
     summary = _summarize_subtree(synthetic, memo)
-    if summary.text_chars < _MIN_MESSAGE_TEXT_CHARS:
+    if summary.text_chars < 8:
         return None
     return _MessageObject(
         node=synthetic,
@@ -515,6 +620,60 @@ def _segment_flat_message_stream(
     return message_objects
 
 
+def _collect_message_fragments(
+    node: dict,
+    *,
+    depth: int = 0,
+    max_depth: int = 12,
+) -> list[str]:
+    if depth > max_depth:
+        return []
+
+    role = node.get("role", "")
+    if role in CHROME_ROLES or _is_nav_like_node(node):
+        return []
+
+    fragments: list[str] = []
+    if role in CONTENT_ROLES:
+        text = _preferred_node_text(node)
+        if text and not _is_transcript_noise_text(text):
+            fragments.append(text)
+
+    for child in node.get("children", []):
+        child_fragments = _collect_message_fragments(
+            child,
+            depth=depth + 1,
+            max_depth=max_depth,
+        )
+        for fragment in child_fragments:
+            if fragments and (
+                fragment == fragments[-1]
+                or fragment.lower() == fragments[-1].lower()
+            ):
+                continue
+            fragments.append(fragment)
+    return fragments
+
+
+def _serialize_clean_message_object(
+    node: dict,
+    remaining_chars: int,
+) -> str:
+    if remaining_chars <= 0:
+        return ""
+
+    wrapper_overhead = len("    <Message></Message>")
+    text_budget = max(
+        80,
+        min(_MAX_MESSAGE_OBJECT_CHARS, remaining_chars) - wrapper_overhead,
+    )
+    merged_text = _join_text_fragments(_collect_message_fragments(node))
+    if not merged_text:
+        return ""
+    merged_text = _trim_middle(merged_text, text_budget)
+    return f"    <Message>{_esc(merged_text)}</Message>"
+
+
 def _score_transcript_branch(
     node: dict,
     summary: _SubtreeSummary,
@@ -537,7 +696,10 @@ def _score_transcript_branch(
     )
     strong_signal = (
         immediate_message_children >= 2
+        or (summary.text_nodes >= 4 and summary.timestamp_nodes >= 2)
+        or (summary.text_nodes >= 3 and summary.action_nodes >= 1)
         or summary.long_text_nodes >= 2
+        or (summary.text_chars >= _LONG_MESSAGE_TEXT_CHARS and summary.text_nodes >= 2)
         or (
             summary.long_text_nodes >= 1
             and (summary.timestamp_nodes > 0 or summary.action_nodes > 0)
@@ -546,8 +708,9 @@ def _score_transcript_branch(
             summary.medium_text_nodes >= 3
             and (summary.timestamp_nodes > 0 or summary.action_nodes > 0)
         )
+        or (summary.text_chars >= _LONG_MESSAGE_TEXT_CHARS and summary.nav_nodes == 0)
     )
-    qualifies = strong_signal and score >= 12.0
+    qualifies = strong_signal and score >= 11.0
     return score, qualifies
 
 
@@ -619,28 +782,8 @@ def _collect_message_objects(
 
 
 def _serialize_message_object(node: dict, remaining_chars: int) -> str:
-    """Serialize one message object, clipping depth if it is too large."""
-    target = max(180, min(_MAX_MESSAGE_OBJECT_CHARS, remaining_chars))
-    best_within_budget = ""
-    shortest_non_empty = ""
-    for depth in (6, 4, 3, 2):
-        xml = subtree_to_xml(node, max_depth=depth, indent=2)
-        if not xml.strip():
-            continue
-        if not shortest_non_empty or len(xml) < len(shortest_non_empty):
-            shortest_non_empty = xml
-        if len(xml) <= target:
-            return xml
-        if len(xml) <= remaining_chars and (
-            not best_within_budget or len(xml) < len(best_within_budget)
-        ):
-            best_within_budget = xml
-    if best_within_budget:
-        return best_within_budget
-    compact_xml = _compact_message_object_xml(node, remaining_chars)
-    if compact_xml:
-        return compact_xml
-    return shortest_non_empty if len(shortest_non_empty) <= int(remaining_chars * 1.15) else ""
+    """Serialize one message object as a compact cleaned message block."""
+    return _serialize_clean_message_object(node, remaining_chars)
 
 
 def _compact_message_object_xml(node: dict, max_chars: int) -> str:
@@ -717,6 +860,8 @@ def _serialized_xml_has_meaningful_prose(xml: str) -> bool:
         non_timestamp_lines.append(text)
         if len(text) >= _MIN_MESSAGE_TEXT_CHARS:
             return True
+        if len(text) >= 4:
+            return True
     if len(non_timestamp_lines) >= 2:
         combined = " ".join(non_timestamp_lines)
         if len(combined) >= 12:
@@ -745,11 +890,14 @@ def _extract_transcript_context(
             )
         ]
 
+    recent_offset = max(len(message_objects) - _MAX_TRANSCRIPT_MESSAGE_OBJECTS, 0)
+    recent_message_objects = message_objects[recent_offset:]
     selected_xmls_rev: list[str] = []
     selected_indexes: list[int] = []
     total_chars = len(focused_xml)
-    for index in range(len(message_objects) - 1, -1, -1):
-        obj = message_objects[index]
+    for local_index in range(len(recent_message_objects) - 1, -1, -1):
+        obj = recent_message_objects[local_index]
+        index = recent_offset + local_index
         remaining = max(char_budget - total_chars, 0)
         if remaining <= 0:
             break
@@ -1048,7 +1196,7 @@ def extract_focus_path_overview(
 
 def extract_context_from_tree(
     tree: dict,
-    token_budget: int = 500,
+    token_budget: int = 1000,
 ) -> Optional[str]:
     """Walk from the focused element upward, collecting nearby content as XML.
 
@@ -1077,7 +1225,7 @@ def extract_context_from_tree(
 
 def _extract_context_from_tree_with_debug(
     path: list[dict],
-    token_budget: int = 500,
+    token_budget: int = 1000,
 ) -> tuple[Optional[str], Optional[dict]]:
     """Internal helper that returns both the context XML and selection debug."""
     if not path:
@@ -1136,7 +1284,7 @@ def extract_context_live(
     window_element,
     focused_element,
     max_depth: int = 40,
-    token_budget: int = 500,
+    token_budget: int = 1000,
 ) -> Optional[str]:
     """Convenience wrapper for live AX elements.
 
@@ -1157,7 +1305,7 @@ def extract_context_live(
 
 def build_context_bundle_from_tree(
     tree: dict,
-    token_budget: int = 500,
+    token_budget: int = 1000,
     overview_token_budget: int = 120,
 ) -> TreeContextBundle | None:
     """Build the prompt-ready context bundle from a serialized tree."""
@@ -1168,11 +1316,25 @@ def build_context_bundle_from_tree(
         path or [],
         token_budget=token_budget,
     )
+    is_transcript_context = (
+        selection_debug is not None
+        and selection_debug.get("strategy") == "transcript_branch"
+    )
+    effective_overview_budget = overview_token_budget
+    max_siblings_per_level = 2
+    if is_transcript_context:
+        effective_overview_budget = min(
+            overview_token_budget,
+            _TINY_OVERVIEW_TOKEN_BUDGET,
+        )
+        max_siblings_per_level = _TINY_OVERVIEW_MAX_SIBLINGS
     return TreeContextBundle(
         tree=tree,
         bottom_up_context=bottom_up_context,
         top_down_context=extract_focus_path_overview(
-            tree, token_budget=overview_token_budget,
+            tree,
+            token_budget=effective_overview_budget,
+            max_siblings_per_level=max_siblings_per_level,
         ),
         selection_debug=selection_debug,
     )
@@ -1189,7 +1351,7 @@ def build_context_bundle_live(
     raw_placeholder_value: str = "",
     raw_number_of_characters: int | None = None,
     max_depth: int = 40,
-    token_budget: int = 500,
+    token_budget: int = 1000,
     overview_token_budget: int = 120,
 ) -> TreeContextBundle | None:
     """Serialize a focus-aware tree and derive prompt/debug context blocks."""

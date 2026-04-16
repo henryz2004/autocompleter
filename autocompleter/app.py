@@ -453,14 +453,14 @@ class Autocompleter:
         self._latency_tracker.mark("subtree_start")
         tree_context_bundle = self.observer.get_context_bundle(
             focused,
-            token_budget=500,
+            token_budget=1000,
             overview_token_budget=120,
         )
         self._latency_tracker.mark("subtree_ready")
         subtree_context = (
             tree_context_bundle.bottom_up_context
             if tree_context_bundle is not None
-            else self.observer.get_subtree_context(token_budget=500)
+            else self.observer.get_subtree_context(token_budget=1000)
         )
         tree_overview_context = (
             tree_context_bundle.top_down_context
@@ -1074,7 +1074,7 @@ class Autocompleter:
 
                     debug_bundle = build_context_bundle_from_tree(
                         context_tree,
-                        token_budget=500,
+                        token_budget=1000,
                         overview_token_budget=120,
                     )
                     selection_debug_payload = (
@@ -1357,14 +1357,14 @@ class Autocompleter:
         self._latency_tracker.mark("subtree_start")
         tree_context_bundle = self.observer.get_context_bundle(
             focused,
-            token_budget=500,
+            token_budget=1000,
             overview_token_budget=120,
         )
         self._latency_tracker.mark("subtree_ready")
         subtree_context = (
             tree_context_bundle.bottom_up_context
             if tree_context_bundle is not None
-            else self.observer.get_subtree_context(token_budget=500)
+            else self.observer.get_subtree_context(token_budget=1000)
         )
         tree_overview_context = (
             tree_context_bundle.top_down_context
@@ -1504,6 +1504,7 @@ class Autocompleter:
             context_tree,
         ) = self._expand_live_trigger_context(
             self._capture_live_trigger_context(focused, trigger_type="regenerate")
+        )
         self._emit_trigger_telemetry(
             mode=mode,
             trigger_type="regenerate",

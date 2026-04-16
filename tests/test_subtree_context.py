@@ -613,6 +613,243 @@ class TestExtractContextSynthetic:
         ]
         assert len(selected) >= 2
 
+    def test_transcript_branch_emits_clean_message_blocks(self):
+        tree = {
+            "role": "AXWindow",
+            "title": "Codex",
+            "ancestorOfFocused": True,
+            "children": [
+                {
+                    "role": "AXGroup",
+                    "description": "Automation folders",
+                    "children": [
+                        {"role": "AXStaticText", "value": "Threads", "children": []},
+                    ],
+                },
+                {
+                    "role": "AXWebArea",
+                    "ancestorOfFocused": True,
+                    "children": [
+                        {
+                            "role": "AXGroup",
+                            "children": [
+                                {
+                                    "role": "AXGroup",
+                                    "children": [
+                                        {
+                                            "role": "AXStaticText",
+                                            "value": "Yes. Since",
+                                            "children": [],
+                                        },
+                                        {
+                                            "role": "AXStaticText",
+                                            "value": "venv/",
+                                            "children": [],
+                                        },
+                                        {
+                                            "role": "AXStaticText",
+                                            "value": "is gone, here’s the clean repo-local rebuild path.",
+                                            "children": [],
+                                        },
+                                        {"role": "AXStaticText", "value": "4:05 PM", "children": []},
+                                        {"role": "AXButton", "description": "Copy message", "children": []},
+                                        {"role": "AXStaticText", "value": "Local", "children": []},
+                                        {"role": "AXStaticText", "value": "main", "children": []},
+                                        {"role": "AXStaticText", "value": "Full access", "children": []},
+                                    ],
+                                },
+                            ],
+                        },
+                        {
+                            "role": "AXGroup",
+                            "ancestorOfFocused": True,
+                            "children": [
+                                {
+                                    "role": "AXTextArea",
+                                    "value": "",
+                                    "focused": True,
+                                    "placeholderDetected": True,
+                                    "cursorPosition": 0,
+                                    "selectionLength": 0,
+                                    "valueLength": 0,
+                                    "children": [],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        }
+        bundle = build_context_bundle_from_tree(tree, token_budget=200, overview_token_budget=80)
+        assert bundle is not None
+        assert bundle.bottom_up_context is not None
+        assert "<Message>" in bundle.bottom_up_context
+        assert "Yes. Since venv/ is gone, here’s the clean repo-local rebuild path." in bundle.bottom_up_context
+        assert "Copy message" not in bundle.bottom_up_context
+        assert "4:05 PM" not in bundle.bottom_up_context
+        assert "Full access" not in bundle.bottom_up_context
+        assert "<Group" not in bundle.bottom_up_context
+        assert bundle.top_down_context is not None
+        assert "Threads" not in bundle.top_down_context
+
+    def test_transcript_branch_keeps_message_boundaries_when_merging_fragments(self):
+        tree = {
+            "role": "AXWindow",
+            "ancestorOfFocused": True,
+            "children": [
+                {
+                    "role": "AXWebArea",
+                    "ancestorOfFocused": True,
+                    "children": [
+                        {
+                            "role": "AXGroup",
+                            "children": [
+                                {
+                                    "role": "AXGroup",
+                                    "children": [
+                                        {"role": "AXStaticText", "value": "First reply starts", "children": []},
+                                        {"role": "AXStaticText", "value": "here.", "children": []},
+                                    ],
+                                },
+                                {
+                                    "role": "AXGroup",
+                                    "children": [
+                                        {"role": "AXStaticText", "value": "Second reply starts", "children": []},
+                                        {"role": "AXStaticText", "value": "there.", "children": []},
+                                    ],
+                                },
+                            ],
+                        },
+                        {
+                            "role": "AXGroup",
+                            "ancestorOfFocused": True,
+                            "children": [
+                                {
+                                    "role": "AXTextArea",
+                                    "value": "",
+                                    "focused": True,
+                                    "placeholderDetected": True,
+                                    "cursorPosition": 0,
+                                    "selectionLength": 0,
+                                    "valueLength": 0,
+                                    "children": [],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        }
+        bundle = build_context_bundle_from_tree(tree, token_budget=180, overview_token_budget=80)
+        assert bundle is not None
+        assert bundle.bottom_up_context is not None
+        assert "First reply starts here." in bundle.bottom_up_context
+        assert "Second reply starts there." in bundle.bottom_up_context
+        assert "here. Second reply starts" not in bundle.bottom_up_context
+        assert bundle.bottom_up_context.count("<Message>") >= 2
+
+    def test_transcript_branch_middle_trims_long_messages(self):
+        long_message = (
+            "Message start with important setup. "
+            + ("middle filler " * 90)
+            + "Message ending with the key ask."
+        )
+        tree = {
+            "role": "AXWindow",
+            "ancestorOfFocused": True,
+            "children": [
+                {
+                    "role": "AXWebArea",
+                    "ancestorOfFocused": True,
+                    "children": [
+                        {
+                            "role": "AXGroup",
+                            "children": [
+                                {
+                                    "role": "AXGroup",
+                                    "children": [
+                                        {"role": "AXStaticText", "value": long_message, "children": []},
+                                    ],
+                                },
+                            ],
+                        },
+                        {
+                            "role": "AXGroup",
+                            "ancestorOfFocused": True,
+                            "children": [
+                                {
+                                    "role": "AXTextArea",
+                                    "value": "",
+                                    "focused": True,
+                                    "placeholderDetected": True,
+                                    "cursorPosition": 0,
+                                    "selectionLength": 0,
+                                    "valueLength": 0,
+                                    "children": [],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        }
+        bundle = build_context_bundle_from_tree(tree, token_budget=180, overview_token_budget=80)
+        assert bundle is not None
+        assert bundle.bottom_up_context is not None
+        assert "Message start with important setup." in bundle.bottom_up_context
+        assert "Message ending with the key ask." in bundle.bottom_up_context
+        assert "[trimmed middle" in bundle.bottom_up_context
+
+    def test_transcript_branch_caps_recent_messages_to_last_six(self):
+        transcript_children = []
+        for i in range(8):
+            transcript_children.append(
+                {
+                    "role": "AXGroup",
+                    "children": [
+                        {"role": "AXStaticText", "value": f"message {i}", "children": []},
+                        {"role": "AXStaticText", "value": f"9:4{i} AM", "children": []},
+                    ],
+                }
+            )
+        tree = {
+            "role": "AXWindow",
+            "ancestorOfFocused": True,
+            "children": [
+                {
+                    "role": "AXWebArea",
+                    "ancestorOfFocused": True,
+                    "children": [
+                        {"role": "AXGroup", "children": transcript_children},
+                        {
+                            "role": "AXGroup",
+                            "ancestorOfFocused": True,
+                            "children": [
+                                {
+                                    "role": "AXTextArea",
+                                    "value": "",
+                                    "focused": True,
+                                    "placeholderDetected": True,
+                                    "cursorPosition": 0,
+                                    "selectionLength": 0,
+                                    "valueLength": 0,
+                                    "children": [],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        }
+        bundle = build_context_bundle_from_tree(tree, token_budget=1000, overview_token_budget=80)
+        assert bundle is not None
+        assert bundle.bottom_up_context is not None
+        assert bundle.bottom_up_context.count("<Message>") <= 6
+        assert "message 7" in bundle.bottom_up_context
+        assert "message 2" in bundle.bottom_up_context
+        assert "message 0" not in bundle.bottom_up_context
+        assert "message 1" not in bundle.bottom_up_context
+
 
 # ---------------------------------------------------------------------------
 # extract_context_from_tree — real fixtures
@@ -700,6 +937,28 @@ class TestExtractContextFixtures:
             # Should contain email sender and some body text
             assert "Tal Gur" in xml, f"{name}: missing sender name"
             assert "Elevate Society" in xml, f"{name}: missing email body content"
+
+    def test_codex_fixture_uses_cleaned_transcript_messages(self):
+        data = _load("codex-transcript")
+        bundle = build_context_bundle_from_tree(
+            data["tree"],
+            token_budget=200,
+            overview_token_budget=80,
+        )
+        assert bundle is not None
+        assert bundle.selection_debug is not None
+        assert bundle.selection_debug["strategy"] == "transcript_branch"
+        assert bundle.bottom_up_context is not None
+        assert "<Message>" in bundle.bottom_up_context
+        assert "Yes. Since venv/ is gone, here’s the clean repo-local rebuild path." in bundle.bottom_up_context
+        assert "yeah and we deleted the venv so let's reconfigure the environment." in bundle.bottom_up_context
+        assert "how do i leave a venv again" in bundle.bottom_up_context
+        assert "Copy message" not in bundle.bottom_up_context
+        assert "Full access" not in bundle.bottom_up_context
+        assert "Local" not in bundle.bottom_up_context
+        assert "Threads" not in bundle.bottom_up_context
+        assert bundle.top_down_context is not None
+        assert "<focusPath>" in bundle.top_down_context
 
     def test_unfocused_fixtures_return_none(self):
         """Fixtures without focus annotations should return None gracefully."""

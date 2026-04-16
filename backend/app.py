@@ -53,7 +53,7 @@ def create_app(
         return {
             "ok": True,
             "supabase_configured": bool(
-                backend_config.supabase_url and backend_config.supabase_service_role_key
+                backend_config.supabase_url and backend_config.supabase_secret_key
             ),
             "primary_upstream_configured": backend_config.primary_upstream.enabled,
             "fallback_upstream_configured": backend_config.fallback_upstream.enabled,

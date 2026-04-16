@@ -171,8 +171,8 @@ class SupabaseStore:
 
     def _headers(self, *, prefer: str | None = None) -> dict[str, str]:
         headers = {
-            "apikey": self.config.supabase_service_role_key,
-            "Authorization": f"Bearer {self.config.supabase_service_role_key}",
+            "apikey": self.config.supabase_secret_key,
+            "Authorization": f"Bearer {self.config.supabase_secret_key}",
             "Content-Type": "application/json",
         }
         if prefer:

@@ -44,12 +44,16 @@ Required:
 ```bash
 AUTOCOMPLETER_BACKEND_ADMIN_SECRET=<admin secret>
 AUTOCOMPLETER_SUPABASE_URL=https://<project>.supabase.co
-AUTOCOMPLETER_SUPABASE_SERVICE_ROLE_KEY=<service role key>
+AUTOCOMPLETER_SUPABASE_SECRET_KEY=<secret key>
 
 AUTOCOMPLETER_PROXY_PRIMARY_BASE_URL=https://<primary-openai-compatible-upstream>/v1
 AUTOCOMPLETER_PROXY_PRIMARY_API_KEY=<primary upstream key>
 AUTOCOMPLETER_PROXY_PRIMARY_DEFAULT_MODEL=<default model name>
 ```
+
+The backend uses the modern Supabase server-side secret key format (`sb_secret_...`). A legacy `AUTOCOMPLETER_SUPABASE_SERVICE_ROLE_KEY` still works as a fallback, but the preferred variable is `AUTOCOMPLETER_SUPABASE_SECRET_KEY`.
+
+You do not need a publishable key for the current backend flow because the desktop app talks to your FastAPI backend, not directly to Supabase. If you later add direct client-side Supabase access, that is when `sb_publishable_...` becomes relevant.
 
 Optional fallback:
 

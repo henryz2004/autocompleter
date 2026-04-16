@@ -312,7 +312,7 @@ class InputObserver:
             conversation_turns=conversation_turns,
         )
 
-    def get_subtree_context(self, token_budget: int = 500) -> str | None:
+    def get_subtree_context(self, token_budget: int = 1000) -> str | None:
         """Extract context XML by walking up from the focused element.
 
         Uses the subtree walker to produce minimal XML context from the
@@ -362,7 +362,7 @@ class InputObserver:
     def get_context_bundle(
         self,
         focused_state: FocusedElement,
-        token_budget: int = 500,
+        token_budget: int = 1000,
         overview_token_budget: int = 120,
     ):
         """Build the focus-aware tree context bundle used by prompts/dumps."""

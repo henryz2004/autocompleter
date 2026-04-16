@@ -59,7 +59,7 @@ class UpstreamConfig:
 class BackendConfig:
     admin_secret: str
     supabase_url: str
-    supabase_service_role_key: str
+    supabase_secret_key: str
     request_timeout_s: float
     stream_timeout_s: float
     allow_upstream_override_headers: bool
@@ -72,6 +72,16 @@ class BackendConfig:
 
 
 def load_backend_config() -> BackendConfig:
+    supabase_secret_key = os.environ.get(
+        "AUTOCOMPLETER_SUPABASE_SECRET_KEY",
+        "",
+    ).strip()
+    if not supabase_secret_key:
+        supabase_secret_key = os.environ.get(
+            "AUTOCOMPLETER_SUPABASE_SERVICE_ROLE_KEY",
+            "",
+        ).strip()
+
     primary_name = os.environ.get(
         "AUTOCOMPLETER_PROXY_PRIMARY_NAME",
         "primary",
@@ -114,10 +124,7 @@ def load_backend_config() -> BackendConfig:
     return BackendConfig(
         admin_secret=os.environ.get("AUTOCOMPLETER_BACKEND_ADMIN_SECRET", "").strip(),
         supabase_url=os.environ.get("AUTOCOMPLETER_SUPABASE_URL", "").strip(),
-        supabase_service_role_key=os.environ.get(
-            "AUTOCOMPLETER_SUPABASE_SERVICE_ROLE_KEY",
-            "",
-        ).strip(),
+        supabase_secret_key=supabase_secret_key,
         request_timeout_s=float(
             os.environ.get("AUTOCOMPLETER_BACKEND_REQUEST_TIMEOUT_S", "15")
         ),

@@ -1,0 +1,361 @@
+{
+  "app": "Codex",
+  "windowTitle": "Codex",
+  "capturedAt": "2026-04-15T21:04:20",
+  "macosVersion": "26.2",
+  "notes": "Curated from a live Codex transcript dump to cover generic cleaned transcript fallback behavior.",
+  "focusedElement": {
+    "role": "AXTextArea",
+    "insertionPoint": 0,
+    "selectionLength": 0,
+    "valueLength": 0,
+    "placeholderDetected": true,
+    "beforeCursor": "",
+    "afterCursor": "",
+    "sourceUrl": "",
+    "rawValue": "\nAsk for follow-up changes",
+    "rawValueLength": 26,
+    "rawPlaceholderValue": "",
+    "rawNumberOfCharacters": 26
+  },
+  "tree": {
+    "role": "AXWindow",
+    "subrole": "AXStandardWindow",
+    "roleDescription": "standard window",
+    "value": null,
+    "title": "Codex",
+    "description": "",
+    "placeholderValue": null,
+    "numberOfCharacters": null,
+    "ancestorOfFocused": true,
+    "children": [
+      {
+        "role": "AXGroup",
+        "subrole": "",
+        "roleDescription": "group",
+        "value": "",
+        "title": "",
+        "description": "Automation folders",
+        "placeholderValue": null,
+        "numberOfCharacters": 0,
+        "children": [
+          {
+            "role": "AXStaticText",
+            "subrole": "",
+            "roleDescription": "text",
+            "value": "Threads",
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": 0,
+            "children": []
+          },
+          {
+            "role": "AXStaticText",
+            "subrole": "",
+            "roleDescription": "text",
+            "value": "Clean up app pipeline",
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": 0,
+            "children": []
+          }
+        ]
+      },
+      {
+        "role": "AXWebArea",
+        "subrole": "",
+        "roleDescription": "HTML content",
+        "value": "",
+        "title": "Codex",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": 0,
+        "ancestorOfFocused": true,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "",
+            "roleDescription": "group",
+            "value": "",
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": 0,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": "",
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": [
+                  {
+                    "role": "AXStaticText",
+                    "subrole": "",
+                    "roleDescription": "text",
+                    "value": "i thought inside venv you can have custom python version",
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": []
+                  },
+                  {
+                    "role": "AXStaticText",
+                    "subrole": "",
+                    "roleDescription": "text",
+                    "value": "4:05 PM",
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "",
+                    "roleDescription": "button",
+                    "value": "",
+                    "title": "",
+                    "description": "Copy message",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": "",
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": [
+                  {
+                    "role": "AXStaticText",
+                    "subrole": "",
+                    "roleDescription": "text",
+                    "value": "Yes. Since",
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": []
+                  },
+                  {
+                    "role": "AXStaticText",
+                    "subrole": "",
+                    "roleDescription": "text",
+                    "value": "venv/",
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": []
+                  },
+                  {
+                    "role": "AXStaticText",
+                    "subrole": "",
+                    "roleDescription": "text",
+                    "value": "is gone, here’s the clean repo-local rebuild path.",
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": []
+                  },
+                  {
+                    "role": "AXStaticText",
+                    "subrole": "",
+                    "roleDescription": "text",
+                    "value": "Use this exact sequence from the repo root:",
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": []
+                  },
+                  {
+                    "role": "AXStaticText",
+                    "subrole": "",
+                    "roleDescription": "text",
+                    "value": "Then verify:",
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": []
+                  },
+                  {
+                    "role": "AXStaticText",
+                    "subrole": "",
+                    "roleDescription": "text",
+                    "value": "4:05 PM",
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "",
+                    "roleDescription": "button",
+                    "value": "",
+                    "title": "",
+                    "description": "Copy message",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": []
+                  },
+                  {
+                    "role": "AXStaticText",
+                    "subrole": "",
+                    "roleDescription": "text",
+                    "value": "Local",
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": []
+                  },
+                  {
+                    "role": "AXStaticText",
+                    "subrole": "",
+                    "roleDescription": "text",
+                    "value": "main",
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": []
+                  },
+                  {
+                    "role": "AXStaticText",
+                    "subrole": "",
+                    "roleDescription": "text",
+                    "value": "Full access",
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": "",
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": [
+                  {
+                    "role": "AXStaticText",
+                    "subrole": "",
+                    "roleDescription": "text",
+                    "value": "yeah and we deleted the venv so let's reconfigure the environment.",
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": []
+                  },
+                  {
+                    "role": "AXStaticText",
+                    "subrole": "",
+                    "roleDescription": "text",
+                    "value": "4:05 PM",
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "role": "AXGroup",
+                "subrole": "",
+                "roleDescription": "group",
+                "value": "",
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": [
+                  {
+                    "role": "AXStaticText",
+                    "subrole": "",
+                    "roleDescription": "text",
+                    "value": "how do i leave a venv again",
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": []
+                  },
+                  {
+                    "role": "AXStaticText",
+                    "subrole": "",
+                    "roleDescription": "text",
+                    "value": "4:07 PM",
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "AXGroup",
+            "subrole": "",
+            "roleDescription": "group",
+            "value": "",
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": 0,
+            "ancestorOfFocused": true,
+            "children": [
+              {
+                "role": "AXTextArea",
+                "subrole": "",
+                "roleDescription": "text entry area",
+                "value": "",
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 26,
+                "children": [],
+                "focused": true,
+                "valueLength": 0,
+                "placeholderDetected": true,
+                "cursorPosition": 0,
+                "selectionLength": 0,
+                "rawValue": "\nAsk for follow-up changes",
+                "rawValueLength": 26,
+                "rawPlaceholderValue": "",
+                "rawNumberOfCharacters": 26
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

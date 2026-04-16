@@ -1,7 +1,17 @@
 SHELL := /bin/sh
 
 SUPABASE ?= supabase
-UVICORN ?= uvicorn
+ifneq ("$(wildcard ./venv/bin/python)","")
+PYTHON := ./venv/bin/python
+else ifneq ("$(wildcard ./.venv/bin/python)","")
+PYTHON := ./.venv/bin/python
+else ifneq ("$(wildcard ./venv/bin/uvicorn)","")
+PYTHON := ./venv/bin/python
+else ifneq ("$(wildcard ./.venv/bin/uvicorn)","")
+PYTHON := ./.venv/bin/python
+else
+PYTHON ?= python3
+endif
 BACKEND_ENV_FILE ?= .env.backend.dev
 INSTALL_LABEL ?= local-smoke
 INSTALL_NOTES ?= created-via-make
@@ -41,7 +51,7 @@ check-project-ref: check-backend-env
 check-backend-config: check-backend-env
 	@test -n "$(AUTOCOMPLETER_BACKEND_ADMIN_SECRET)" || { echo "Set AUTOCOMPLETER_BACKEND_ADMIN_SECRET in $(BACKEND_ENV_FILE)"; exit 1; }
 	@test -n "$(AUTOCOMPLETER_SUPABASE_URL)" || { echo "Set AUTOCOMPLETER_SUPABASE_URL in $(BACKEND_ENV_FILE)"; exit 1; }
-	@test -n "$(AUTOCOMPLETER_SUPABASE_SERVICE_ROLE_KEY)" || { echo "Set AUTOCOMPLETER_SUPABASE_SERVICE_ROLE_KEY in $(BACKEND_ENV_FILE)"; exit 1; }
+	@test -n "$(AUTOCOMPLETER_SUPABASE_SECRET_KEY)" || { echo "Set AUTOCOMPLETER_SUPABASE_SECRET_KEY in $(BACKEND_ENV_FILE)"; exit 1; }
 	@test -n "$(AUTOCOMPLETER_PROXY_PRIMARY_BASE_URL)" || { echo "Set AUTOCOMPLETER_PROXY_PRIMARY_BASE_URL in $(BACKEND_ENV_FILE)"; exit 1; }
 	@test -n "$(AUTOCOMPLETER_PROXY_PRIMARY_API_KEY)" || { echo "Set AUTOCOMPLETER_PROXY_PRIMARY_API_KEY in $(BACKEND_ENV_FILE)"; exit 1; }
 	@test -n "$(AUTOCOMPLETER_PROXY_PRIMARY_DEFAULT_MODEL)" || { echo "Set AUTOCOMPLETER_PROXY_PRIMARY_DEFAULT_MODEL in $(BACKEND_ENV_FILE)"; exit 1; }
@@ -77,7 +87,7 @@ supabase-db-push-prod:
 .PHONY: backend-run
 backend-run: check-backend-config
 	@set -a; . "$(BACKEND_ENV_FILE)"; set +a; \
-	$(UVICORN) backend.app:app --host "$${BACKEND_HOST:-127.0.0.1}" --port "$${BACKEND_PORT:-8000}"
+	PYTHONPATH=. $(PYTHON) -m uvicorn backend.app:app --host "$${BACKEND_HOST:-127.0.0.1}" --port "$${BACKEND_PORT:-8000}"
 
 .PHONY: backend-run-dev
 backend-run-dev:
@@ -114,4 +124,3 @@ backend-mint-install-dev:
 .PHONY: backend-mint-install-prod
 backend-mint-install-prod:
 	@$(MAKE) backend-mint-install BACKEND_ENV_FILE=.env.backend.prod
-
