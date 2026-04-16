@@ -19,7 +19,7 @@ source "$HOME/.local/bin/env"
 ```
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/henryz2004/autocompleter.git
 cd autocompleter
 make friend-beta-run
 ```

@@ -21,11 +21,27 @@ For the beta backend and Supabase integration, prefer the modern Supabase API ke
 ## Requirements
 
 - macOS
-- Python 3.11+
+- `uv` for the recommended bootstrap flow
 - Accessibility permission for the host app you launch from
 - At least one supported LLM provider API key
 
 ## Install
+
+Recommended bootstrap:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source "$HOME/.local/bin/env"
+git clone https://github.com/henryz2004/autocompleter.git
+cd autocompleter
+make friend-beta-bootstrap
+```
+
+That will use `uv` to install Python 3.11 if needed, create `./venv`, install the app, and create `./.env` from `./.env.example` if it does not already exist.
+
+Then edit `.env` with your provider settings and API key, or with your beta `AUTOCOMPLETER_INSTALL_ID` and `AUTOCOMPLETER_PROXY_API_KEY`.
+
+Manual alternative:
 
 ```bash
 git clone https://github.com/henryz2004/autocompleter.git
@@ -36,8 +52,6 @@ pip install -r requirements.txt
 pip install -e .
 cp .env.example .env
 ```
-
-Then edit `.env` with your provider settings and API key.
 
 ## Friend Beta
 
@@ -109,18 +123,17 @@ Provider keys are resolved from standard env vars such as:
 ## Run
 
 ```bash
-source venv/bin/activate
-python -m autocompleter
+make friend-beta-run
 ```
 
 Useful variants:
 
 ```bash
-python -m autocompleter --log-file /tmp/autocompleter.log --log-level DEBUG
-python -m autocompleter --dump-dir dumps
-python -m autocompleter --stats
-python -m autocompleter --stats 100
-python -m autocompleter --consolidate-memory
+./venv/bin/python -m autocompleter --log-file /tmp/autocompleter.log --log-level DEBUG
+./venv/bin/python -m autocompleter --dump-dir dumps
+./venv/bin/python -m autocompleter --stats
+./venv/bin/python -m autocompleter --stats 100
+./venv/bin/python -m autocompleter --consolidate-memory
 ```
 
 ## Hotkeys
