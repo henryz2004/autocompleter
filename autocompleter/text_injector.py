@@ -37,7 +37,8 @@ class TextInjector:
     """Injects text into the currently focused input field."""
 
     _CLIPBOARD_SETTLE_DELAY_S = 0.03
-    _KEYSTROKE_DELAY_S = 0.002
+    _KEYSTROKE_DELAY_S = 0.005
+    _KEY_DOWN_UP_DELAY_S = 0.001
 
     def __init__(self):
         if HAS_INJECTION:
@@ -301,8 +302,7 @@ class TextInjector:
         )
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, event_up)
 
-    @staticmethod
-    def _type_character(char: str) -> None:
+    def _type_character(self, char: str) -> None:
         """Simulate typing a single character using CGEvents."""
         if not HAS_INJECTION:
             return
@@ -311,15 +311,25 @@ class TextInjector:
             Quartz.kCGEventSourceStateHIDSystemState
         )
 
-        # Use CGEventKeyboardSetUnicodeString for arbitrary characters
-        event_down = Quartz.CGEventCreateKeyboardEvent(source, 0, True)
-        Quartz.CGEventKeyboardSetUnicodeString(
-            event_down, len(char), char
-        )
+        # Space is especially sensitive in rich editors; use the real space
+        # virtual key instead of a Unicode string event to reduce dropped or
+        # coalesced whitespace.
+        if char == " ":
+            event_down = Quartz.CGEventCreateKeyboardEvent(source, 49, True)
+        else:
+            # Use CGEventKeyboardSetUnicodeString for arbitrary characters
+            event_down = Quartz.CGEventCreateKeyboardEvent(source, 0, True)
+            Quartz.CGEventKeyboardSetUnicodeString(
+                event_down, len(char), char
+            )
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, event_down)
+        time.sleep(self._KEY_DOWN_UP_DELAY_S)
 
-        event_up = Quartz.CGEventCreateKeyboardEvent(source, 0, False)
-        Quartz.CGEventKeyboardSetUnicodeString(
-            event_up, len(char), char
-        )
+        if char == " ":
+            event_up = Quartz.CGEventCreateKeyboardEvent(source, 49, False)
+        else:
+            event_up = Quartz.CGEventCreateKeyboardEvent(source, 0, False)
+            Quartz.CGEventKeyboardSetUnicodeString(
+                event_up, len(char), char
+            )
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, event_up)

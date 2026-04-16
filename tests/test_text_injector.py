@@ -389,6 +389,37 @@ class TestClipboardAndKeystrokesUnaffected:
         mock_clip.assert_not_called()
 
 
+class TestKeystrokePacing:
+
+    def test_keystrokes_sleep_between_characters(self, injector):
+        with patch.object(injector, "_type_character") as mock_type, \
+             patch("autocompleter.text_injector.time.sleep") as mock_sleep:
+            result = injector._inject_via_keystrokes("abc")
+
+        assert result is True
+        assert [call.args[0] for call in mock_type.call_args_list] == list("abc")
+        assert mock_sleep.call_count == 3
+        mock_sleep.assert_called_with(injector._KEYSTROKE_DELAY_S)
+
+    def test_space_uses_real_space_keycode(self, injector):
+        mock_quartz = MagicMock()
+        mock_quartz.kCGEventSourceStateHIDSystemState = 1
+        mock_quartz.kCGHIDEventTap = 2
+        source = object()
+        down_event = object()
+        up_event = object()
+        mock_quartz.CGEventSourceCreate.return_value = source
+        mock_quartz.CGEventCreateKeyboardEvent.side_effect = [down_event, up_event]
+
+        with patch("autocompleter.text_injector.Quartz", mock_quartz), \
+             patch("autocompleter.text_injector.time.sleep"):
+            injector._type_character(" ")
+
+        assert mock_quartz.CGEventCreateKeyboardEvent.call_args_list[0].args == (source, 49, True)
+        assert mock_quartz.CGEventCreateKeyboardEvent.call_args_list[1].args == (source, 49, False)
+        mock_quartz.CGEventKeyboardSetUnicodeString.assert_not_called()
+
+
 # ===================================================================
 # Edge cases
 # ===================================================================

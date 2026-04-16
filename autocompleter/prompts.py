@@ -53,11 +53,15 @@ appropriate for the app
 casually (lowercase, no punctuation, slang, abbreviations), suggest in \
 that same casual style. If formal, stay formal. Mirror how the USER \
 actually writes, not the assistant.
-- Keep suggestions SHORT — 1 sentence max, like a real text message
+- Keep suggestions concise and natural — like a real text message, not a paragraph
+- Stop at a natural endpoint. If the thought feels complete after a word, phrase, or sentence, stop there instead of stretching it into a run-on
+- Use punctuation when it improves clarity or matches how a real person would naturally end the message; do not force a run-on just to stay casual
 - Focus on the most recent messages in the conversation — older messages \
 are background context, not topics to address directly
 - Vary approach across suggestions (e.g. agree, ask follow-up, push back) \
 but keep them relevant to the latest exchange
+- Vary cadence as well as content: some suggestions can be brief fragments, \
+some can be complete sentences, and some can end with a short question if that fits
 - Do not repeat or quote content already visible
 - Be skeptical of nearby UI labels, navigation text, and unrelated context \
 from other apps; use them only if they are clearly relevant
@@ -80,7 +84,8 @@ Generate exactly {num_suggestions} distinct suggestions for what the \
 user might type next. If a "Draft so far" is shown, output ONLY the \
 remaining text to complete it (your output is appended directly). \
 If there is no draft, suggest complete replies or conversation starters. \
-Keep each suggestion to 1 short sentence max — like a real text message.\
+Keep each suggestion to a single natural message turn — often a short sentence \
+or phrase, but stop wherever the thought naturally lands instead of forcing a run-on.\
 """
 
 def build_prompt_extra_rules(mode, prompt_placeholder_aware: bool) -> str:

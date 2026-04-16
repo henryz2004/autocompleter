@@ -242,7 +242,23 @@ class TestStreamingPostprocess:
             before_cursor="",
             index=0,
             avoid_texts=["sounds good"],
-        ) == ""
+        ) == "sounds good"
+
+    def test_streaming_postprocess_strips_repeated_reply_prefix(self):
+        assert postprocess_suggestion_text(
+            "can we make it type them out gradually instead of all at once? maybe start with smaller batches",
+            mode=AutocompleteMode.REPLY,
+            before_cursor="can we make it type them out gradually instead of all at once? ",
+            index=0,
+        ) == "maybe start with smaller batches"
+
+    def test_streaming_postprocess_normalizes_reply_spacing(self):
+        assert postprocess_suggestion_text(
+            " what if we slow down spaces a bit",
+            mode=AutocompleteMode.REPLY,
+            before_cursor="hello ",
+            index=0,
+        ) == "what if we slow down spaces a bit"
 
     def test_unicode_in_suggestions(self, engine):
         """Unicode characters pass through correctly."""
@@ -545,6 +561,34 @@ class TestGenerateSuggestionsStream:
         call_kwargs = mock_client.messages.stream.call_args[1]
         assert call_kwargs["temperature"] == engine.config.reply_temperature
         assert call_kwargs["max_tokens"] == engine.config.max_tokens
+
+    def test_regenerate_stream_prefers_non_repeated_suggestions(self, engine):
+        _mock_engine_stream(engine, ["sounds good", "new idea", "let's do it"])
+
+        results = list(engine.generate_suggestions_stream(
+            current_input="",
+            context="context",
+            mode=AutocompleteMode.REPLY,
+            temperature_boost=0.5,
+            negative_patterns=["sounds good", "let's do it"],
+            prompt_placeholder_aware=True,
+        ))
+
+        assert [result.text for result in results] == ["new idea"]
+
+    def test_regenerate_stream_falls_back_when_all_suggestions_repeat(self, engine):
+        _mock_engine_stream(engine, ["sounds good", "let's do it"])
+
+        results = list(engine.generate_suggestions_stream(
+            current_input="",
+            context="context",
+            mode=AutocompleteMode.REPLY,
+            temperature_boost=0.5,
+            negative_patterns=["sounds good", "let's do it"],
+            prompt_placeholder_aware=True,
+        ))
+
+        assert [result.text for result in results] == ["sounds good", "let's do it"]
 
     def test_exception_during_stream_yields_error_suggestion(self, engine):
         """Top-level exception in streaming + fallback yields an error suggestion."""

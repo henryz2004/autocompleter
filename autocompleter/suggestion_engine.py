@@ -126,6 +126,23 @@ def _filter_avoided_text(
     return text
 
 
+def _apply_avoidance_with_fallback(
+    texts: list[str],
+    avoid_texts: set[str] | None = None,
+) -> list[str]:
+    if not avoid_texts:
+        return texts
+
+    has_nonavoided = any(
+        text.strip() and _filter_avoided_text(text, avoid_texts).strip()
+        for text in texts
+    )
+    if not has_nonavoided:
+        return texts
+
+    return [_filter_avoided_text(text, avoid_texts) for text in texts]
+
+
 def _strip_repeated_prefix(text: str, before_cursor: str | None) -> str:
     suggestion = text.strip()
     if not suggestion or not before_cursor:
@@ -149,12 +166,22 @@ def _postprocess_continuation_text(
     text: str,
     before_cursor: str | None,
     index: int,
-    avoid_texts: set[str] | None = None,
 ) -> str:
     stripped = _strip_repeated_prefix(text, before_cursor)
     result = _normalize_continuation_spacing(before_cursor, stripped or text)
     del index
-    return _filter_avoided_text(result, avoid_texts)
+    return result
+
+
+def _postprocess_reply_text(
+    text: str,
+    before_cursor: str | None,
+) -> str:
+    stripped = _strip_repeated_prefix(text, before_cursor)
+    candidate = stripped or text.strip()
+    if before_cursor:
+        return _normalize_continuation_spacing(before_cursor, candidate)
+    return candidate.strip()
 
 
 def postprocess_suggestion_texts(
@@ -169,11 +196,13 @@ def postprocess_suggestion_texts(
         if _normalize_similarity_text(text)
     }
     if mode != AutocompleteMode.CONTINUATION:
-        return [_filter_avoided_text(text, avoid) for text in texts]
-    return [
-        _postprocess_continuation_text(text, before_cursor, i, avoid)
+        processed = [_postprocess_reply_text(text, before_cursor) for text in texts]
+        return _apply_avoidance_with_fallback(processed, avoid)
+    processed = [
+        _postprocess_continuation_text(text, before_cursor, i)
         for i, text in enumerate(texts)
     ]
+    return _apply_avoidance_with_fallback(processed, avoid)
 
 
 def postprocess_suggestion_text(
@@ -183,14 +212,10 @@ def postprocess_suggestion_text(
     index: int,
     avoid_texts: list[str] | None = None,
 ) -> str:
-    avoid = {
-        _normalize_similarity_text(item)
-        for item in (avoid_texts or [])
-        if _normalize_similarity_text(item)
-    }
+    del avoid_texts
     if mode != AutocompleteMode.CONTINUATION:
-        return _filter_avoided_text(text, avoid)
-    return _postprocess_continuation_text(text, before_cursor, index, avoid)
+        return _postprocess_reply_text(text, before_cursor)
+    return _postprocess_continuation_text(text, before_cursor, index)
 
 
 @dataclass
@@ -583,6 +608,13 @@ class SuggestionEngine:
             )
 
         try:
+            buffered_avoided: list[Suggestion] = []
+            yielded_nonavoided = False
+            avoid = {
+                _normalize_similarity_text(item)
+                for item in (negative_patterns or [])
+                if _normalize_similarity_text(item)
+            } if temperature_boost > 0 else set()
             for suggestion in self._call_llm_stream(
                 system,
                 user_msg,
@@ -596,9 +628,16 @@ class SuggestionEngine:
                         mode=mode,
                         before_cursor=before_cursor if before_cursor is not None else current_input,
                         index=suggestion.index,
-                        avoid_texts=negative_patterns if temperature_boost > 0 else None,
                     )
-                if suggestion.text.strip():
+                if not suggestion.text.strip():
+                    continue
+                if avoid and not _filter_avoided_text(suggestion.text, avoid).strip():
+                    buffered_avoided.append(suggestion)
+                    continue
+                yielded_nonavoided = True
+                yield suggestion
+            if not yielded_nonavoided:
+                for suggestion in buffered_avoided:
                     yield suggestion
         except Exception as exc:
             if self._is_rate_limit_error(exc):

@@ -82,6 +82,9 @@ class TestSuggestionEngine:
         assert "You suggest messages the user might type next." in system
         assert "Mirror how the USER actually writes, not the assistant." in system
         assert "Generate exactly 3 distinct suggestions for what the user might type next." in user
+        assert "Stop at a natural endpoint." in system
+        assert "Vary cadence as well as content" in system
+        assert "single natural message turn" in user
 
     def test_debounce_blocks_rapid_requests(self, engine):
         engine._last_request_time = time.time()
@@ -202,6 +205,52 @@ class TestSuggestionEngine:
             "",
             "",
             "can you share the fixture names?",
+        ]
+
+    def test_postprocess_reply_mode_falls_back_when_all_texts_are_avoided(self):
+        result = postprocess_suggestion_texts(
+            ["sounds good", "let's do it"],
+            mode=AutocompleteMode.REPLY,
+            before_cursor="",
+            avoid_texts=["sounds good", "let's do it"],
+        )
+
+        assert result == [
+            "sounds good",
+            "let's do it",
+        ]
+
+    def test_postprocess_reply_mode_strips_repeated_draft_prefix(self):
+        result = postprocess_suggestion_texts(
+            ["can we make it type them out gradually instead of all at once? maybe start with smaller batches"],
+            mode=AutocompleteMode.REPLY,
+            before_cursor="can we make it type them out gradually instead of all at once? ",
+        )
+
+        assert result == [
+            "maybe start with smaller batches",
+        ]
+
+    def test_postprocess_reply_mode_normalizes_leading_space_against_draft(self):
+        result = postprocess_suggestion_texts(
+            [" what if we slow down spaces a bit"],
+            mode=AutocompleteMode.REPLY,
+            before_cursor="hello ",
+        )
+
+        assert result == [
+            "what if we slow down spaces a bit",
+        ]
+
+    def test_postprocess_reply_mode_adds_needed_space_after_draft(self):
+        result = postprocess_suggestion_texts(
+            ["what if we slow down spaces a bit"],
+            mode=AutocompleteMode.REPLY,
+            before_cursor="hello",
+        )
+
+        assert result == [
+            " what if we slow down spaces a bit",
         ]
 
     @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
