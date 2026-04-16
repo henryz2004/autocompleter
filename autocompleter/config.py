@@ -25,10 +25,10 @@ class Config:
 
     # LLM API
     llm_provider: str = "openai"  # "anthropic" or "openai" (cerebras/groq/etc. use "openai")
-    llm_base_url: str = "https://api.cerebras.ai/v1"  # empty = SDK default
+    llm_base_url: str = "https://api.groq.com/openai/v1"  # empty = SDK default
     anthropic_api_key: str = ""
     openai_api_key: str = ""
-    llm_model: str = "qwen-3-235b-a22b-instruct-2507"
+    llm_model: str = "qwen/qwen3-32b"
     max_tokens: int = 200
     temperature: float = 0.7
 
@@ -40,8 +40,8 @@ class Config:
 
     # Fallback provider (used when primary doesn't respond in time)
     fallback_provider: str = "openai"  # same convention as llm_provider
-    fallback_base_url: str = "https://api.groq.com/openai/v1"
-    fallback_model: str = "qwen/qwen3-32b"
+    fallback_base_url: str = "https://api.cerebras.ai/v1"
+    fallback_model: str = "qwen-3-235b-a22b-instruct-2507"
     fallback_api_key: str = "__UNSET__"
     escalation_timeout_ms: int = 400  # ms to wait before firing fallback
 
@@ -97,8 +97,28 @@ class Config:
         if not self.anthropic_api_key:
             self.anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         if not self.openai_api_key:
-            # Try provider-specific keys before falling back to OPENAI_API_KEY
-            for env_var in ("CEREBRAS_API_KEY", "GROQ_API_KEY", "OPENAI_API_KEY"):
+            provider_key_map = {
+                "https://api.groq.com/openai/v1": "GROQ_API_KEY",
+                "https://api.cerebras.ai/v1": "CEREBRAS_API_KEY",
+                "https://api.sambanova.ai/v1": "SAMBANOVA_API_KEY",
+                "https://api.together.xyz/v1": "TOGETHER_API_KEY",
+                "https://api.fireworks.ai/inference/v1": "FIREWORKS_API_KEY",
+                "https://api.deepinfra.com/v1/openai": "DEEPINFRA_API_KEY",
+            }
+            env_var_candidates = []
+            env_var = provider_key_map.get(self.llm_base_url)
+            if env_var:
+                env_var_candidates.append(env_var)
+            env_var_candidates.extend(
+                env_name
+                for env_name in (
+                    "OPENAI_API_KEY",
+                    "CEREBRAS_API_KEY",
+                    "GROQ_API_KEY",
+                )
+                if env_name not in env_var_candidates
+            )
+            for env_var in env_var_candidates:
                 key = os.environ.get(env_var, "")
                 if key:
                     self.openai_api_key = key
@@ -235,10 +255,10 @@ def load_config() -> Config:
     config = Config(
         llm_provider=os.environ.get("AUTOCOMPLETER_LLM_PROVIDER", "openai"),
         llm_base_url=os.environ.get(
-            "AUTOCOMPLETER_LLM_BASE_URL", "https://api.cerebras.ai/v1"
+            "AUTOCOMPLETER_LLM_BASE_URL", "https://api.groq.com/openai/v1"
         ),
         llm_model=os.environ.get(
-            "AUTOCOMPLETER_LLM_MODEL", "qwen-3-235b-a22b-instruct-2507"
+            "AUTOCOMPLETER_LLM_MODEL", "qwen/qwen3-32b"
         ),
         beta_mode=_env_bool("AUTOCOMPLETER_BETA_MODE"),
         proxy_enabled=_env_bool("AUTOCOMPLETER_PROXY_ENABLED"),
@@ -248,10 +268,10 @@ def load_config() -> Config:
             "AUTOCOMPLETER_FALLBACK_PROVIDER", "openai"
         ),
         fallback_base_url=os.environ.get(
-            "AUTOCOMPLETER_FALLBACK_BASE_URL", "https://api.groq.com/openai/v1"
+            "AUTOCOMPLETER_FALLBACK_BASE_URL", "https://api.cerebras.ai/v1"
         ),
         fallback_model=os.environ.get(
-            "AUTOCOMPLETER_FALLBACK_MODEL", "qwen/qwen3-32b"
+            "AUTOCOMPLETER_FALLBACK_MODEL", "qwen-3-235b-a22b-instruct-2507"
         ),
         escalation_timeout_ms=int(os.environ.get(
             "AUTOCOMPLETER_ESCALATION_TIMEOUT_MS", "400"

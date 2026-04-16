@@ -58,13 +58,14 @@ class TestBetaProxyConfig:
         monkeypatch.setenv("AUTOCOMPLETER_PROXY_ENABLED", "0")
         monkeypatch.setenv("AUTOCOMPLETER_LLM_PROVIDER", "anthropic")
         monkeypatch.setenv("AUTOCOMPLETER_LLM_BASE_URL", "https://api.example/v1")
+        monkeypatch.setenv("AUTOCOMPLETER_LLM_MODEL", "qwen/qwen3-32b")
 
         cfg = load_config()
 
         assert cfg.proxy_enabled is False
         assert cfg.effective_llm_provider == "anthropic"
         assert cfg.effective_llm_base_url == "https://api.example/v1"
-        assert cfg.effective_llm_model == "qwen-3-235b-a22b-instruct-2507"
+        assert cfg.effective_llm_model == "qwen/qwen3-32b"
         assert cfg.effective_request_route == "direct"
 
     def test_telemetry_opt_out_does_not_disable_proxy_mode(self, monkeypatch, tmp_path):
@@ -89,6 +90,17 @@ class TestBetaProxyConfig:
         cfg = load_config()
 
         assert cfg.effective_telemetry_api_key == "proxy-key"
+
+    def test_byo_mode_prefers_provider_specific_key_for_primary(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("AUTOCOMPLETER_PROXY_ENABLED", "0")
+        monkeypatch.setenv("AUTOCOMPLETER_LLM_BASE_URL", "https://api.groq.com/openai/v1")
+        monkeypatch.setenv("GROQ_API_KEY", "groq-key")
+        monkeypatch.setenv("CEREBRAS_API_KEY", "cerebras-key")
+
+        cfg = load_config()
+
+        assert cfg.effective_openai_api_key == "groq-key"
 
     def test_install_id_is_created_and_reused(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HOME", str(tmp_path))

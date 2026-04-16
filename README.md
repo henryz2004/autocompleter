@@ -93,8 +93,8 @@ Configuration is loaded from environment variables and an optional local `.env` 
 
 The current defaults are tuned for OpenAI-compatible endpoints:
 
-- Primary provider: Cerebras-compatible OpenAI endpoint
-- Fallback provider: Groq-compatible OpenAI endpoint
+- Primary provider: Groq-compatible OpenAI endpoint
+- Fallback provider: Cerebras-compatible OpenAI endpoint
 - Anthropic is also supported
 
 Start with `.env.example`, then set at least the variables needed for the provider you want to use.
