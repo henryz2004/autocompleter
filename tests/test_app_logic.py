@@ -353,6 +353,7 @@ class TestRegenerateDiversity:
 
         assert app._on_regenerate() is True
         assert captured["kwargs"]["temperature_boost"] == 0.5
+        assert captured["kwargs"]["extra_negative_patterns"] == ["old one", "old two"]
         assert captured["args"][10] == "snapshot"
         assert captured["snapshot_kwargs"]["trigger_type"] == "regenerate"
         assert captured["snapshot_kwargs"]["generation_id"] == 1
@@ -439,7 +440,7 @@ class TestTelemetryHooks:
 
         app.observer = SimpleNamespace(get_focused_element=lambda: focused)
         app.overlay = SimpleNamespace(accept_selection=lambda: app_module.Suggestion(text=" world", index=1))
-        app.injector = SimpleNamespace(inject=lambda text: True)
+        app.injector = SimpleNamespace(inject=lambda text, **kwargs: True)
         app.telemetry = SimpleNamespace(emit=lambda event, **payload: events.append((event, payload)))
         app.memory = SimpleNamespace(enabled=False)
         app.context_store = SimpleNamespace(record_feedback=lambda **kwargs: None)
@@ -482,7 +483,7 @@ class TestTelemetryHooks:
             is_visible=True,
             accept_selection=lambda: app_module.Suggestion(text="Hello world. Next sentence", index=0),
         )
-        app.injector = SimpleNamespace(inject=lambda text: injected.append(text) or True)
+        app.injector = SimpleNamespace(inject=lambda text, **kwargs: injected.append(text) or True)
         app.observer = SimpleNamespace(get_focused_element=lambda: focused)
         app.telemetry = SimpleNamespace(emit=lambda event, **payload: events.append((event, payload)))
         app._trigger_before_cursor = ""

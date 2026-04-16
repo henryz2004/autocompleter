@@ -190,6 +190,20 @@ class TestSuggestionEngine:
             " we should change it",
         ]
 
+    def test_postprocess_filters_avoided_texts_in_reply_mode(self):
+        result = postprocess_suggestion_texts(
+            ["sounds good", "let's do it", "can you share the fixture names?"],
+            mode=AutocompleteMode.REPLY,
+            before_cursor="",
+            avoid_texts=["sounds good", "let's do it"],
+        )
+
+        assert result == [
+            "",
+            "",
+            "can you share the fixture names?",
+        ]
+
     @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
     def test_continuation_postprocess_keeps_literal_completion(self, mock_call, engine):
         mock_call.return_value = [

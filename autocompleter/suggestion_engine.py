@@ -117,6 +117,15 @@ def _normalize_similarity_text(text: str) -> str:
     return " ".join(text.lower().split()).strip()
 
 
+def _filter_avoided_text(
+    text: str,
+    avoid_texts: set[str] | None = None,
+) -> str:
+    if avoid_texts and _normalize_similarity_text(text) in avoid_texts:
+        return ""
+    return text
+
+
 def _strip_repeated_prefix(text: str, before_cursor: str | None) -> str:
     suggestion = text.strip()
     if not suggestion or not before_cursor:
@@ -144,11 +153,8 @@ def _postprocess_continuation_text(
 ) -> str:
     stripped = _strip_repeated_prefix(text, before_cursor)
     result = _normalize_continuation_spacing(before_cursor, stripped or text)
-    # Drop suggestions that duplicate a previous one (e.g. on regenerate)
-    if avoid_texts and _normalize_similarity_text(result) in avoid_texts:
-        return ""
     del index
-    return result
+    return _filter_avoided_text(result, avoid_texts)
 
 
 def postprocess_suggestion_texts(
@@ -157,13 +163,13 @@ def postprocess_suggestion_texts(
     before_cursor: str | None,
     avoid_texts: list[str] | None = None,
 ) -> list[str]:
-    if mode != AutocompleteMode.CONTINUATION:
-        return texts
     avoid = {
         _normalize_similarity_text(text)
         for text in (avoid_texts or [])
         if _normalize_similarity_text(text)
     }
+    if mode != AutocompleteMode.CONTINUATION:
+        return [_filter_avoided_text(text, avoid) for text in texts]
     return [
         _postprocess_continuation_text(text, before_cursor, i, avoid)
         for i, text in enumerate(texts)
@@ -177,13 +183,13 @@ def postprocess_suggestion_text(
     index: int,
     avoid_texts: list[str] | None = None,
 ) -> str:
-    if mode != AutocompleteMode.CONTINUATION:
-        return text
     avoid = {
         _normalize_similarity_text(item)
         for item in (avoid_texts or [])
         if _normalize_similarity_text(item)
     }
+    if mode != AutocompleteMode.CONTINUATION:
+        return _filter_avoided_text(text, avoid)
     return _postprocess_continuation_text(text, before_cursor, index, avoid)
 
 

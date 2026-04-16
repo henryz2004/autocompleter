@@ -1950,6 +1950,9 @@ class Autocompleter:
             return False
 
         def _accept_partial():
+            focused = self.observer.get_focused_element()
+            app_name = focused.app_name if focused else "Unknown"
+            app_pid = focused.app_pid if focused else 0
             suggestion = self.overlay.accept_selection()
             if suggestion:
                 partial_text = self._extract_first_segment(suggestion.text)
@@ -1965,8 +1968,6 @@ class Autocompleter:
                 )
                 if success:
                     logger.info(f"Partial inject: {partial_text[:60]}")
-                    focused = self.observer.get_focused_element()
-                    app_name = focused.app_name if focused else "Unknown"
                     self._emit_telemetry(
                         "partial_accept_used",
                         suggestion_rank=suggestion.index + 1,
