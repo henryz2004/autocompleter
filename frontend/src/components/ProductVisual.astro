@@ -1,0 +1,292 @@
+---
+// Product visual: Claude popup with autocompleter overlay below the input box.
+---
+
+<section class="visual">
+  <div class="container">
+    <div class="scene">
+      <div class="popup">
+
+        <!-- Top toolbar -->
+        <div class="popup-toolbar">
+          <div class="traffic-lights" aria-hidden="true">
+            <span class="traffic-light traffic-close"></span>
+            <span class="traffic-light traffic-min"></span>
+            <span class="traffic-light traffic-max"></span>
+          </div>
+        </div>
+
+        <!-- Chat messages -->
+        <div class="messages">
+          <div class="human-bubble">
+            i'm not sure if i should keep working on this or pivot to something completely different
+          </div>
+
+          <div class="assistant-msg">
+            <p>what's making you consider stopping? is it the traction, or something about the work itself?</p>
+            <p>and when you say pivot, do you mean a new direction or starting over entirely?</p>
+          </div>
+        </div>
+
+        <!-- Input area -->
+        <div class="input-pane">
+          <div class="input-box">
+            <span class="input-placeholder">honestly i think the real problem is<span class="caret" aria-hidden="true"></span></span>
+          </div>
+          <div class="input-toolbar" aria-hidden="true">
+            <span>+</span>
+            <span class="input-model">Auto</span>
+            <span class="input-send">&#x2191;</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Autocompleter overlay — mirrors the real macOS HUD-style overlay -->
+      <div class="overlay" role="presentation">
+        <ol class="overlay-list">
+          <li class="overlay-item is-active">
+            <span class="rank">1</span>
+            <span class="overlay-text">that I keep building what I think they need, not what they ask for</span>
+          </li>
+          <li class="overlay-item">
+            <span class="rank">2</span>
+            <span class="overlay-text">that I'm not sure I actually want to run a company</span>
+          </li>
+          <li class="overlay-item">
+            <span class="rank">3</span>
+            <span class="overlay-text">that we haven't found one person who couldn't live without it</span>
+          </li>
+        </ol>
+        <div class="overlay-hint" aria-hidden="true">
+          <span class="overlay-hint-text">1-3/Tab accept&nbsp;&nbsp;&#x21E7;Tab partial&nbsp;&nbsp;&#x2303;R regen&nbsp;&nbsp;&#x2303;/ help&nbsp;&nbsp;Esc dismiss</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<style>
+  .visual {
+    padding: var(--space-6) 0 var(--space-10);
+  }
+
+  /* Desktop backdrop */
+  .scene {
+    background: linear-gradient(150deg, #b8c8e0 0%, #a0b4cc 50%, #8fa8c0 100%);
+    border-radius: var(--radius-lg);
+    padding: var(--space-8);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Claude popup panel */
+  .popup {
+    width: min(440px, 100%);
+    background: #e8edf5;
+    border: 1px solid rgba(30, 40, 60, 0.08);
+    border-radius: 18px;
+    box-shadow: 0 24px 60px rgba(40, 60, 100, 0.28);
+    overflow: hidden;
+  }
+
+  /* Toolbar */
+  .popup-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.85rem 0.95rem;
+  }
+
+  /* macOS traffic-light buttons */
+  .traffic-lights {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .traffic-light {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: block;
+    flex-shrink: 0;
+  }
+
+  .traffic-close { background: #ff5f57; }
+  .traffic-min   { background: #febc2e; }
+  .traffic-max   { background: #28c840; }
+
+  /* Messages */
+  .messages {
+    padding: 1.1rem 1rem 0.7rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+    min-height: 250px;
+  }
+
+  .human-bubble {
+    align-self: flex-end;
+    background: #1a1a1a;
+    color: #fff;
+    border-radius: 16px 16px 4px 16px;
+    padding: 0.65rem 0.9rem;
+    font-size: 0.875rem;
+    line-height: 1.45;
+    max-width: 84%;
+  }
+
+  .assistant-msg {
+    font-size: 0.875rem;
+    line-height: 1.55;
+    color: #1c1e28;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .assistant-msg p { margin: 0; }
+
+  /* Input pane */
+  .input-pane {
+    margin: 0.4rem 0.5rem 0.5rem;
+    padding: 0.85rem 0.85rem 0.6rem;
+    background: #ffffff;
+    border: 1px solid rgba(30, 40, 60, 0.12);
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(30, 40, 60, 0.05);
+  }
+
+  .input-box {
+    font-size: 0.9rem;
+    color: rgba(28, 30, 40, 0.75);
+    padding-bottom: 0.8rem;
+    min-height: 2.4rem;
+  }
+
+  .caret {
+    display: inline-block;
+    width: 1.5px;
+    height: 1.05em;
+    background: rgba(28, 30, 40, 0.92);
+    vertical-align: -0.12em;
+    margin-left: 1px;
+    border-radius: 0.5px;
+    animation: blink 1.06s steps(2, start) infinite;
+  }
+
+  @keyframes blink { to { opacity: 0; } }
+
+  .input-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    color: rgba(50, 60, 80, 0.38);
+    font-size: 0.8rem;
+  }
+
+  .input-model {
+    font-size: 0.75rem;
+  }
+
+  .input-send {
+    margin-left: auto;
+    background: rgba(50, 60, 80, 0.1);
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+  }
+
+  /* Autocompleter overlay — mirrors the real macOS HUD overlay
+     (see autocompleter/overlay.py: dark translucent backdrop, light gray
+     text, blue highlight on selected row, bottom keyboard-hint bar). */
+  .overlay {
+    width: min(440px, 100%);
+    align-self: center;
+    /* Centered horizontally, slightly offset to the right */
+    transform: translateX(6%);
+    background: rgba(13, 13, 20, 0.78);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    box-shadow:
+      0 8px 16px rgba(0, 0, 0, 0.25),
+      0 24px 50px rgba(0, 0, 0, 0.30);
+    overflow: hidden;
+    color: rgb(235, 235, 240);
+  }
+
+  .overlay-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .overlay-item {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.82rem;
+    color: rgb(235, 235, 240);
+    line-height: 1.35;
+    align-items: flex-start;
+  }
+
+  .overlay-item.is-active {
+    background: rgb(64, 115, 191);
+    color: rgb(250, 250, 252);
+  }
+
+  .overlay-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .rank {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: rgba(235, 235, 240, 0.55);
+    flex-shrink: 0;
+    width: 14px;
+    padding-top: 0.05rem;
+  }
+
+  .overlay-item.is-active .rank {
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  .overlay-hint {
+    margin-top: 4px;
+    padding: 0.25rem 0.75rem 0.35rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.22);
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.5);
+    letter-spacing: 0.01em;
+  }
+
+  .overlay-hint-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+  }
+
+  @media (max-width: 600px) {
+    .scene { padding: var(--space-4); }
+    .popup { width: 100%; align-self: stretch; }
+    .overlay {
+      width: 100%;
+      align-self: stretch;
+      transform: none;
+    }
+  }
+</style>

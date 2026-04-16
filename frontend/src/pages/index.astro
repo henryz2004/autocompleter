@@ -1,0 +1,25 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Hero from "../components/Hero.astro";
+import ProductVisual from "../components/ProductVisual.astro";
+import Proof from "../components/Proof.astro";
+import HowItWorks from "../components/HowItWorks.astro";
+import BetaNotice from "../components/BetaNotice.astro";
+import WaitlistForm from "../components/WaitlistForm.astro";
+import Footer from "../components/Footer.astro";
+---
+
+<BaseLayout
+  title="Autocompleter — A real copilot, everywhere you type"
+  description="macOS system-wide contextual autocomplete. Reads the window you're in. Completes the next thing you were about to write."
+>
+  <main>
+    <Hero />
+    <ProductVisual />
+    <Proof />
+    <HowItWorks />
+    <BetaNotice />
+    <WaitlistForm />
+    <Footer />
+  </main>
+</BaseLayout>

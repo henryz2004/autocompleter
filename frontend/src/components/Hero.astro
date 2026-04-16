@@ -1,0 +1,89 @@
+---
+// Short, blunt hero. One headline, one sentence, one CTA.
+---
+
+<section class="hero">
+  <div class="container hero-inner">
+    <p class="eyebrow reveal">Autocompleter · Limited beta</p>
+    <h1 class="display display-xl reveal reveal-delay-1">
+      Autocomplete<br />that knows<br />what app you're in.
+    </h1>
+    <p class="hero-lede body-muted reveal reveal-delay-2">
+      A floating overlay that reads what's on screen and completes the next
+      thing you were about to write, in your terminal, chat, editor, anywhere.
+    </p>
+    <div class="hero-ctas reveal reveal-delay-3">
+      <a href="#waitlist" class="btn btn-primary">Apply for access</a>
+    </div>
+  </div>
+</section>
+
+<style>
+  .hero {
+    padding: var(--space-16) 0 var(--space-10);
+  }
+
+  .hero-inner {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    max-width: 880px;
+  }
+
+  .hero-lede {
+    font-size: clamp(1.0625rem, 1.6vw, 1.25rem);
+    max-width: 52ch;
+    line-height: 1.45;
+  }
+
+  .hero-ctas {
+    display: flex;
+    gap: var(--space-3);
+    margin-top: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.85rem 1.4rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+    letter-spacing: -0.005em;
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition:
+      background 140ms ease,
+      border-color 140ms ease,
+      transform 140ms ease;
+  }
+
+  .btn-primary {
+    background: var(--color-text);
+    color: var(--color-accent-contrast);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-1px);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--color-text);
+    border-color: var(--color-border);
+  }
+
+  .btn-ghost:hover {
+    border-color: var(--color-text);
+  }
+
+  a.btn {
+    border-bottom: 1px solid transparent;
+  }
+
+  a.btn-ghost:hover {
+    border-bottom-color: var(--color-text);
+  }
+</style>
