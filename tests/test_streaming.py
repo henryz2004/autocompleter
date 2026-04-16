@@ -477,12 +477,29 @@ class TestCallLlm:
 
         mock_client.create.assert_called_once()
         call_kwargs = mock_client.create.call_args[1]
+        assert call_kwargs["model"] == engine.config.effective_llm_model
         assert call_kwargs["response_model"] is SuggestionList
         assert call_kwargs["temperature"] == 0.7
         assert call_kwargs["max_tokens"] == 200
         msgs = call_kwargs["messages"]
         assert msgs[0] == {"role": "system", "content": "system prompt"}
         assert msgs[1] == {"role": "user", "content": "user message"}
+
+    def test_passes_empty_model_in_proxy_mode(self):
+        """Proxy mode still passes an explicit empty model for backend defaulting."""
+        proxy_engine = SuggestionEngine(
+            Config(
+                proxy_enabled=True,
+                proxy_base_url="https://example.com/v1",
+                proxy_api_key="proxy-key",
+            )
+        )
+        mock_client = self._mock_engine_with_list(proxy_engine, [])
+
+        proxy_engine._call_llm("system prompt", "user message", temperature=0.7, max_tokens=200)
+
+        call_kwargs = mock_client.create.call_args[1]
+        assert call_kwargs["model"] == ""
 
 
 # ---------------------------------------------------------------------------

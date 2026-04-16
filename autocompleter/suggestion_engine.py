@@ -472,6 +472,7 @@ class SuggestionEngine:
         """Call the LLM via Instructor and return parsed suggestions."""
         client = self._get_client()
         create_kwargs: dict = dict(
+            model=self.config.effective_llm_model,
             response_model=SuggestionList,
             max_retries=2,
             messages=[
