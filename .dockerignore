@@ -1,0 +1,16 @@
+.git
+.gitignore
+.pytest_cache
+__pycache__/
+.coverage
+.env
+.env.*
+.venv/
+venv/
+dumps/
+tests/
+autocompleter/
+docs/
+scripts/
+supabase/.temp/
+*.log

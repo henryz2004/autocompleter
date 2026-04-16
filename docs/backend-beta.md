@@ -30,6 +30,33 @@ Or with Uvicorn directly:
 uvicorn backend.app:app --host 127.0.0.1 --port 8000
 ```
 
+## Deploy To Render
+
+This repo now includes Render deployment scaffolding for the backend:
+
+- [render.yaml](../render.yaml)
+- [backend/Dockerfile](../backend/Dockerfile)
+- [requirements-backend.txt](../requirements-backend.txt)
+
+The deployment uses a backend-only Docker image on Render instead of the root `requirements.txt`. This matters because the desktop app depends on macOS-only `pyobjc` packages, which are not valid on Render's Linux runtime.
+
+Recommended Render flow:
+
+1. Push this repo to GitHub.
+2. In Render, create a new `Blueprint` and point it at this repository.
+3. Render will detect [render.yaml](../render.yaml) and create a Docker-based web service from [backend/Dockerfile](../backend/Dockerfile).
+4. In the Blueprint setup flow, provide values for the required secret environment variables.
+5. After the first deploy, open `https://<your-service>.onrender.com/health` and confirm it returns `{"ok": true, ...}`.
+
+Render-specific notes:
+
+- Render Blueprints use `render.yaml` in the repo root by default.
+- The configured `healthCheckPath` is `/health`, which Render recommends for zero-downtime deploys.
+- Render injects a `PORT` variable for web services. The backend Docker command already binds Uvicorn to `${PORT}`.
+- The service is intended to be deployed as a single web backend. Do not expose the admin secret to clients.
+
+If you still prefer Railway later, the repo also contains [railway.json](../railway.json), but Render is now the recommended hosted path for the friend beta.
+
 If you prefer repo-local helper commands, use:
 
 ```bash
@@ -144,6 +171,13 @@ AUTOCOMPLETER_PROXY_API_KEY=<install_key>
 AUTOCOMPLETER_TELEMETRY_ENABLED=1
 AUTOCOMPLETER_TELEMETRY_URL=http://127.0.0.1:8000/v1/telemetry/events
 AUTOCOMPLETER_INSTALL_ID=<install_id>
+```
+
+For Render, replace `http://127.0.0.1:8000` with your public Render domain:
+
+```bash
+AUTOCOMPLETER_PROXY_BASE_URL=https://<your-service>.onrender.com/v1
+AUTOCOMPLETER_TELEMETRY_URL=https://<your-service>.onrender.com/v1/telemetry/events
 ```
 
 You can mint `install_id` and `install_key` locally with:

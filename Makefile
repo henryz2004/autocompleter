@@ -1,6 +1,7 @@
 SHELL := /bin/sh
 
 SUPABASE ?= supabase
+UV ?= uv
 ifneq ("$(wildcard ./venv/bin/python)","")
 PYTHON := ./venv/bin/python
 else ifneq ("$(wildcard ./.venv/bin/python)","")
@@ -24,6 +25,8 @@ endif
 .PHONY: help
 help:
 	@printf '%s\n' \
+		'make friend-beta-bootstrap   Use uv to install Python 3.11, create ./venv, and install the app' \
+		'make friend-beta-run         Bootstrap the repo-local beta app and launch it' \
 		'make supabase-link-dev        Link the repo to the dev Supabase project' \
 		'make supabase-db-push-dev     Push repo migrations to the dev Supabase project' \
 		'make supabase-link-prod       Link the repo to the prod Supabase project' \
@@ -34,6 +37,34 @@ help:
 		'make backend-health-prod      Check the local backend /health endpoint using prod env values' \
 		'make backend-mint-install-dev Mint a beta install key against the local backend' \
 		'make backend-mint-install-prod Mint a beta install key against the local backend using prod env values'
+
+.PHONY: check-uv
+check-uv:
+	@command -v $(UV) >/dev/null 2>&1 || { \
+		echo "uv is required for friend-beta bootstrap."; \
+		echo "Install it with:"; \
+		echo "  curl -LsSf https://astral.sh/uv/install.sh | sh"; \
+		exit 1; \
+	}
+
+.PHONY: friend-beta-bootstrap
+friend-beta-bootstrap: check-uv
+	@$(UV) python install 3.11
+	@$(UV) venv --python 3.11 --seed --allow-existing venv
+	@./venv/bin/python -c "import autocompleter" >/dev/null 2>&1 || { \
+		echo "Installing autocompleter into ./venv"; \
+		./venv/bin/python -m pip install -r requirements.txt; \
+		./venv/bin/python -m pip install -e .; \
+	}
+	@if [ ! -f .env ]; then \
+		cp .env.example .env; \
+		echo "Created ./.env from ./.env.example"; \
+		echo "Fill in your beta proxy URL, install id, and install key, then rerun make friend-beta-run."; \
+	fi
+
+.PHONY: friend-beta-run
+friend-beta-run: friend-beta-bootstrap
+	@./venv/bin/python scripts/run_friend_beta.py
 
 .PHONY: check-supabase-cli
 check-supabase-cli:

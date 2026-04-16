@@ -2,16 +2,41 @@
 
 This beta is still distributed as a repository plus manual installation steps. It is not yet a packaged macOS app.
 
+If you are using the shared beta backend hosted by the Autocompleter team, you do not need to run `uvicorn` locally. The backend is already running for you. Your local setup only needs to launch the desktop app.
+
 ## Install
+
+First install `uv`:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Then restart your terminal, or run:
+
+```bash
+source "$HOME/.local/bin/env"
+```
 
 ```bash
 git clone <your-repo-url>
 cd autocompleter
-python3.11 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-pip install -e '.[dev]'
-cp .env.example .env
+make friend-beta-run
+```
+
+On first run, the launcher will:
+
+- use `uv` to install Python 3.11 if needed
+- create `./venv`
+- install the Python dependencies
+- create `./.env` from `./.env.example` if needed
+- stop with clear instructions if your beta config is incomplete
+
+If you prefer not to use `make`, this works too:
+
+```bash
+make friend-beta-bootstrap
+./venv/bin/python scripts/run_friend_beta.py
 ```
 
 ## Required Beta Config
@@ -28,14 +53,28 @@ AUTOCOMPLETER_TELEMETRY_URL=<proxy base url>/telemetry/events
 AUTOCOMPLETER_INSTALL_ID=<install id>
 ```
 
-Then run:
+Then rerun:
 
 ```bash
-source venv/bin/activate
-python -m autocompleter
+make friend-beta-run
 ```
 
-Grant Accessibility permission to the app you launch it from, usually Terminal or iTerm.
+## Accessibility Permission
+
+Autocompleter needs macOS Accessibility permission to read focused text fields and inject accepted suggestions.
+
+Grant access to the app you launch it from, usually:
+
+- Terminal
+- iTerm
+- Warp
+- Visual Studio Code terminal
+
+In macOS, go to `System Settings > Privacy & Security > Accessibility`, enable your terminal app, then relaunch that terminal and run:
+
+```bash
+make friend-beta-run
+```
 
 ## Telemetry Opt-Out
 

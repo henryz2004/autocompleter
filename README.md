@@ -43,9 +43,12 @@ Then edit `.env` with your provider settings and API key.
 
 For the current friend beta, the intended path is:
 
-1. Copy `.env.example` to `.env`
-2. Paste in the beta proxy URL, install id, and install key
-3. Run `python -m autocompleter`
+1. Install `uv` with `curl -LsSf https://astral.sh/uv/install.sh | sh`
+2. Restart your terminal or run `source "$HOME/.local/bin/env"`
+3. Run `make friend-beta-run`
+4. Fill in `.env` with the beta proxy URL, install id, and install key if the launcher created it
+5. Grant Accessibility access to your terminal app in macOS
+6. Run `make friend-beta-run` again
 
 Telemetry is enabled by default for the beta, but you can opt out by setting:
 

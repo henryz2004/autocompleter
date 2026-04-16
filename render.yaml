@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: autocompleter-beta-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: AUTOCOMPLETER_BACKEND_ADMIN_SECRET
+        sync: false
+      - key: AUTOCOMPLETER_SUPABASE_URL
+        sync: false
+      - key: AUTOCOMPLETER_SUPABASE_SECRET_KEY
+        sync: false
+      - key: AUTOCOMPLETER_PROXY_PRIMARY_BASE_URL
+        sync: false
+      - key: AUTOCOMPLETER_PROXY_PRIMARY_API_KEY
+        sync: false
+      - key: AUTOCOMPLETER_PROXY_PRIMARY_DEFAULT_MODEL
+        sync: false
+      - key: AUTOCOMPLETER_PROXY_FALLBACK_BASE_URL
+        sync: false
+      - key: AUTOCOMPLETER_PROXY_FALLBACK_API_KEY
+        sync: false
+      - key: AUTOCOMPLETER_PROXY_FALLBACK_DEFAULT_MODEL
+        sync: false
+      - key: AUTOCOMPLETER_BACKEND_REQUEST_TIMEOUT_S
+        value: "15"
+      - key: AUTOCOMPLETER_BACKEND_STREAM_TIMEOUT_S
+        value: "60"
+      - key: AUTOCOMPLETER_BACKEND_ALLOW_UPSTREAM_OVERRIDE_HEADERS
+        value: "0"

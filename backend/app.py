@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -131,7 +132,7 @@ app = create_app()
 def main() -> None:
     uvicorn.run(
         "backend.app:app",
-        host="127.0.0.1",
-        port=8000,
+        host=os.environ.get("BACKEND_HOST", "127.0.0.1"),
+        port=int(os.environ.get("PORT") or os.environ.get("BACKEND_PORT") or "8000"),
         reload=False,
     )
