@@ -1,9 +1,9 @@
 """App-specific conversation extractors for chat-like UIs.
 
 Provides a plugin-like system where known apps (Gemini, ChatGPT, Claude Desktop,
-Slack, iMessage) have dedicated extractors for pulling structured conversation
-turns from their Accessibility API trees. Falls back to a generic heuristic
-for unknown apps.
+Codex, Slack, iMessage) have dedicated extractors for pulling structured
+conversation turns from their Accessibility API trees. Falls back to a generic
+heuristic for unknown apps.
 
 Also defines ``ConversationTurn`` (the shared data class) and the
 ``_collect_child_text`` helper so that both this module and
@@ -378,30 +378,37 @@ class GeminiExtractor(ConversationExtractor):
         if not children:
             return []
 
-        # Find the child group with the most sub-children (the message list).
-        # Unwrap single-child wrappers: if a group has exactly one child that
-        # is also a group, use the inner group's child count instead.
+        # First try heading-based extraction across the whole container. Older
+        # Gemini builds often bury the actual transcript several wrapper levels
+        # below the "Conversation with Gemini" parent, so choosing one direct
+        # child group can miss the real turn pairs entirely.
+        turns: list[ConversationTurn] = []
+        container_headings: list[tuple] = []
+        self._find_speaker_headings(container, container_headings, max_depth=14)
+        if container_headings:
+            for heading, title, parent, sibling_idx in container_headings:
+                if len(turns) >= max_turns:
+                    break
+                if title.startswith("You said"):
+                    text = self._extract_user_text_from_heading(heading, title)
+                    if text and not _is_ai_disclaimer(text):
+                        turns.append(ConversationTurn(speaker="User", text=text))
+                elif title.startswith("Gemini said"):
+                    text = self._extract_response_after_heading(
+                        heading, parent, sibling_idx
+                    )
+                    if text and not _is_ai_disclaimer(text):
+                        turns.append(ConversationTurn(speaker="Gemini", text=text))
+        best_turns = turns[-max_turns:] if turns else []
+
+        # Fall back to choosing the likeliest direct transcript branch.
         best_group = None
         best_count = 0
         for child in children[:50]:
-            role = ax_get_attribute(child, "AXRole") or ""
-            if role in {"AXGroup", "AXList"}:
-                grandchildren = ax_get_children(child)
-                count = len(grandchildren) if grandchildren else 0
-                candidate = child
-                # Unwrap single-child wrapper
-                if count == 1 and grandchildren:
-                    inner = grandchildren[0]
-                    inner_role = ax_get_attribute(inner, "AXRole") or ""
-                    if inner_role in {"AXGroup", "AXList"}:
-                        inner_children = ax_get_children(inner)
-                        inner_count = len(inner_children) if inner_children else 0
-                        if inner_count > count:
-                            candidate = inner
-                            count = inner_count
-                if count > best_count:
-                    best_count = count
-                    best_group = candidate
+            candidate, count = self._unwrap_dense_group(child)
+            if count > best_count:
+                best_count = count
+                best_group = candidate
 
         if best_group is None or best_count == 0:
             return []
@@ -410,8 +417,8 @@ class GeminiExtractor(ConversationExtractor):
         if not msg_children:
             return []
 
-        # Heading-based extraction: find "You said" / "Gemini said" headings
-        turns: list[ConversationTurn] = []
+        # Heading-based extraction inside the selected branch.
+        turns = []
         for msg_child in msg_children:
             if len(turns) >= max_turns:
                 break
@@ -430,7 +437,36 @@ class GeminiExtractor(ConversationExtractor):
                 speaker = "User" if i % 2 == 0 else "Gemini"
                 turns.append(ConversationTurn(speaker=speaker, text=text))
 
-        return turns
+        if len(turns) > len(best_turns):
+            return turns[-max_turns:]
+        return best_turns
+
+    def _unwrap_dense_group(self, element) -> tuple[object | None, int]:
+        """Return the deepest wrapper chain node with the richest child set."""
+        role = ax_get_attribute(element, "AXRole") or ""
+        if role not in {"AXGroup", "AXList"}:
+            return None, 0
+
+        best_candidate = element
+        children = ax_get_children(element) or []
+        best_count = len(children)
+
+        current = element
+        for _ in range(6):
+            current_children = ax_get_children(current) or []
+            if len(current_children) != 1:
+                break
+            inner = current_children[0]
+            inner_role = ax_get_attribute(inner, "AXRole") or ""
+            if inner_role not in {"AXGroup", "AXList"}:
+                break
+            inner_children = ax_get_children(inner) or []
+            if len(inner_children) >= best_count:
+                best_candidate = inner
+                best_count = len(inner_children)
+            current = inner
+
+        return best_candidate, best_count
 
     def _extract_turns_from_pair(
         self, element, turns: list[ConversationTurn], max_turns: int,
@@ -1056,6 +1092,223 @@ class ClaudeDesktopExtractor(ConversationExtractor):
 
         # No thinking section detected — collect everything
         return _collect_child_text(group, max_depth=6, max_chars=1500)
+
+
+class CodexExtractor(ConversationExtractor):
+    """Extractor for the Codex desktop app.
+
+    Codex exposes the visible transcript as a flat sequence of direct children
+    inside a single large ``AXGroup``. User prompts appear as text-rich groups
+    adjacent to a plain ``Copy`` button, while assistant responses are anchored
+    by action buttons such as ``Copy message`` and ``Fork from this message``.
+
+    The assistant response body then continues in the following text-rich
+    ``AXGroup``/``AXList`` siblings until the next user or assistant action
+    boundary.
+    """
+
+    app_names: tuple[str, ...] = ("Codex",)
+
+    _MAX_VISITS = 1600
+    _MAX_DEPTH = 22
+
+    _ASSISTANT_BUTTON_DESCRIPTIONS = frozenset({
+        "copy message",
+        "fork from this message",
+        "edit message",
+    })
+    _USER_BUTTON_DESCRIPTIONS = frozenset({"copy"})
+    _META_GROUP_PATTERNS = (
+        re.compile(r"^worked for\b", re.IGNORECASE),
+        re.compile(r"^\d+\s+previous messages$", re.IGNORECASE),
+    )
+    _TIMESTAMP_RE = re.compile(r"^\d{1,2}:\d{2}\s[AP]M$")
+
+    def extract(
+        self, window_element, max_turns: int = 15
+    ) -> Optional[list[ConversationTurn]]:
+        try:
+            container = self._find_transcript_container(window_element)
+            if container is not None:
+                turns = self._extract_turns(container, max_turns)
+                if turns:
+                    return turns
+        except Exception:
+            logger.debug("Codex conversation extraction failed", exc_info=True)
+
+        return ActionDelimitedExtractor().extract(window_element, max_turns)
+
+    def _find_transcript_container(self, element):
+        """Return the best Codex transcript container candidate."""
+        best: tuple[int, object] | None = None
+
+        def visit(node, depth: int, visits: list[int]) -> None:
+            nonlocal best
+            visits[0] += 1
+            if visits[0] > self._MAX_VISITS or depth > self._MAX_DEPTH:
+                return
+
+            score = self._score_container(node)
+            if score > 0 and (best is None or score > best[0]):
+                best = (score, node)
+
+            for child in (ax_get_children(node) or [])[:60]:
+                visit(child, depth + 1, visits)
+
+        visit(element, 0, [0])
+        return best[1] if best is not None else None
+
+    def _score_container(self, element) -> int:
+        children = ax_get_children(element) or []
+        if len(children) < 6:
+            return 0
+
+        assistant_buttons = 0
+        user_buttons = 0
+        timestamps = 0
+        text_blocks = 0
+
+        for child in children[:120]:
+            if self._is_assistant_button(child):
+                assistant_buttons += 1
+            elif self._is_user_button(child):
+                user_buttons += 1
+            elif self._is_timestamp_node(child):
+                timestamps += 1
+            elif self._is_text_block(child):
+                text_blocks += 1
+
+        if assistant_buttons < 2 or text_blocks < 3:
+            return 0
+
+        return assistant_buttons * 20 + user_buttons * 8 + timestamps + text_blocks
+
+    def _extract_turns(
+        self, container, max_turns: int
+    ) -> Optional[list[ConversationTurn]]:
+        children = ax_get_children(container) or []
+        turns: list[ConversationTurn] = []
+        pending_user_groups: list = []
+        i = 0
+
+        while i < len(children):
+            child = children[i]
+
+            if self._is_assistant_button(child):
+                user_text = self._extract_text_from_blocks(pending_user_groups)
+                if user_text:
+                    turns.append(ConversationTurn(speaker="User", text=user_text))
+                pending_user_groups = []
+
+                timestamp = self._nearest_timestamp_before(children, i)
+
+                # Skip assistant action controls and metadata immediately after
+                while i < len(children) and self._is_assistant_boundary_or_meta(children[i]):
+                    i += 1
+
+                assistant_blocks: list = []
+                while i < len(children):
+                    next_child = children[i]
+                    if self._is_user_button(next_child) or self._is_assistant_button(next_child):
+                        break
+                    if self._is_timestamp_node(next_child) and assistant_blocks:
+                        break
+                    if self._is_meta_group(next_child):
+                        i += 1
+                        continue
+                    if self._is_text_block(next_child):
+                        assistant_blocks.append(next_child)
+                    i += 1
+
+                assistant_text = self._extract_text_from_blocks(assistant_blocks)
+                if assistant_text:
+                    turns.append(
+                        ConversationTurn(
+                            speaker="Assistant",
+                            text=assistant_text,
+                            timestamp=timestamp,
+                        )
+                    )
+                continue
+
+            if self._is_user_button(child) or self._is_timestamp_node(child) or self._is_meta_group(child):
+                i += 1
+                continue
+
+            if self._is_text_block(child):
+                pending_user_groups.append(child)
+
+            i += 1
+
+        return turns[-max_turns:] if turns else None
+
+    def _nearest_timestamp_before(self, children: list, index: int) -> str:
+        for lookback in range(index - 1, max(-1, index - 4), -1):
+            candidate = ax_get_attribute(children[lookback], "AXValue") or ""
+            if isinstance(candidate, str) and self._TIMESTAMP_RE.match(candidate.strip()):
+                return candidate.strip()
+        return ""
+
+    def _is_assistant_boundary_or_meta(self, element) -> bool:
+        return self._is_assistant_button(element) or self._is_meta_group(element)
+
+    def _is_assistant_button(self, element) -> bool:
+        if (ax_get_attribute(element, "AXRole") or "") != "AXButton":
+            return False
+        for attr in ("AXDescription", "AXTitle", "AXValue"):
+            value = ax_get_attribute(element, attr) or ""
+            if isinstance(value, str) and value.strip().lower() in self._ASSISTANT_BUTTON_DESCRIPTIONS:
+                return True
+        return False
+
+    def _is_user_button(self, element) -> bool:
+        if (ax_get_attribute(element, "AXRole") or "") != "AXButton":
+            return False
+        desc = ax_get_attribute(element, "AXDescription") or ""
+        if not isinstance(desc, str):
+            return False
+        return desc.strip().lower() in self._USER_BUTTON_DESCRIPTIONS
+
+    def _is_timestamp_node(self, element) -> bool:
+        if (ax_get_attribute(element, "AXRole") or "") != "AXStaticText":
+            return False
+        value = ax_get_attribute(element, "AXValue") or ""
+        return isinstance(value, str) and bool(self._TIMESTAMP_RE.match(value.strip()))
+
+    def _is_meta_group(self, element) -> bool:
+        if (ax_get_attribute(element, "AXRole") or "") != "AXGroup":
+            return False
+        text = _collect_child_text(element, max_depth=2, max_chars=120).strip()
+        if not text:
+            for attr in ("AXTitle", "AXValue", "AXDescription"):
+                value = ax_get_attribute(element, attr) or ""
+                if isinstance(value, str) and value.strip():
+                    text = value.strip()
+                    break
+        return any(pattern.match(text) for pattern in self._META_GROUP_PATTERNS)
+
+    def _is_text_block(self, element) -> bool:
+        role = ax_get_attribute(element, "AXRole") or ""
+        if role not in {"AXGroup", "AXList"}:
+            return False
+        if self._is_meta_group(element):
+            return False
+        text = _collect_child_text(element, max_depth=6, max_chars=2000).strip()
+        if len(text) < 2 or _is_ai_disclaimer(text):
+            return False
+        return True
+
+    def _extract_text_from_blocks(self, blocks: list) -> str:
+        parts: list[str] = []
+        for block in blocks:
+            text = _collect_child_text(block, max_depth=6, max_chars=3000).strip()
+            if text and not self._is_meta_text(text):
+                if not parts or parts[-1] != text:
+                    parts.append(text)
+        return "\n".join(parts)
+
+    def _is_meta_text(self, text: str) -> bool:
+        return any(pattern.match(text) for pattern in self._META_GROUP_PATTERNS)
 
 
 class ActionDelimitedExtractor(ConversationExtractor):
@@ -2116,6 +2369,7 @@ _ALL_EXTRACTORS: list[ConversationExtractor] = [
     SlackExtractor(),
     ChatGPTExtractor(),
     ClaudeDesktopExtractor(),
+    CodexExtractor(),
     IMessageExtractor(),
     WhatsAppExtractor(),
     DiscordExtractor(),

@@ -1,0 +1,42 @@
+{
+  "extractor": "CodexExtractor",
+  "app": "Codex",
+  "turns": [
+    {
+      "speaker": "User",
+      "text": "current flow of context extractors"
+    },
+    {
+      "speaker": "Assistant",
+      "timestamp": "12:25 AM",
+      "text": "The current flow is basically:"
+    },
+    {
+      "speaker": "User",
+      "text": "fallback extractor work"
+    },
+    {
+      "speaker": "Assistant",
+      "timestamp": "12:27 AM",
+      "text": "The fallback path is actually two layers"
+    },
+    {
+      "speaker": "User",
+      "text": "rename this branch custom extractor flows"
+    },
+    {
+      "speaker": "Assistant",
+      "timestamp": "12:30 AM",
+      "text": "codex/custom-extractor-flows"
+    },
+    {
+      "speaker": "User",
+      "text": "capturing AX fixtures or dumps"
+    },
+    {
+      "speaker": "Assistant",
+      "timestamp": "12:33 AM",
+      "text": "fixture workflow"
+    }
+  ]
+}

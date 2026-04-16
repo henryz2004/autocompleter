@@ -166,12 +166,18 @@ def on_trigger(out_path: str | None, out_dir: str | None, max_depth: int, notes:
     source_url = _get_source_url(app_el, name, window)
 
     envelope = {
+        "artifactType": "ax_tree_fixture_v1",
+        "schemaVersion": 1,
+        "captureTool": "dump_ax_tree_json.py",
         "app": name,
         "windowTitle": window_title,
         "sourceUrl": source_url,
         "capturedAt": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "macosVersion": platform.mac_ver()[0],
         "notes": notes,
+        "captureSettings": {
+            "maxDepth": max_depth,
+        },
         "focusedElement": focused_summary,
         "tree": tree,
     }

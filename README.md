@@ -149,8 +149,14 @@ Debug helpers:
 
 ```bash
 python dump_ax_tree.py
+python dump_ax_tree_json.py -d tests/fixtures/ax_trees --notes "what was on screen"
 python dump_pipeline.py
+python analyze_fixture.py tests/fixtures/ax_trees/claude-current-chat.json
+python replay_fixture.py tests/fixtures/ax_trees/claude-current-chat.json
+./venv/bin/python -m pytest tests/test_fixture_workflow.py -v
 ```
+
+For the full fixture capture, analysis, and benchmark workflow, see [docs/fixture-workflow.md](docs/fixture-workflow.md).
 
 ## Privacy And Safety Notes
 
@@ -165,6 +171,7 @@ See also:
 
 - [PRIVACY.md](PRIVACY.md)
 - [docs/data-flows.md](docs/data-flows.md)
+- [docs/fixture-workflow.md](docs/fixture-workflow.md)
 - [docs/friend-beta.md](docs/friend-beta.md)
 - [docs/backend-beta.md](docs/backend-beta.md)
 - [docs/supabase-environments.md](docs/supabase-environments.md)

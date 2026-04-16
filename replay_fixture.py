@@ -31,188 +31,18 @@ import os as _os
 import sys
 import tempfile
 import time
-from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, ".")
 
-
-# ---------------------------------------------------------------------------
-# DictNode: make serialized AX tree dicts usable with ax_get_attribute
-# ---------------------------------------------------------------------------
-
-# Map from AX attribute names to fixture JSON keys.
-_AX_ATTR_MAP: dict[str, str | None] = {
-    "AXRole": "role",
-    "AXSubrole": "subrole",
-    "AXRoleDescription": "roleDescription",
-    "AXValue": "value",
-    "AXTitle": "title",
-    "AXDescription": "description",
-    "AXPlaceholderValue": "placeholderValue",
-    "AXNumberOfCharacters": "numberOfCharacters",
-    "AXChildren": "children",
-    # Not available in fixtures:
-    "AXSelectedTextRange": None,
-    "AXDocument": None,
-    "AXPosition": None,
-    "AXSize": None,
-    "AXFocusedWindow": None,
-    "AXFocusedUIElement": None,
-    "AXWindows": None,
-}
-
-
-class DictNode:
-    """Wraps a fixture dict so it can be passed to code that calls ax_get_attribute."""
-
-    __slots__ = ("_data",)
-
-    def __init__(self, data: dict) -> None:
-        self._data = data
-
-    def __repr__(self) -> str:
-        role = self._data.get("role", "?")
-        val = self._data.get("value")
-        val_str = f' val="{val[:40]}..."' if isinstance(val, str) and len(val) > 40 else (f' val="{val}"' if val else "")
-        return f"DictNode({role}{val_str})"
-
-
-def _ax_get_attribute_dict(element: Any, attribute: str) -> Any:
-    """Drop-in replacement for ax_get_attribute that handles DictNode/dict."""
-    if not isinstance(element, (dict, DictNode)):
-        # Not a dict — return None (we're in replay mode, no live AX)
-        return None
-
-    data = element._data if isinstance(element, DictNode) else element
-    key = _AX_ATTR_MAP.get(attribute)
-
-    if key is None:
-        return None
-
-    val = data.get(key)
-
-    # Wrap children as DictNode so downstream code works
-    if attribute == "AXChildren" and val is not None:
-        return [DictNode(c) if isinstance(c, dict) else c for c in val]
-
-    return val
-
-
-@contextmanager
-def patch_ax_for_dicts():
-    """Context manager that monkey-patches ax_get_attribute everywhere.
-
-    Patches the function in ax_utils and in every module that imported it,
-    so all extractors / observers transparently work with DictNode trees.
-    """
-    import autocompleter.ax_utils as _ax_mod
-    import autocompleter.conversation_extractors as _ext_mod
-    import autocompleter.input_observer as _obs_mod
-
-    originals = {
-        "ax_utils": _ax_mod.ax_get_attribute,
-        "extractors": _ext_mod.ax_get_attribute,
-        "observer": _obs_mod.ax_get_attribute,
-    }
-
-    _ax_mod.ax_get_attribute = _ax_get_attribute_dict
-    _ext_mod.ax_get_attribute = _ax_get_attribute_dict
-    _obs_mod.ax_get_attribute = _ax_get_attribute_dict
-
-    try:
-        yield
-    finally:
-        _ax_mod.ax_get_attribute = originals["ax_utils"]
-        _ext_mod.ax_get_attribute = originals["extractors"]
-        _obs_mod.ax_get_attribute = originals["observer"]
-
-
-# ---------------------------------------------------------------------------
-# Fixture loading
-# ---------------------------------------------------------------------------
-
-def load_fixture(path: str) -> dict:
-    """Load a JSON fixture file."""
-    with open(path) as f:
-        return json.load(f)
-
-
-# ---------------------------------------------------------------------------
-# FocusedElement construction from fixture data
-# ---------------------------------------------------------------------------
-
-def build_focused_element(fixture: dict):
-    """Build a FocusedElement dataclass from the fixture envelope."""
-    from autocompleter.input_observer import FocusedElement
-
-    fe = fixture.get("focusedElement")
-    if fe is None:
-        # Legacy fixture without focusedElement — try to find the focused
-        # node in the tree and construct from that.
-        fe = _focused_element_from_tree(fixture.get("tree", {}))
-        if fe is None:
-            return None
-
-    value = fe.get("value") or ""
-    cursor_pos = fe.get("cursorPosition")
-    sel_len = fe.get("selectionLength", 0)
-
-    # If no cursor position recorded, place cursor at end of value
-    if cursor_pos is None:
-        cursor_pos = len(value)
-
-    return FocusedElement(
-        app_name=fixture.get("app", "Unknown"),
-        app_pid=0,
-        role=fe.get("role", "AXTextArea"),
-        value=value,
-        selected_text=value[cursor_pos:cursor_pos + sel_len] if sel_len else "",
-        position=None,
-        size=None,
-        insertion_point=cursor_pos,
-        selection_length=sel_len,
-        placeholder_detected=_detect_placeholder(fe, value),
-    )
-
-
-def _focused_element_from_tree(tree: dict) -> dict | None:
-    """Walk the tree to find the focused node and extract element info."""
-    if tree.get("focused"):
-        return {
-            "role": tree.get("role", ""),
-            "roleDescription": tree.get("roleDescription", ""),
-            "description": tree.get("description", ""),
-            "value": tree.get("value"),
-            "placeholderValue": tree.get("placeholderValue"),
-            "numberOfCharacters": tree.get("numberOfCharacters"),
-            "cursorPosition": tree.get("cursorPosition"),
-            "selectionLength": tree.get("selectionLength", 0),
-        }
-
-    for child in tree.get("children", []):
-        if child.get("focused") or child.get("ancestorOfFocused"):
-            result = _focused_element_from_tree(child)
-            if result:
-                return result
-    return None
-
-
-def _detect_placeholder(fe: dict, value: str) -> bool:
-    """Simple placeholder detection from fixture data."""
-    placeholder = fe.get("placeholderValue")
-    if placeholder and value == placeholder:
-        return True
-    num_chars = fe.get("numberOfCharacters")
-    if num_chars is not None and num_chars == 0:
-        return True
-    # Common placeholder values
-    if value.strip().lower() in ("reply...", "message", "type a message", "type a message..."):
-        return True
-    return False
-
+from autocompleter.fixture_tools import (
+    NormalizedFixture,
+    build_focused_element,
+    extract_conversation_turns,
+    load_normalized_fixture,
+)
 
 # ---------------------------------------------------------------------------
 # Visible text extraction (dict-based, mirrors _collect_text logic)
@@ -285,32 +115,6 @@ def _collect_text_recurse(
         _collect_text_recurse(child, results, max_depth, max_items, depth + 1)
 
 
-# ---------------------------------------------------------------------------
-# Conversation extraction via patched ax_get_attribute
-# ---------------------------------------------------------------------------
-
-def extract_conversations(tree: dict, app_name: str, window_title: str = ""):
-    """Run conversation extractors on a fixture tree dict.
-
-    Uses the DictNode + monkey-patch approach so existing extractors
-    work transparently on dict data.
-    """
-    from autocompleter.conversation_extractors import get_extractor
-
-    with patch_ax_for_dicts():
-        extractor = get_extractor(app_name, window_title=window_title)
-        extractor_name = type(extractor).__name__
-        try:
-            turns = extractor.extract(DictNode(tree), max_turns=15)
-            return turns, extractor_name
-        except Exception as e:
-            return None, f"{extractor_name} (ERROR: {e})"
-
-
-# ---------------------------------------------------------------------------
-# Subtree context extraction (already works on dicts natively)
-# ---------------------------------------------------------------------------
-
 def extract_subtree(tree: dict, token_budget: int = 500) -> str | None:
     """Run the subtree context walker on a fixture tree."""
     from autocompleter.subtree_context import extract_context_from_tree
@@ -322,27 +126,27 @@ def extract_subtree(tree: dict, token_budget: int = 500) -> str | None:
 # ---------------------------------------------------------------------------
 
 def assemble_context(
-    fixture: dict,
+    fixture: NormalizedFixture,
     focused,
-    visible_text: list[str],
     conversation_turns,
     subtree_context: str | None,
     mode,
     num_suggestions: int = 3,
-) -> tuple[str, str, str]:
+) -> tuple[str, str, str, str | None]:
     """Assemble the LLM context and prompts.
 
     Uses the same ``build_messages()`` function as the live pipeline so
     prompts stay in sync (including STREAMING_JSON_INSTRUCTION).
 
-    Returns (context, system_prompt, user_prompt).
+    Returns ``(context, system_prompt, user_prompt, tree_overview)``.
     """
     from autocompleter.context_store import ContextStore
     from autocompleter.suggestion_engine import AutocompleteMode, build_messages
+    from autocompleter.subtree_context import build_context_bundle_from_tree
 
-    app_name = fixture.get("app", "Unknown")
-    window_title = fixture.get("windowTitle", "")
-    source_url = fixture.get("sourceUrl", "")
+    app_name = fixture.app
+    window_title = fixture.window_title
+    source_url = fixture.source_url
 
     # Ephemeral context store for assembly
     tmp_dir = tempfile.mkdtemp(prefix="replay_fixture_")
@@ -361,6 +165,14 @@ def assemble_context(
 
         before_cursor = focused.before_cursor if focused else ""
         after_cursor = focused.after_cursor if focused else ""
+        tree_bundle = build_context_bundle_from_tree(
+            fixture.tree,
+            token_budget=500,
+            overview_token_budget=120,
+        )
+        tree_overview = tree_bundle.top_down_context if tree_bundle else None
+        if subtree_context is None and tree_bundle is not None:
+            subtree_context = tree_bundle.bottom_up_context
 
         if mode == AutocompleteMode.CONTINUATION:
             context = ctx_store.get_continuation_context(
@@ -369,10 +181,11 @@ def assemble_context(
                 source_app=app_name,
                 window_title=window_title,
                 source_url=source_url,
-                visible_text=visible_text,
                 cross_app_context="",
                 subtree_context=subtree_context,
+                tree_overview=tree_overview,
                 memory_context="",
+                focused_state=_focused_state_payload(focused),
             )
         else:
             context = ctx_store.get_reply_context(
@@ -381,10 +194,11 @@ def assemble_context(
                 window_title=window_title,
                 source_url=source_url,
                 draft_text=before_cursor,
-                visible_text=visible_text,
                 cross_app_context="",
                 subtree_context=subtree_context,
+                tree_overview=tree_overview,
                 memory_context="",
+                focused_state=_focused_state_payload(focused),
             )
 
         # Use the same prompt builder as the live streaming pipeline.
@@ -398,7 +212,21 @@ def assemble_context(
     finally:
         ctx_store.close()
 
-    return context, system_prompt, user_prompt
+    return context, system_prompt, user_prompt, tree_overview
+
+
+def _focused_state_payload(focused) -> dict[str, object] | None:
+    """Match the live pipeline's focused-state payload."""
+    if focused is None:
+        return None
+    return {
+        "role": focused.role,
+        "insertion_point": focused.insertion_point,
+        "selection_length": getattr(focused, "selection_length", 0),
+        "value_length": len(focused.value),
+        "placeholder_detected": focused.placeholder_detected,
+        "raw_placeholder_value": getattr(focused, "raw_placeholder_value", ""),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -728,20 +556,21 @@ def replay(
     )
 
     f = out_file or sys.stdout
-    fixture = load_fixture(fixture_path)
+    fixture = load_normalized_fixture(fixture_path)
 
-    app_name = fixture.get("app", "Unknown")
-    window_title = fixture.get("windowTitle", "")
-    source_url = fixture.get("sourceUrl", "")
-    tree = fixture.get("tree", {})
+    app_name = fixture.app
+    window_title = fixture.window_title
+    source_url = fixture.source_url
+    tree = fixture.tree
 
     f.write(f"\nReplay: {fixture_path}\n")
     f.write(f"App: {app_name} | Window: {window_title!r}\n")
     if source_url:
         f.write(f"URL: {source_url}\n")
-    f.write(f"Captured: {fixture.get('capturedAt', '?')}\n")
-    if fixture.get("notes"):
-        f.write(f"Notes: {fixture['notes']}\n")
+    f.write(f"Captured: {fixture.captured_at or '?'}\n")
+    f.write(f"Artifact type: {fixture.artifact_type}\n")
+    if fixture.notes:
+        f.write(f"Notes: {fixture.notes}\n")
 
     # --- A. Focused Element ---
     _section(f, "A. FOCUSED ELEMENT")
@@ -779,7 +608,11 @@ def replay(
 
     # --- C. Conversation Extraction ---
     _section(f, "C. CONVERSATION EXTRACTION")
-    turns, extractor_name = extract_conversations(tree, app_name, window_title)
+    turns, extractor_name = extract_conversation_turns(
+        tree,
+        app_name=app_name,
+        window_title=window_title,
+    )
     f.write(f"  Extractor: {extractor_name}\n")
     if turns is None:
         f.write("  No conversation turns extracted (returned None)\n")
@@ -845,10 +678,14 @@ def replay(
 
             # --- F. Assembled Context ---
             _section(f, f"F. ASSEMBLED CONTEXT ({mode.name})")
-            context, system_prompt, user_prompt = assemble_context(
-                fixture, focused, visible_text, turns, subtree,
+            context, system_prompt, user_prompt, tree_overview = assemble_context(
+                fixture, focused, turns, subtree,
                 mode, num_suggestions,
             )
+            if tree_overview:
+                f.write("  Focus path overview:\n")
+                f.write(_indent(tree_overview) + "\n")
+                f.write("  ---\n")
             f.write(_indent(context) + "\n")
 
             # --- G. LLM Prompts ---

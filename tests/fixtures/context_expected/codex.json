@@ -1,0 +1,10 @@
+{
+  "mode": "reply",
+  "extractor": "CodexExtractor",
+  "context_contains": [
+    "App: Codex | Channel: Codex",
+    "Conversation:",
+    "- User: can you rename this branch custom extractor flows",
+    "- Assistant: The branch is now codex/custom-extractor-flows."
+  ]
+}

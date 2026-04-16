@@ -1,0 +1,10 @@
+{
+  "mode": "reply",
+  "extractor": "ClaudeDesktopExtractor",
+  "context_contains": [
+    "App: Claude | Channel: Claude",
+    "Conversation:",
+    "- User: government bonds vs corporate bonds risk and return?",
+    "- Claude: Here's a concise comparison:"
+  ]
+}

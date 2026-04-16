@@ -1,0 +1,219 @@
+{
+  "artifactType": "ax_tree_fixture_v1",
+  "schemaVersion": 1,
+  "captureTool": "dump_ax_tree_json.py",
+  "app": "Terminal",
+  "windowTitle": "henryz2004 — tmux new — 152×54",
+  "sourceUrl": "",
+  "capturedAt": "2026-04-16T01:18:22",
+  "macosVersion": "26.2",
+  "notes": "what was on screen",
+  "captureSettings": {
+    "maxDepth": 35
+  },
+  "focusedElement": {
+    "role": "AXTextArea",
+    "roleDescription": "text entry area",
+    "description": "shell",
+    "value": "Last login: Wed Apr 15 15:49:07 on ttys006\nhenryz2004@Henrys-MacBook-Pro ~ % claude\n▗ ▗   ▖ ▖  Claude Code v2.1.101                                                 \n           Opus 4.6 · Claude Max                                                \n  ▘▘ ▝▝    /Users/henryz2004                                                    \n  ⎿  SessionStart:startup hook error      ⎿  Failed with non-blocking status    \n                                             code: ambiguous option: default    \n                                                                                \n────────────────────────────────────────────────────────────────────────────────\n❯                                                                               \n────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                           ◐ medium · /effort  \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n\n\n\n\n\n\n\n\n\n\n\n▗ ▗   ▖ ▖  Claude Code v2.1.101\n           Opus 4.6 · Claude Max\n  ▘▘ ▝▝    /Users/henryz2004\n  ⎿  SessionStart:startup hook error           ⎿  Failed with non-blocking status code:\n                                                  ambiguous option: default\n\n──────────────────────────────────────────────────────────────────────────────────────────\n❯  \n──────────────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                                     ◐ medium · /effort\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n▗ ▗   ▖ ▖  Claude Code v2.1.101\n           Opus 4.6 · Claude Max\n  ▘▘ ▝▝    /Users/henryz2004\n  ⎿  SessionStart:startup hook error                ⎿  Failed with non-blocking status code:\n                                                       ambiguous option: default\n\n────────────────────────────────────────────────────────────────────────────────────────────────────\n❯  \n────────────────────────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                                               ◐ medium · /effort\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n▗ ▗   ▖ ▖  Claude Code v2.1.101\n           Opus 4.6 · Claude Max\n  ▘▘ ▝▝    /Users/henryz2004\n  ⎿  SessionStart:startup hook error                     ⎿  Failed with non-blocking status code: ambiguous\n                                                            option: default\n\n──────────────────────────────────────────────────────────────────────────────────────────────────────────────\n❯  \n──────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                                                         ◐ medium · /effort\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n▗ ▗   ▖ ▖  Claude Code v2.1.101\n           Opus 4.6 · Claude Max\n  ▘▘ ▝▝    /Users/henryz2004\n  ⎿  SessionStart:startup hook error                             ⎿  Failed with non-blocking status code: ambiguous option:\n                                                                    default\n\n──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n❯  \n──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                                                                         ◐ medium · /effort\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n▗ ▗   ▖ ▖  Claude Code v2.1.101\n           Opus 4.6 · Claude Max\n  ▘▘ ▝▝    /Users/henryz2004\n  ⎿  SessionStart:startup hook error                                    ⎿  Failed with non-blocking status code: ambiguous option: default\n\n───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n❯  \n───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                                                                                      ◐ medium · /effort\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n▗ ▗   ▖ ▖  Claude Code v2.1.101\n           Opus 4.6 · Claude Max\n  ▘▘ ▝▝    /Users/henryz2004\n  ⎿  SessionStart:startup hook error                                     ⎿  Failed with non-blocking status code: ambiguous option: default\n\n─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n❯  \n─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                                                                                        ◐ medium · /effort\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n▗ ▗   ▖ ▖  Claude Code v2.1.101\n           Opus 4.6 · Claude Max\n  ▘▘ ▝▝    /Users/henryz2004\n  ⎿  SessionStart:startup hook error                                      ⎿  Failed with non-blocking status code: ambiguous option: default\n\n───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n❯  \n───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                                                                                          ◐ medium · /effort\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n▗ ▗   ▖ ▖  Claude Code v2.1.101\n           Opus 4.6 · Claude Max\n  ▘▘ ▝▝    /Users/henryz2004\n  ⎿  SessionStart:startup hook error                                        ⎿  Failed with non-blocking status code: ambiguous option: default\n\n────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n❯  \n────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                                                                                               ◐ medium · /effort\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n▗ ▗   ▖ ▖  Claude Code v2.1.101\n           Opus 4.6 · Claude Max\n  ▘▘ ▝▝    /Users/henryz2004\n  ⎿  SessionStart:startup hook error                                         ⎿  Failed with non-blocking status code: ambiguous option: default\n\n─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n❯  \n─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                                                                                                ◐ medium · /effort\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n▗ ▗   ▖ ▖  Claude Code v2.1.101\n           Opus 4.6 · Claude Max\n  ▘▘ ▝▝    /Users/henryz2004\n  ⎿  SessionStart:startup hook error                                          ⎿  Failed with non-blocking status code: ambiguous option: default\n\n───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n❯  \n───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                                                                                                  ◐ medium · /effort\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n▗ ▗   ▖ ▖  Claude Code v2.1.101\n           Opus 4.6 · Claude Max\n  ▘▘ ▝▝    /Users/henryz2004\n  ⎿  SessionStart:startup hook error                                          ⎿  Failed with non-blocking status code: ambiguous option: default\n\n❯ Hello!                                                                                                                                                \n  ⎿  UserPromptSubmit hook error                                              ⎿  Failed with non-blocking status code: invalid option: \n                                                                                 bg=yellow,fg=black                                                     \n                                                                                                                                                      \n⏺ Hello! How can I help you today?                                                                                                                      \n   \n────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n❯                                                                                                                                                     \n────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  Press Ctrl-C again to exit                                                                                                                            \n\nResume this session with:                                                                                                                               \nclaude --resume 4b0f1e8b-9ccd-48d6-a34a-d28ab2606547\nhenryz2004@Henrys-MacBook-Pro ~ % tmux new \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n── ✳ Claude test in tmux ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\nhenryz2004@Henrys-MacBook-Pro ~ % claude\n ▐▛███▜▌   Claude Code v2.1.87                                                                                                                          \n▝▜█████▛▘  Opus 4.6 · Claude Max                                                                                                                        \n  ▘▘ ▝▝    /Users/henryz2004                                                                                                                            \n                                                                                                                                                        \n  ↑ Opus now defaults to 1M context · 5x more room, same pricing                                                                                        \n                                                                                                                                                        \n❯ this is a claude test in tmux, just a test                                                                                                            \n                                                                                                                                                        \n⏺ Got it — test acknowledged. Let me know when you want to do something real.                                                                           \n                                                                                                                                                        \n❯ yeah, i will.                                                                                                                                         \n                                                                                                                                                        \n⏺ Sounds good.                                                                                                                                          \n                                                                                                                                                        \n────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n❯                                                                                                                                                       \n────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                                                                      Update available! Run: brew upgrade claude-code  \n                                                                                                                                                        \n                                                                                                                                                        \n                                                                                                                                                        \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n[65] 0:claude*                                                                                                   \"✳ Claude test in tmux\" 01:18 16-Apr-26\n",
+    "placeholderValue": null,
+    "numberOfCharacters": 13848
+  },
+  "tree": {
+    "role": "AXWindow",
+    "subrole": "AXStandardWindow",
+    "roleDescription": "standard window",
+    "value": null,
+    "title": "henryz2004 — tmux new — 152×54",
+    "description": "<AXValue 0x7939085a0> {value = error:-25205 type = kAXValueAXErrorType}",
+    "placeholderValue": null,
+    "numberOfCharacters": null,
+    "children": [
+      {
+        "role": "AXSplitGroup",
+        "subrole": "<AXValue 0x793908940> {value = error:-25205 type = kAXValueAXErrorType}",
+        "roleDescription": "split group",
+        "value": null,
+        "title": "<AXValue 0x79390ae20> {value = error:-25205 type = kAXValueAXErrorType}",
+        "description": "<AXValue 0x793909580> {value = error:-25205 type = kAXValueAXErrorType}",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXScrollArea",
+            "subrole": "<AXValue 0x793908a00> {value = error:-25205 type = kAXValueAXErrorType}",
+            "roleDescription": "scroll area",
+            "value": null,
+            "title": "<AXValue 0x793908d00> {value = error:-25205 type = kAXValueAXErrorType}",
+            "description": "<AXValue 0x793909400> {value = error:-25205 type = kAXValueAXErrorType}",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXTextArea",
+                "subrole": "<AXValue 0x79390bde0> {value = error:-25205 type = kAXValueAXErrorType}",
+                "roleDescription": "text entry area",
+                "value": "Last login: Wed Apr 15 15:49:07 on ttys006\nhenryz2004@Henrys-MacBook-Pro ~ % claude\n▗ ▗   ▖ ▖  Claude Code v2.1.101                                                 \n           Opus 4.6 · Claude Max                                                \n  ▘▘ ▝▝    /Users/henryz2004                                                    \n  ⎿  SessionStart:startup hook error      ⎿  Failed with non-blocking status    \n                                             code: ambiguous option: default    \n                                                                                \n────────────────────────────────────────────────────────────────────────────────\n❯                                                                               \n────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                           ◐ medium · /effort  \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n                                                                                \n\n\n\n\n\n\n\n\n\n\n\n▗ ▗   ▖ ▖  Claude Code v2.1.101\n           Opus 4.6 · Claude Max\n  ▘▘ ▝▝    /Users/henryz2004\n  ⎿  SessionStart:startup hook error           ⎿  Failed with non-blocking status code:\n                                                  ambiguous option: default\n\n──────────────────────────────────────────────────────────────────────────────────────────\n❯  \n──────────────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                                     ◐ medium · /effort\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n▗ ▗   ▖ ▖  Claude Code v2.1.101\n           Opus 4.6 · Claude Max\n  ▘▘ ▝▝    /Users/henryz2004\n  ⎿  SessionStart:startup hook error                ⎿  Failed with non-blocking status code:\n                                                       ambiguous option: default\n\n────────────────────────────────────────────────────────────────────────────────────────────────────\n❯  \n────────────────────────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                                               ◐ medium · /effort\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n▗ ▗   ▖ ▖  Claude Code v2.1.101\n           Opus 4.6 · Claude Max\n  ▘▘ ▝▝    /Users/henryz2004\n  ⎿  SessionStart:startup hook error                     ⎿  Failed with non-blocking status code: ambiguous\n                                                            option: default\n\n──────────────────────────────────────────────────────────────────────────────────────────────────────────────\n❯  \n──────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                                                         ◐ medium · /effort\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n▗ ▗   ▖ ▖  Claude Code v2.1.101\n           Opus 4.6 · Claude Max\n  ▘▘ ▝▝    /Users/henryz2004\n  ⎿  SessionStart:startup hook error                             ⎿  Failed with non-blocking status code: ambiguous option:\n                                                                    default\n\n──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n❯  \n──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                                                                         ◐ medium · /effort\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n▗ ▗   ▖ ▖  Claude Code v2.1.101\n           Opus 4.6 · Claude Max\n  ▘▘ ▝▝    /Users/henryz2004\n  ⎿  SessionStart:startup hook error                                    ⎿  Failed with non-blocking status code: ambiguous option: default\n\n───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n❯  \n───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                                                                                      ◐ medium · /effort\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n▗ ▗   ▖ ▖  Claude Code v2.1.101\n           Opus 4.6 · Claude Max\n  ▘▘ ▝▝    /Users/henryz2004\n  ⎿  SessionStart:startup hook error                                     ⎿  Failed with non-blocking status code: ambiguous option: default\n\n─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n❯  \n─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                                                                                        ◐ medium · /effort\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n▗ ▗   ▖ ▖  Claude Code v2.1.101\n           Opus 4.6 · Claude Max\n  ▘▘ ▝▝    /Users/henryz2004\n  ⎿  SessionStart:startup hook error                                      ⎿  Failed with non-blocking status code: ambiguous option: default\n\n───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n❯  \n───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                                                                                          ◐ medium · /effort\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n▗ ▗   ▖ ▖  Claude Code v2.1.101\n           Opus 4.6 · Claude Max\n  ▘▘ ▝▝    /Users/henryz2004\n  ⎿  SessionStart:startup hook error                                        ⎿  Failed with non-blocking status code: ambiguous option: default\n\n────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n❯  \n────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                                                                                               ◐ medium · /effort\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n▗ ▗   ▖ ▖  Claude Code v2.1.101\n           Opus 4.6 · Claude Max\n  ▘▘ ▝▝    /Users/henryz2004\n  ⎿  SessionStart:startup hook error                                         ⎿  Failed with non-blocking status code: ambiguous option: default\n\n─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n❯  \n─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                                                                                                ◐ medium · /effort\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n▗ ▗   ▖ ▖  Claude Code v2.1.101\n           Opus 4.6 · Claude Max\n  ▘▘ ▝▝    /Users/henryz2004\n  ⎿  SessionStart:startup hook error                                          ⎿  Failed with non-blocking status code: ambiguous option: default\n\n───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n❯  \n───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                                                                                                  ◐ medium · /effort\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n▗ ▗   ▖ ▖  Claude Code v2.1.101\n           Opus 4.6 · Claude Max\n  ▘▘ ▝▝    /Users/henryz2004\n  ⎿  SessionStart:startup hook error                                          ⎿  Failed with non-blocking status code: ambiguous option: default\n\n❯ Hello!                                                                                                                                                \n  ⎿  UserPromptSubmit hook error                                              ⎿  Failed with non-blocking status code: invalid option: \n                                                                                 bg=yellow,fg=black                                                     \n                                                                                                                                                      \n⏺ Hello! How can I help you today?                                                                                                                      \n   \n────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n❯                                                                                                                                                     \n────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  Press Ctrl-C again to exit                                                                                                                            \n\nResume this session with:                                                                                                                               \nclaude --resume 4b0f1e8b-9ccd-48d6-a34a-d28ab2606547\nhenryz2004@Henrys-MacBook-Pro ~ % tmux new \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n── ✳ Claude test in tmux ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\nhenryz2004@Henrys-MacBook-Pro ~ % claude\n ▐▛███▜▌   Claude Code v2.1.87                                                                                                                          \n▝▜█████▛▘  Opus 4.6 · Claude Max                                                                                                                        \n  ▘▘ ▝▝    /Users/henryz2004                                                                                                                            \n                                                                                                                                                        \n  ↑ Opus now defaults to 1M context · 5x more room, same pricing                                                                                        \n                                                                                                                                                        \n❯ this is a claude test in tmux, just a test                                                                                                            \n                                                                                                                                                        \n⏺ Got it — test acknowledged. Let me know when you want to do something real.                                                                           \n                                                                                                                                                        \n❯ yeah, i will.                                                                                                                                         \n                                                                                                                                                        \n⏺ Sounds good.                                                                                                                                          \n                                                                                                                                                        \n────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n❯                                                                                                                                                       \n────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n  ? for shortcuts                                                                                      Update available! Run: brew upgrade claude-code  \n                                                                                                                                                        \n                                                                                                                                                        \n                                                                                                                                                        \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n[65] 0:claude*                                                                                                   \"✳ Claude test in tmux\" 01:18 16-Apr-26\n",
+                "title": "<AXValue 0x7939094e0> {value = error:-25205 type = kAXValueAXErrorType}",
+                "description": "shell",
+                "placeholderValue": null,
+                "numberOfCharacters": 13848,
+                "children": [],
+                "focused": true
+              },
+              {
+                "role": "AXScrollBar",
+                "subrole": "<AXValue 0x793909720> {value = error:-25205 type = kAXValueAXErrorType}",
+                "roleDescription": "scroll bar",
+                "value": null,
+                "title": "<AXValue 0x79390be20> {value = error:-25205 type = kAXValueAXErrorType}",
+                "description": "<AXValue 0x793909260> {value = error:-25205 type = kAXValueAXErrorType}",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": [
+                  {
+                    "role": "AXValueIndicator",
+                    "subrole": "<AXValue 0x7939091e0> {value = error:-25205 type = kAXValueAXErrorType}",
+                    "roleDescription": "value indicator",
+                    "value": null,
+                    "title": "<AXValue 0x793908580> {value = error:-25205 type = kAXValueAXErrorType}",
+                    "description": "<AXValue 0x793908ba0> {value = error:-25205 type = kAXValueAXErrorType}",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "AXIncrementArrow",
+                    "roleDescription": "increment arrow button",
+                    "value": null,
+                    "title": "<AXValue 0x79390b0a0> {value = error:-25205 type = kAXValueAXErrorType}",
+                    "description": "<AXValue 0x793908fc0> {value = error:-25205 type = kAXValueAXErrorType}",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "AXDecrementArrow",
+                    "roleDescription": "decrement arrow button",
+                    "value": null,
+                    "title": "<AXValue 0x793909360> {value = error:-25205 type = kAXValueAXErrorType}",
+                    "description": "<AXValue 0x7939088e0> {value = error:-25205 type = kAXValueAXErrorType}",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "AXIncrementPage",
+                    "roleDescription": "increment page button",
+                    "value": null,
+                    "title": "<AXValue 0x7939089c0> {value = error:-25205 type = kAXValueAXErrorType}",
+                    "description": "<AXValue 0x793909760> {value = error:-25205 type = kAXValueAXErrorType}",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "AXDecrementPage",
+                    "roleDescription": "decrement page button",
+                    "value": null,
+                    "title": "<AXValue 0x79390b0e0> {value = error:-25205 type = kAXValueAXErrorType}",
+                    "description": "<AXValue 0x793909300> {value = error:-25205 type = kAXValueAXErrorType}",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  }
+                ]
+              }
+            ],
+            "ancestorOfFocused": true
+          }
+        ],
+        "ancestorOfFocused": true
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXCloseButton",
+        "roleDescription": "close button",
+        "value": null,
+        "title": "<AXValue 0x793909480> {value = error:-25212 type = kAXValueAXErrorType}",
+        "description": "<AXValue 0x793908a60> {value = error:-25205 type = kAXValueAXErrorType}",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXFullScreenButton",
+        "roleDescription": "full screen button",
+        "value": null,
+        "title": "<AXValue 0x7939090a0> {value = error:-25212 type = kAXValueAXErrorType}",
+        "description": "<AXValue 0x79390b280> {value = error:-25205 type = kAXValueAXErrorType}",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "<AXValue 0x79390bfa0> {value = error:-25205 type = kAXValueAXErrorType}",
+            "roleDescription": "group",
+            "value": null,
+            "title": "<AXValue 0x793908480> {value = error:-25205 type = kAXValueAXErrorType}",
+            "description": "<AXValue 0x79390bd80> {value = error:-25205 type = kAXValueAXErrorType}",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "<AXValue 0x79390b160> {value = error:-25205 type = kAXValueAXErrorType}",
+                "roleDescription": "group",
+                "value": null,
+                "title": "<AXValue 0x79390ab20> {value = error:-25205 type = kAXValueAXErrorType}",
+                "description": "<AXValue 0x793908ca0> {value = error:-25205 type = kAXValueAXErrorType}",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXMinimizeButton",
+        "roleDescription": "minimize button",
+        "value": null,
+        "title": "<AXValue 0x79390a1e0> {value = error:-25212 type = kAXValueAXErrorType}",
+        "description": "<AXValue 0x793908ec0> {value = error:-25205 type = kAXValueAXErrorType}",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      },
+      {
+        "role": "AXImage",
+        "subrole": "<AXValue 0x793908ee0> {value = error:-25205 type = kAXValueAXErrorType}",
+        "roleDescription": "image",
+        "value": null,
+        "title": "henryz2004",
+        "description": "<AXValue 0x7939089e0> {value = error:-25205 type = kAXValueAXErrorType}",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      },
+      {
+        "role": "AXStaticText",
+        "subrole": "<AXValue 0x793908820> {value = error:-25205 type = kAXValueAXErrorType}",
+        "roleDescription": "text",
+        "value": "henryz2004 — tmux new — 152×54",
+        "title": "<AXValue 0x793908e00> {value = error:-25205 type = kAXValueAXErrorType}",
+        "description": "<AXValue 0x7939082c0> {value = error:-25205 type = kAXValueAXErrorType}",
+        "placeholderValue": null,
+        "numberOfCharacters": 30,
+        "children": []
+      }
+    ],
+    "ancestorOfFocused": true
+  }
+}

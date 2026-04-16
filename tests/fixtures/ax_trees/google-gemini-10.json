@@ -1,0 +1,1777 @@
+{
+  "artifactType": "ax_tree_fixture_v1",
+  "schemaVersion": 1,
+  "captureTool": "dump_ax_tree_json.py",
+  "app": "Google Gemini",
+  "windowTitle": "",
+  "sourceUrl": "",
+  "capturedAt": "2026-04-16T01:16:45",
+  "macosVersion": "26.2",
+  "notes": "what was on screen",
+  "captureSettings": {
+    "maxDepth": 35
+  },
+  "focusedElement": {
+    "role": "AXTextArea",
+    "roleDescription": "text entry area",
+    "description": "Enter a prompt for Gemini",
+    "value": "Ask Gemini\n",
+    "placeholderValue": null,
+    "numberOfCharacters": 11
+  },
+  "tree": {
+    "role": "AXWindow",
+    "subrole": "AXStandardWindow",
+    "roleDescription": "standard window",
+    "value": null,
+    "title": "<AXValue 0x79393a180> {value = error:-25212 type = kAXValueAXErrorType}",
+    "description": "<AXValue 0x79393a2c0> {value = error:-25205 type = kAXValueAXErrorType}",
+    "placeholderValue": null,
+    "numberOfCharacters": null,
+    "children": [
+      {
+        "role": "AXGroup",
+        "subrole": "<AXValue 0x79393a240> {value = error:-25212 type = kAXValueAXErrorType}",
+        "roleDescription": "group",
+        "value": "",
+        "title": "Google Gemini - Personal",
+        "description": "",
+        "placeholderValue": null,
+        "numberOfCharacters": 0,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "<AXValue 0x79393a000> {value = error:-25212 type = kAXValueAXErrorType}",
+            "roleDescription": "group",
+            "value": "",
+            "title": "",
+            "description": "",
+            "placeholderValue": null,
+            "numberOfCharacters": 0,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "<AXValue 0x7939398a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                "roleDescription": "group",
+                "value": "",
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": [
+                  {
+                    "role": "AXGroup",
+                    "subrole": "<AXValue 0x793939940> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "roleDescription": "group",
+                    "value": "",
+                    "title": "",
+                    "description": "",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 0,
+                    "children": [
+                      {
+                        "role": "AXGroup",
+                        "subrole": "<AXValue 0x793939fa0> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "group",
+                        "value": "",
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "<AXValue 0x793939d60> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "text",
+                            "value": "Google Gemini",
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 13,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXGroup",
+                        "subrole": "<AXValue 0x7939397e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "group",
+                        "value": "",
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXGroup",
+                            "subrole": "<AXValue 0x793939e80> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "group",
+                            "value": "",
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "<AXValue 0x79393a0a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                "roleDescription": "group",
+                                "value": "",
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXGroup",
+                                    "subrole": "<AXValue 0x79393a660> {value = error:-25212 type = kAXValueAXErrorType}",
+                                    "roleDescription": "group",
+                                    "value": "",
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 0,
+                                    "children": [
+                                      {
+                                        "role": "AXGroup",
+                                        "subrole": "<AXValue 0x79393a560> {value = error:-25212 type = kAXValueAXErrorType}",
+                                        "roleDescription": "group",
+                                        "value": "",
+                                        "title": "",
+                                        "description": "",
+                                        "placeholderValue": null,
+                                        "numberOfCharacters": 0,
+                                        "children": [
+                                          {
+                                            "role": "AXGroup",
+                                            "subrole": "<AXValue 0x79393b660> {value = error:-25212 type = kAXValueAXErrorType}",
+                                            "roleDescription": "group",
+                                            "value": "",
+                                            "title": "",
+                                            "description": "",
+                                            "placeholderValue": null,
+                                            "numberOfCharacters": 0,
+                                            "children": [
+                                              {
+                                                "role": "AXWebArea",
+                                                "subrole": "<AXValue 0x79393a100> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                "roleDescription": "HTML content",
+                                                "value": "",
+                                                "title": "Google Gemini",
+                                                "description": "",
+                                                "placeholderValue": null,
+                                                "numberOfCharacters": 0,
+                                                "children": [
+                                                  {
+                                                    "role": "AXGroup",
+                                                    "subrole": "<AXValue 0x79393a220> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                    "roleDescription": "group",
+                                                    "value": "",
+                                                    "title": "",
+                                                    "description": "",
+                                                    "placeholderValue": null,
+                                                    "numberOfCharacters": 0,
+                                                    "children": [
+                                                      {
+                                                        "role": "AXGroup",
+                                                        "subrole": "<AXValue 0x79393a1e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                        "roleDescription": "group",
+                                                        "value": "",
+                                                        "title": "",
+                                                        "description": "",
+                                                        "placeholderValue": null,
+                                                        "numberOfCharacters": 0,
+                                                        "children": [
+                                                          {
+                                                            "role": "AXGroup",
+                                                            "subrole": "<AXValue 0x7939393a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                            "roleDescription": "group",
+                                                            "value": "",
+                                                            "title": "",
+                                                            "description": "",
+                                                            "placeholderValue": null,
+                                                            "numberOfCharacters": 0,
+                                                            "children": [
+                                                              {
+                                                                "role": "AXGroup",
+                                                                "subrole": "<AXValue 0x79393bd00> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                "roleDescription": "group",
+                                                                "value": "",
+                                                                "title": "",
+                                                                "description": "",
+                                                                "placeholderValue": null,
+                                                                "numberOfCharacters": 0,
+                                                                "children": [
+                                                                  {
+                                                                    "role": "AXGroup",
+                                                                    "subrole": "<AXValue 0x7939392e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                    "roleDescription": "group",
+                                                                    "value": "",
+                                                                    "title": "",
+                                                                    "description": "",
+                                                                    "placeholderValue": null,
+                                                                    "numberOfCharacters": 0,
+                                                                    "children": [
+                                                                      {
+                                                                        "role": "AXGroup",
+                                                                        "subrole": "<AXValue 0x79393a160> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                        "roleDescription": "group",
+                                                                        "value": "",
+                                                                        "title": "",
+                                                                        "description": "",
+                                                                        "placeholderValue": null,
+                                                                        "numberOfCharacters": 0,
+                                                                        "children": [
+                                                                          {
+                                                                            "role": "AXButton",
+                                                                            "subrole": "<AXValue 0x79393bd80> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                            "roleDescription": "button",
+                                                                            "value": "",
+                                                                            "title": "",
+                                                                            "description": "Google Account: Henry Zhang (henryz2004@gmail.com)",
+                                                                            "placeholderValue": null,
+                                                                            "numberOfCharacters": 0,
+                                                                            "children": [
+                                                                              {
+                                                                                "role": "AXGroup",
+                                                                                "subrole": "<AXValue 0x79393b8a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                "roleDescription": "group",
+                                                                                "value": "",
+                                                                                "title": "",
+                                                                                "description": "",
+                                                                                "placeholderValue": null,
+                                                                                "numberOfCharacters": 0,
+                                                                                "children": [
+                                                                                  {
+                                                                                    "role": "AXStaticText",
+                                                                                    "subrole": "<AXValue 0x79393a1a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                    "roleDescription": "text",
+                                                                                    "value": "  ",
+                                                                                    "title": "",
+                                                                                    "description": "",
+                                                                                    "placeholderValue": null,
+                                                                                    "numberOfCharacters": 0,
+                                                                                    "children": []
+                                                                                  }
+                                                                                ]
+                                                                              },
+                                                                              {
+                                                                                "role": "AXGroup",
+                                                                                "subrole": "<AXValue 0x7939399e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                "roleDescription": "group",
+                                                                                "value": "",
+                                                                                "title": "",
+                                                                                "description": "",
+                                                                                "placeholderValue": null,
+                                                                                "numberOfCharacters": 0,
+                                                                                "children": [
+                                                                                  {
+                                                                                    "role": "AXImage",
+                                                                                    "subrole": "<AXValue 0x79393a360> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                    "roleDescription": "image",
+                                                                                    "value": "",
+                                                                                    "title": "",
+                                                                                    "description": "",
+                                                                                    "placeholderValue": null,
+                                                                                    "numberOfCharacters": 0,
+                                                                                    "children": []
+                                                                                  }
+                                                                                ]
+                                                                              },
+                                                                              {
+                                                                                "role": "AXGroup",
+                                                                                "subrole": "<AXValue 0x79393a040> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                "roleDescription": "group",
+                                                                                "value": "",
+                                                                                "title": "",
+                                                                                "description": "",
+                                                                                "placeholderValue": null,
+                                                                                "numberOfCharacters": 0,
+                                                                                "children": []
+                                                                              },
+                                                                              {
+                                                                                "role": "AXGroup",
+                                                                                "subrole": "<AXValue 0x79393a2a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                "roleDescription": "group",
+                                                                                "value": "",
+                                                                                "title": "",
+                                                                                "description": "",
+                                                                                "placeholderValue": null,
+                                                                                "numberOfCharacters": 0,
+                                                                                "children": []
+                                                                              }
+                                                                            ]
+                                                                          }
+                                                                        ]
+                                                                      }
+                                                                    ]
+                                                                  }
+                                                                ]
+                                                              }
+                                                            ]
+                                                          }
+                                                        ]
+                                                      },
+                                                      {
+                                                        "role": "AXGroup",
+                                                        "subrole": "<AXValue 0x79393b1c0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                        "roleDescription": "group",
+                                                        "value": "",
+                                                        "title": "",
+                                                        "description": "",
+                                                        "placeholderValue": null,
+                                                        "numberOfCharacters": 0,
+                                                        "children": [
+                                                          {
+                                                            "role": "AXGroup",
+                                                            "subrole": "AXLandmarkMain",
+                                                            "roleDescription": "main",
+                                                            "value": "",
+                                                            "title": "",
+                                                            "description": "",
+                                                            "placeholderValue": null,
+                                                            "numberOfCharacters": 0,
+                                                            "children": [
+                                                              {
+                                                                "role": "AXGroup",
+                                                                "subrole": "<AXValue 0x79393bda0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                "roleDescription": "group",
+                                                                "value": "",
+                                                                "title": "",
+                                                                "description": "",
+                                                                "placeholderValue": null,
+                                                                "numberOfCharacters": 0,
+                                                                "children": [
+                                                                  {
+                                                                    "role": "AXGroup",
+                                                                    "subrole": "<AXValue 0x79393b860> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                    "roleDescription": "group",
+                                                                    "value": "",
+                                                                    "title": "",
+                                                                    "description": "",
+                                                                    "placeholderValue": null,
+                                                                    "numberOfCharacters": 0,
+                                                                    "children": [
+                                                                      {
+                                                                        "role": "AXButton",
+                                                                        "subrole": "<AXValue 0x793939e00> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                        "roleDescription": "button",
+                                                                        "value": "",
+                                                                        "title": "",
+                                                                        "description": "Main menu",
+                                                                        "placeholderValue": null,
+                                                                        "numberOfCharacters": 0,
+                                                                        "children": []
+                                                                      }
+                                                                    ]
+                                                                  },
+                                                                  {
+                                                                    "role": "AXButton",
+                                                                    "subrole": "<AXValue 0x793939280> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                    "roleDescription": "button",
+                                                                    "value": "",
+                                                                    "title": "",
+                                                                    "description": "New chat",
+                                                                    "placeholderValue": null,
+                                                                    "numberOfCharacters": 0,
+                                                                    "children": [
+                                                                      {
+                                                                        "role": "AXGroup",
+                                                                        "subrole": "<AXValue 0x79393aec0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                        "roleDescription": "group",
+                                                                        "value": "",
+                                                                        "title": "",
+                                                                        "description": "",
+                                                                        "placeholderValue": null,
+                                                                        "numberOfCharacters": 0,
+                                                                        "children": [
+                                                                          {
+                                                                            "role": "AXStaticText",
+                                                                            "subrole": "<AXValue 0x79393bd60> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                            "roleDescription": "text",
+                                                                            "value": "Gemini",
+                                                                            "title": "",
+                                                                            "description": "",
+                                                                            "placeholderValue": null,
+                                                                            "numberOfCharacters": 0,
+                                                                            "children": []
+                                                                          }
+                                                                        ]
+                                                                      }
+                                                                    ]
+                                                                  }
+                                                                ]
+                                                              },
+                                                              {
+                                                                "role": "AXGroup",
+                                                                "subrole": "<AXValue 0x79393b840> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                "roleDescription": "group",
+                                                                "value": "",
+                                                                "title": "",
+                                                                "description": "",
+                                                                "placeholderValue": null,
+                                                                "numberOfCharacters": 0,
+                                                                "children": [
+                                                                  {
+                                                                    "role": "AXGroup",
+                                                                    "subrole": "<AXValue 0x793939ea0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                    "roleDescription": "group",
+                                                                    "value": "",
+                                                                    "title": "",
+                                                                    "description": "",
+                                                                    "placeholderValue": null,
+                                                                    "numberOfCharacters": 0,
+                                                                    "children": []
+                                                                  },
+                                                                  {
+                                                                    "role": "AXButton",
+                                                                    "subrole": "<AXValue 0x79393be00> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                    "roleDescription": "button",
+                                                                    "value": "",
+                                                                    "title": "PRO",
+                                                                    "description": "",
+                                                                    "placeholderValue": null,
+                                                                    "numberOfCharacters": 0,
+                                                                    "children": []
+                                                                  }
+                                                                ]
+                                                              },
+                                                              {
+                                                                "role": "AXGroup",
+                                                                "subrole": "AXLandmarkNavigation",
+                                                                "roleDescription": "navigation",
+                                                                "value": "",
+                                                                "title": "",
+                                                                "description": "",
+                                                                "placeholderValue": null,
+                                                                "numberOfCharacters": 0,
+                                                                "children": [
+                                                                  {
+                                                                    "role": "AXGroup",
+                                                                    "subrole": "<AXValue 0x79393af00> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                    "roleDescription": "group",
+                                                                    "value": "",
+                                                                    "title": "",
+                                                                    "description": "",
+                                                                    "placeholderValue": null,
+                                                                    "numberOfCharacters": 0,
+                                                                    "children": [
+                                                                      {
+                                                                        "role": "AXGroup",
+                                                                        "subrole": "<AXValue 0x79393a0e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                        "roleDescription": "group",
+                                                                        "value": "",
+                                                                        "title": "",
+                                                                        "description": "",
+                                                                        "placeholderValue": null,
+                                                                        "numberOfCharacters": 0,
+                                                                        "children": []
+                                                                      },
+                                                                      {
+                                                                        "role": "AXGroup",
+                                                                        "subrole": "<AXValue 0x7939381e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                        "roleDescription": "group",
+                                                                        "value": "",
+                                                                        "title": "",
+                                                                        "description": "",
+                                                                        "placeholderValue": null,
+                                                                        "numberOfCharacters": 0,
+                                                                        "children": [
+                                                                          {
+                                                                            "role": "AXGroup",
+                                                                            "subrole": "AXApplicationGroup",
+                                                                            "roleDescription": "group",
+                                                                            "value": "",
+                                                                            "title": "",
+                                                                            "description": "",
+                                                                            "placeholderValue": null,
+                                                                            "numberOfCharacters": 0,
+                                                                            "children": [
+                                                                              {
+                                                                                "role": "AXLink",
+                                                                                "subrole": "<AXValue 0x79393bbc0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                "roleDescription": "link",
+                                                                                "value": "",
+                                                                                "title": "",
+                                                                                "description": "New chat",
+                                                                                "placeholderValue": null,
+                                                                                "numberOfCharacters": 0,
+                                                                                "children": [
+                                                                                  {
+                                                                                    "role": "AXGroup",
+                                                                                    "subrole": "<AXValue 0x793939f80> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                    "roleDescription": "group",
+                                                                                    "value": "",
+                                                                                    "title": "",
+                                                                                    "description": "",
+                                                                                    "placeholderValue": null,
+                                                                                    "numberOfCharacters": 0,
+                                                                                    "children": [
+                                                                                      {
+                                                                                        "role": "AXGroup",
+                                                                                        "subrole": "<AXValue 0x793939900> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                        "roleDescription": "group",
+                                                                                        "value": "",
+                                                                                        "title": "",
+                                                                                        "description": "",
+                                                                                        "placeholderValue": null,
+                                                                                        "numberOfCharacters": 0,
+                                                                                        "children": []
+                                                                                      }
+                                                                                    ]
+                                                                                  }
+                                                                                ]
+                                                                              }
+                                                                            ]
+                                                                          },
+                                                                          {
+                                                                            "role": "AXGroup",
+                                                                            "subrole": "<AXValue 0x7939395c0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                            "roleDescription": "group",
+                                                                            "value": "",
+                                                                            "title": "",
+                                                                            "description": "",
+                                                                            "placeholderValue": null,
+                                                                            "numberOfCharacters": 0,
+                                                                            "children": [
+                                                                              {
+                                                                                "role": "AXProgressIndicator",
+                                                                                "subrole": "<AXValue 0x793939000> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                "roleDescription": "progress indicator",
+                                                                                "value": "",
+                                                                                "title": "",
+                                                                                "description": "Loading Gems and Recent conversations",
+                                                                                "placeholderValue": null,
+                                                                                "numberOfCharacters": 0,
+                                                                                "children": []
+                                                                              }
+                                                                            ]
+                                                                          },
+                                                                          {
+                                                                            "role": "AXGroup",
+                                                                            "subrole": "AXApplicationGroup",
+                                                                            "roleDescription": "group",
+                                                                            "value": "",
+                                                                            "title": "",
+                                                                            "description": "",
+                                                                            "placeholderValue": null,
+                                                                            "numberOfCharacters": 0,
+                                                                            "children": [
+                                                                              {
+                                                                                "role": "AXGroup",
+                                                                                "subrole": "<AXValue 0x79393bf00> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                "roleDescription": "group",
+                                                                                "value": "",
+                                                                                "title": "",
+                                                                                "description": "",
+                                                                                "placeholderValue": null,
+                                                                                "numberOfCharacters": 0,
+                                                                                "children": [
+                                                                                  {
+                                                                                    "role": "AXPopUpButton",
+                                                                                    "subrole": "<AXValue 0x79393b640> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                    "roleDescription": "pop up button",
+                                                                                    "value": "",
+                                                                                    "title": "",
+                                                                                    "description": "Settings & help",
+                                                                                    "placeholderValue": null,
+                                                                                    "numberOfCharacters": 0,
+                                                                                    "children": [
+                                                                                      {
+                                                                                        "role": "AXGroup",
+                                                                                        "subrole": "<AXValue 0x79393a640> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                        "roleDescription": "group",
+                                                                                        "value": "",
+                                                                                        "title": "",
+                                                                                        "description": "",
+                                                                                        "placeholderValue": null,
+                                                                                        "numberOfCharacters": 0,
+                                                                                        "children": [
+                                                                                          {
+                                                                                            "role": "AXGroup",
+                                                                                            "subrole": "<AXValue 0x793939380> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                            "roleDescription": "group",
+                                                                                            "value": "",
+                                                                                            "title": "",
+                                                                                            "description": "",
+                                                                                            "placeholderValue": null,
+                                                                                            "numberOfCharacters": 0,
+                                                                                            "children": []
+                                                                                          }
+                                                                                        ]
+                                                                                      }
+                                                                                    ]
+                                                                                  }
+                                                                                ]
+                                                                              }
+                                                                            ]
+                                                                          }
+                                                                        ]
+                                                                      }
+                                                                    ]
+                                                                  }
+                                                                ]
+                                                              },
+                                                              {
+                                                                "role": "AXGroup",
+                                                                "subrole": "<AXValue 0x793939f60> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                "roleDescription": "group",
+                                                                "value": "",
+                                                                "title": "",
+                                                                "description": "",
+                                                                "placeholderValue": null,
+                                                                "numberOfCharacters": 0,
+                                                                "children": [
+                                                                  {
+                                                                    "role": "AXGroup",
+                                                                    "subrole": "<AXValue 0x79393b3a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                    "roleDescription": "group",
+                                                                    "value": "",
+                                                                    "title": "",
+                                                                    "description": "",
+                                                                    "placeholderValue": null,
+                                                                    "numberOfCharacters": 0,
+                                                                    "children": [
+                                                                      {
+                                                                        "role": "AXGroup",
+                                                                        "subrole": "<AXValue 0x79393b760> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                        "roleDescription": "group",
+                                                                        "value": "",
+                                                                        "title": "",
+                                                                        "description": "",
+                                                                        "placeholderValue": null,
+                                                                        "numberOfCharacters": 0,
+                                                                        "children": []
+                                                                      },
+                                                                      {
+                                                                        "role": "AXGroup",
+                                                                        "subrole": "<AXValue 0x793938480> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                        "roleDescription": "group",
+                                                                        "value": "",
+                                                                        "title": "",
+                                                                        "description": "",
+                                                                        "placeholderValue": null,
+                                                                        "numberOfCharacters": 0,
+                                                                        "children": []
+                                                                      },
+                                                                      {
+                                                                        "role": "AXGroup",
+                                                                        "subrole": "<AXValue 0x793939680> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                        "roleDescription": "group",
+                                                                        "value": "",
+                                                                        "title": "",
+                                                                        "description": "",
+                                                                        "placeholderValue": null,
+                                                                        "numberOfCharacters": 0,
+                                                                        "children": [
+                                                                          {
+                                                                            "role": "AXGroup",
+                                                                            "subrole": "<AXValue 0x79393a520> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                            "roleDescription": "group",
+                                                                            "value": "",
+                                                                            "title": "",
+                                                                            "description": "",
+                                                                            "placeholderValue": null,
+                                                                            "numberOfCharacters": 0,
+                                                                            "children": [
+                                                                              {
+                                                                                "role": "AXHeading",
+                                                                                "subrole": "<AXValue 0x79393a6c0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                "roleDescription": "heading",
+                                                                                "value": "",
+                                                                                "title": "Conversation with Gemini",
+                                                                                "description": "",
+                                                                                "placeholderValue": null,
+                                                                                "numberOfCharacters": 0,
+                                                                                "children": [
+                                                                                  {
+                                                                                    "role": "AXStaticText",
+                                                                                    "subrole": "<AXValue 0x79393a4e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                    "roleDescription": "text",
+                                                                                    "value": "Conversation with Gemini",
+                                                                                    "title": "",
+                                                                                    "description": "",
+                                                                                    "placeholderValue": null,
+                                                                                    "numberOfCharacters": 0,
+                                                                                    "children": []
+                                                                                  }
+                                                                                ]
+                                                                              },
+                                                                              {
+                                                                                "role": "AXGroup",
+                                                                                "subrole": "<AXValue 0x79393a440> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                "roleDescription": "group",
+                                                                                "value": "",
+                                                                                "title": "",
+                                                                                "description": "",
+                                                                                "placeholderValue": null,
+                                                                                "numberOfCharacters": 0,
+                                                                                "children": [
+                                                                                  {
+                                                                                    "role": "AXGroup",
+                                                                                    "subrole": "<AXValue 0x79393a5e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                    "roleDescription": "group",
+                                                                                    "value": "",
+                                                                                    "title": "",
+                                                                                    "description": "",
+                                                                                    "placeholderValue": null,
+                                                                                    "numberOfCharacters": 0,
+                                                                                    "children": [
+                                                                                      {
+                                                                                        "role": "AXGroup",
+                                                                                        "subrole": "<AXValue 0x793939de0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                        "roleDescription": "group",
+                                                                                        "value": "",
+                                                                                        "title": "",
+                                                                                        "description": "",
+                                                                                        "placeholderValue": null,
+                                                                                        "numberOfCharacters": 0,
+                                                                                        "children": [
+                                                                                          {
+                                                                                            "role": "AXGroup",
+                                                                                            "subrole": "<AXValue 0x793939300> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                            "roleDescription": "group",
+                                                                                            "value": "",
+                                                                                            "title": "",
+                                                                                            "description": "",
+                                                                                            "placeholderValue": null,
+                                                                                            "numberOfCharacters": 0,
+                                                                                            "children": [
+                                                                                              {
+                                                                                                "role": "AXGroup",
+                                                                                                "subrole": "<AXValue 0x79393ad20> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                "roleDescription": "group",
+                                                                                                "value": "",
+                                                                                                "title": "",
+                                                                                                "description": "",
+                                                                                                "placeholderValue": null,
+                                                                                                "numberOfCharacters": 0,
+                                                                                                "children": [
+                                                                                                  {
+                                                                                                    "role": "AXGroup",
+                                                                                                    "subrole": "<AXValue 0x79393a380> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                    "roleDescription": "group",
+                                                                                                    "value": "",
+                                                                                                    "title": "",
+                                                                                                    "description": "",
+                                                                                                    "placeholderValue": null,
+                                                                                                    "numberOfCharacters": 0,
+                                                                                                    "children": [
+                                                                                                      {
+                                                                                                        "role": "AXGroup",
+                                                                                                        "subrole": "<AXValue 0x793939480> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                        "roleDescription": "group",
+                                                                                                        "value": "",
+                                                                                                        "title": "",
+                                                                                                        "description": "",
+                                                                                                        "placeholderValue": null,
+                                                                                                        "numberOfCharacters": 0,
+                                                                                                        "children": [
+                                                                                                          {
+                                                                                                            "role": "AXGroup",
+                                                                                                            "subrole": "<AXValue 0x79393b680> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                            "roleDescription": "group",
+                                                                                                            "value": "",
+                                                                                                            "title": "",
+                                                                                                            "description": "",
+                                                                                                            "placeholderValue": null,
+                                                                                                            "numberOfCharacters": 0,
+                                                                                                            "children": [
+                                                                                                              {
+                                                                                                                "role": "AXGroup",
+                                                                                                                "subrole": "<AXValue 0x79393bb80> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                "roleDescription": "group",
+                                                                                                                "value": "",
+                                                                                                                "title": "",
+                                                                                                                "description": "",
+                                                                                                                "placeholderValue": null,
+                                                                                                                "numberOfCharacters": 0,
+                                                                                                                "children": [
+                                                                                                                  {
+                                                                                                                    "role": "AXStaticText",
+                                                                                                                    "subrole": "<AXValue 0x79393b5e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                    "roleDescription": "text",
+                                                                                                                    "value": "Hi Henry",
+                                                                                                                    "title": "",
+                                                                                                                    "description": "",
+                                                                                                                    "placeholderValue": null,
+                                                                                                                    "numberOfCharacters": 0,
+                                                                                                                    "children": []
+                                                                                                                  }
+                                                                                                                ]
+                                                                                                              }
+                                                                                                            ]
+                                                                                                          }
+                                                                                                        ]
+                                                                                                      },
+                                                                                                      {
+                                                                                                        "role": "AXGroup",
+                                                                                                        "subrole": "<AXValue 0x79393a3a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                        "roleDescription": "group",
+                                                                                                        "value": "",
+                                                                                                        "title": "",
+                                                                                                        "description": "",
+                                                                                                        "placeholderValue": null,
+                                                                                                        "numberOfCharacters": 0,
+                                                                                                        "children": [
+                                                                                                          {
+                                                                                                            "role": "AXGroup",
+                                                                                                            "subrole": "<AXValue 0x79393bfe0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                            "roleDescription": "group",
+                                                                                                            "value": "",
+                                                                                                            "title": "",
+                                                                                                            "description": "",
+                                                                                                            "placeholderValue": null,
+                                                                                                            "numberOfCharacters": 0,
+                                                                                                            "children": [
+                                                                                                              {
+                                                                                                                "role": "AXHeading",
+                                                                                                                "subrole": "<AXValue 0x79393bec0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                "roleDescription": "heading",
+                                                                                                                "value": "",
+                                                                                                                "title": "What should we try today?",
+                                                                                                                "description": "",
+                                                                                                                "placeholderValue": null,
+                                                                                                                "numberOfCharacters": 0,
+                                                                                                                "children": [
+                                                                                                                  {
+                                                                                                                    "role": "AXGroup",
+                                                                                                                    "subrole": "<AXValue 0x79393a460> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                    "roleDescription": "group",
+                                                                                                                    "value": "",
+                                                                                                                    "title": "",
+                                                                                                                    "description": "",
+                                                                                                                    "placeholderValue": null,
+                                                                                                                    "numberOfCharacters": 0,
+                                                                                                                    "children": [
+                                                                                                                      {
+                                                                                                                        "role": "AXStaticText",
+                                                                                                                        "subrole": "<AXValue 0x79393bea0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                        "roleDescription": "text",
+                                                                                                                        "value": "What should we try today?",
+                                                                                                                        "title": "",
+                                                                                                                        "description": "",
+                                                                                                                        "placeholderValue": null,
+                                                                                                                        "numberOfCharacters": 0,
+                                                                                                                        "children": []
+                                                                                                                      }
+                                                                                                                    ]
+                                                                                                                  }
+                                                                                                                ]
+                                                                                                              }
+                                                                                                            ]
+                                                                                                          }
+                                                                                                        ]
+                                                                                                      }
+                                                                                                    ]
+                                                                                                  },
+                                                                                                  {
+                                                                                                    "role": "AXGroup",
+                                                                                                    "subrole": "<AXValue 0x79393b240> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                    "roleDescription": "group",
+                                                                                                    "value": "",
+                                                                                                    "title": "",
+                                                                                                    "description": "",
+                                                                                                    "placeholderValue": null,
+                                                                                                    "numberOfCharacters": 0,
+                                                                                                    "children": [
+                                                                                                      {
+                                                                                                        "role": "AXGroup",
+                                                                                                        "subrole": "<AXValue 0x79393b600> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                        "roleDescription": "group",
+                                                                                                        "value": "",
+                                                                                                        "title": "",
+                                                                                                        "description": "",
+                                                                                                        "placeholderValue": null,
+                                                                                                        "numberOfCharacters": 0,
+                                                                                                        "children": [
+                                                                                                          {
+                                                                                                            "role": "AXButton",
+                                                                                                            "subrole": "<AXValue 0x79393b140> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                            "roleDescription": "button",
+                                                                                                            "value": "",
+                                                                                                            "title": "",
+                                                                                                            "description": "For you, button, tap to use tool",
+                                                                                                            "placeholderValue": null,
+                                                                                                            "numberOfCharacters": 0,
+                                                                                                            "children": [
+                                                                                                              {
+                                                                                                                "role": "AXGroup",
+                                                                                                                "subrole": "<AXValue 0x79393be80> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                "roleDescription": "group",
+                                                                                                                "value": "",
+                                                                                                                "title": "",
+                                                                                                                "description": "",
+                                                                                                                "placeholderValue": null,
+                                                                                                                "numberOfCharacters": 0,
+                                                                                                                "children": [
+                                                                                                                  {
+                                                                                                                    "role": "AXStaticText",
+                                                                                                                    "subrole": "<AXValue 0x79393a4a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                    "roleDescription": "text",
+                                                                                                                    "value": "For you",
+                                                                                                                    "title": "",
+                                                                                                                    "description": "",
+                                                                                                                    "placeholderValue": null,
+                                                                                                                    "numberOfCharacters": 0,
+                                                                                                                    "children": []
+                                                                                                                  }
+                                                                                                                ]
+                                                                                                              }
+                                                                                                            ]
+                                                                                                          },
+                                                                                                          {
+                                                                                                            "role": "AXButton",
+                                                                                                            "subrole": "<AXValue 0x793939fe0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                            "roleDescription": "button",
+                                                                                                            "value": "",
+                                                                                                            "title": "",
+                                                                                                            "description": "🖼️ Create image, button, tap to use tool",
+                                                                                                            "placeholderValue": null,
+                                                                                                            "numberOfCharacters": 0,
+                                                                                                            "children": [
+                                                                                                              {
+                                                                                                                "role": "AXGroup",
+                                                                                                                "subrole": "<AXValue 0x79393a140> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                "roleDescription": "group",
+                                                                                                                "value": "",
+                                                                                                                "title": "",
+                                                                                                                "description": "",
+                                                                                                                "placeholderValue": null,
+                                                                                                                "numberOfCharacters": 0,
+                                                                                                                "children": [
+                                                                                                                  {
+                                                                                                                    "role": "AXStaticText",
+                                                                                                                    "subrole": "<AXValue 0x79393a3e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                    "roleDescription": "text",
+                                                                                                                    "value": "🖼️ Create image",
+                                                                                                                    "title": "",
+                                                                                                                    "description": "",
+                                                                                                                    "placeholderValue": null,
+                                                                                                                    "numberOfCharacters": 0,
+                                                                                                                    "children": []
+                                                                                                                  }
+                                                                                                                ]
+                                                                                                              }
+                                                                                                            ]
+                                                                                                          },
+                                                                                                          {
+                                                                                                            "role": "AXButton",
+                                                                                                            "subrole": "<AXValue 0x79393b1e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                            "roleDescription": "button",
+                                                                                                            "value": "",
+                                                                                                            "title": "",
+                                                                                                            "description": "🎸 Create music, button, tap to use tool",
+                                                                                                            "placeholderValue": null,
+                                                                                                            "numberOfCharacters": 0,
+                                                                                                            "children": [
+                                                                                                              {
+                                                                                                                "role": "AXGroup",
+                                                                                                                "subrole": "<AXValue 0x79393a5a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                "roleDescription": "group",
+                                                                                                                "value": "",
+                                                                                                                "title": "",
+                                                                                                                "description": "",
+                                                                                                                "placeholderValue": null,
+                                                                                                                "numberOfCharacters": 0,
+                                                                                                                "children": [
+                                                                                                                  {
+                                                                                                                    "role": "AXStaticText",
+                                                                                                                    "subrole": "<AXValue 0x793938f20> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                    "roleDescription": "text",
+                                                                                                                    "value": "🎸 Create music",
+                                                                                                                    "title": "",
+                                                                                                                    "description": "",
+                                                                                                                    "placeholderValue": null,
+                                                                                                                    "numberOfCharacters": 0,
+                                                                                                                    "children": []
+                                                                                                                  }
+                                                                                                                ]
+                                                                                                              }
+                                                                                                            ]
+                                                                                                          },
+                                                                                                          {
+                                                                                                            "role": "AXButton",
+                                                                                                            "subrole": "<AXValue 0x793939d80> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                            "roleDescription": "button",
+                                                                                                            "value": "",
+                                                                                                            "title": "",
+                                                                                                            "description": "Boost my day, button, tap to use tool",
+                                                                                                            "placeholderValue": null,
+                                                                                                            "numberOfCharacters": 0,
+                                                                                                            "children": [
+                                                                                                              {
+                                                                                                                "role": "AXGroup",
+                                                                                                                "subrole": "<AXValue 0x79393bf60> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                "roleDescription": "group",
+                                                                                                                "value": "",
+                                                                                                                "title": "",
+                                                                                                                "description": "",
+                                                                                                                "placeholderValue": null,
+                                                                                                                "numberOfCharacters": 0,
+                                                                                                                "children": [
+                                                                                                                  {
+                                                                                                                    "role": "AXStaticText",
+                                                                                                                    "subrole": "<AXValue 0x79393b2a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                    "roleDescription": "text",
+                                                                                                                    "value": "Boost my day",
+                                                                                                                    "title": "",
+                                                                                                                    "description": "",
+                                                                                                                    "placeholderValue": null,
+                                                                                                                    "numberOfCharacters": 0,
+                                                                                                                    "children": []
+                                                                                                                  }
+                                                                                                                ]
+                                                                                                              }
+                                                                                                            ]
+                                                                                                          },
+                                                                                                          {
+                                                                                                            "role": "AXButton",
+                                                                                                            "subrole": "<AXValue 0x793938200> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                            "roleDescription": "button",
+                                                                                                            "value": "",
+                                                                                                            "title": "",
+                                                                                                            "description": "Create video, button, tap to use tool",
+                                                                                                            "placeholderValue": null,
+                                                                                                            "numberOfCharacters": 0,
+                                                                                                            "children": [
+                                                                                                              {
+                                                                                                                "role": "AXGroup",
+                                                                                                                "subrole": "<AXValue 0x79393a300> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                "roleDescription": "group",
+                                                                                                                "value": "",
+                                                                                                                "title": "",
+                                                                                                                "description": "",
+                                                                                                                "placeholderValue": null,
+                                                                                                                "numberOfCharacters": 0,
+                                                                                                                "children": [
+                                                                                                                  {
+                                                                                                                    "role": "AXStaticText",
+                                                                                                                    "subrole": "<AXValue 0x793938f00> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                    "roleDescription": "text",
+                                                                                                                    "value": "Create video",
+                                                                                                                    "title": "",
+                                                                                                                    "description": "",
+                                                                                                                    "placeholderValue": null,
+                                                                                                                    "numberOfCharacters": 0,
+                                                                                                                    "children": []
+                                                                                                                  }
+                                                                                                                ]
+                                                                                                              }
+                                                                                                            ]
+                                                                                                          },
+                                                                                                          {
+                                                                                                            "role": "AXButton",
+                                                                                                            "subrole": "<AXValue 0x79393bdc0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                            "roleDescription": "button",
+                                                                                                            "value": "",
+                                                                                                            "title": "",
+                                                                                                            "description": "Write anything, button, tap to use tool",
+                                                                                                            "placeholderValue": null,
+                                                                                                            "numberOfCharacters": 0,
+                                                                                                            "children": [
+                                                                                                              {
+                                                                                                                "role": "AXGroup",
+                                                                                                                "subrole": "<AXValue 0x793939ee0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                "roleDescription": "group",
+                                                                                                                "value": "",
+                                                                                                                "title": "",
+                                                                                                                "description": "",
+                                                                                                                "placeholderValue": null,
+                                                                                                                "numberOfCharacters": 0,
+                                                                                                                "children": [
+                                                                                                                  {
+                                                                                                                    "role": "AXStaticText",
+                                                                                                                    "subrole": "<AXValue 0x793939dc0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                    "roleDescription": "text",
+                                                                                                                    "value": "Write anything",
+                                                                                                                    "title": "",
+                                                                                                                    "description": "",
+                                                                                                                    "placeholderValue": null,
+                                                                                                                    "numberOfCharacters": 0,
+                                                                                                                    "children": []
+                                                                                                                  }
+                                                                                                                ]
+                                                                                                              }
+                                                                                                            ]
+                                                                                                          }
+                                                                                                        ]
+                                                                                                      }
+                                                                                                    ]
+                                                                                                  }
+                                                                                                ]
+                                                                                              }
+                                                                                            ]
+                                                                                          }
+                                                                                        ]
+                                                                                      },
+                                                                                      {
+                                                                                        "role": "AXGroup",
+                                                                                        "subrole": "<AXValue 0x793939a40> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                        "roleDescription": "group",
+                                                                                        "value": "",
+                                                                                        "title": "",
+                                                                                        "description": "",
+                                                                                        "placeholderValue": null,
+                                                                                        "numberOfCharacters": 0,
+                                                                                        "children": []
+                                                                                      }
+                                                                                    ]
+                                                                                  }
+                                                                                ]
+                                                                              },
+                                                                              {
+                                                                                "role": "AXGroup",
+                                                                                "subrole": "<AXValue 0x79393a540> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                "roleDescription": "group",
+                                                                                "value": "",
+                                                                                "title": "",
+                                                                                "description": "",
+                                                                                "placeholderValue": null,
+                                                                                "numberOfCharacters": 0,
+                                                                                "children": [
+                                                                                  {
+                                                                                    "role": "AXGroup",
+                                                                                    "subrole": "AXApplicationGroup",
+                                                                                    "roleDescription": "group",
+                                                                                    "value": "",
+                                                                                    "title": "",
+                                                                                    "description": "",
+                                                                                    "placeholderValue": null,
+                                                                                    "numberOfCharacters": 0,
+                                                                                    "children": [
+                                                                                      {
+                                                                                        "role": "AXGroup",
+                                                                                        "subrole": "<AXValue 0x79393a200> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                        "roleDescription": "group",
+                                                                                        "value": "",
+                                                                                        "title": "",
+                                                                                        "description": "",
+                                                                                        "placeholderValue": null,
+                                                                                        "numberOfCharacters": 0,
+                                                                                        "children": []
+                                                                                      },
+                                                                                      {
+                                                                                        "role": "AXGroup",
+                                                                                        "subrole": "<AXValue 0x7939384a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                        "roleDescription": "group",
+                                                                                        "value": "",
+                                                                                        "title": "",
+                                                                                        "description": "",
+                                                                                        "placeholderValue": null,
+                                                                                        "numberOfCharacters": 0,
+                                                                                        "children": [
+                                                                                          {
+                                                                                            "role": "AXGroup",
+                                                                                            "subrole": "<AXValue 0x79393a320> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                            "roleDescription": "group",
+                                                                                            "value": "",
+                                                                                            "title": "",
+                                                                                            "description": "",
+                                                                                            "placeholderValue": null,
+                                                                                            "numberOfCharacters": 0,
+                                                                                            "children": []
+                                                                                          },
+                                                                                          {
+                                                                                            "role": "AXGroup",
+                                                                                            "subrole": "<AXValue 0x793939fc0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                            "roleDescription": "group",
+                                                                                            "value": "",
+                                                                                            "title": "",
+                                                                                            "description": "",
+                                                                                            "placeholderValue": null,
+                                                                                            "numberOfCharacters": 0,
+                                                                                            "children": [
+                                                                                              {
+                                                                                                "role": "AXGroup",
+                                                                                                "subrole": "<AXValue 0x793939340> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                "roleDescription": "group",
+                                                                                                "value": "",
+                                                                                                "title": "",
+                                                                                                "description": "",
+                                                                                                "placeholderValue": null,
+                                                                                                "numberOfCharacters": 0,
+                                                                                                "children": [
+                                                                                                  {
+                                                                                                    "role": "AXGroup",
+                                                                                                    "subrole": "<AXValue 0x793939f20> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                    "roleDescription": "group",
+                                                                                                    "value": "",
+                                                                                                    "title": "",
+                                                                                                    "description": "",
+                                                                                                    "placeholderValue": null,
+                                                                                                    "numberOfCharacters": 0,
+                                                                                                    "children": [
+                                                                                                      {
+                                                                                                        "role": "AXGroup",
+                                                                                                        "subrole": "<AXValue 0x79393b800> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                        "roleDescription": "group",
+                                                                                                        "value": "",
+                                                                                                        "title": "",
+                                                                                                        "description": "",
+                                                                                                        "placeholderValue": null,
+                                                                                                        "numberOfCharacters": 0,
+                                                                                                        "children": [
+                                                                                                          {
+                                                                                                            "role": "AXGroup",
+                                                                                                            "subrole": "<AXValue 0x79393bca0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                            "roleDescription": "group",
+                                                                                                            "value": "",
+                                                                                                            "title": "",
+                                                                                                            "description": "",
+                                                                                                            "placeholderValue": null,
+                                                                                                            "numberOfCharacters": 0,
+                                                                                                            "children": [
+                                                                                                              {
+                                                                                                                "role": "AXTextArea",
+                                                                                                                "subrole": "<AXValue 0x793938fa0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                "roleDescription": "text entry area",
+                                                                                                                "value": "Ask Gemini\n",
+                                                                                                                "title": "",
+                                                                                                                "description": "Enter a prompt for Gemini",
+                                                                                                                "placeholderValue": null,
+                                                                                                                "numberOfCharacters": 11,
+                                                                                                                "children": [
+                                                                                                                  {
+                                                                                                                    "role": "AXGroup",
+                                                                                                                    "subrole": "<AXValue 0x793939f40> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                    "roleDescription": "group",
+                                                                                                                    "value": "",
+                                                                                                                    "title": "",
+                                                                                                                    "description": "",
+                                                                                                                    "placeholderValue": null,
+                                                                                                                    "numberOfCharacters": 0,
+                                                                                                                    "children": [
+                                                                                                                      {
+                                                                                                                        "role": "AXStaticText",
+                                                                                                                        "subrole": "<AXValue 0x793939d40> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                        "roleDescription": "text",
+                                                                                                                        "value": "Ask Gemini",
+                                                                                                                        "title": "",
+                                                                                                                        "description": "",
+                                                                                                                        "placeholderValue": null,
+                                                                                                                        "numberOfCharacters": 0,
+                                                                                                                        "children": []
+                                                                                                                      }
+                                                                                                                    ]
+                                                                                                                  },
+                                                                                                                  {
+                                                                                                                    "role": "AXGroup",
+                                                                                                                    "subrole": "<AXValue 0x79393b360> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                    "roleDescription": "group",
+                                                                                                                    "value": "",
+                                                                                                                    "title": "",
+                                                                                                                    "description": "",
+                                                                                                                    "placeholderValue": null,
+                                                                                                                    "numberOfCharacters": 0,
+                                                                                                                    "children": [
+                                                                                                                      {
+                                                                                                                        "role": "AXGroup",
+                                                                                                                        "subrole": "<AXValue 0x79393afe0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                        "roleDescription": "group",
+                                                                                                                        "value": "",
+                                                                                                                        "title": "\n",
+                                                                                                                        "description": "",
+                                                                                                                        "placeholderValue": null,
+                                                                                                                        "numberOfCharacters": 0,
+                                                                                                                        "children": []
+                                                                                                                      }
+                                                                                                                    ]
+                                                                                                                  }
+                                                                                                                ],
+                                                                                                                "focused": true
+                                                                                                              },
+                                                                                                              {
+                                                                                                                "role": "AXTextArea",
+                                                                                                                "subrole": "<AXValue 0x79393bb00> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                "roleDescription": "text entry area",
+                                                                                                                "value": "",
+                                                                                                                "title": "",
+                                                                                                                "description": "",
+                                                                                                                "placeholderValue": null,
+                                                                                                                "numberOfCharacters": 0,
+                                                                                                                "children": []
+                                                                                                              }
+                                                                                                            ],
+                                                                                                            "ancestorOfFocused": true
+                                                                                                          }
+                                                                                                        ],
+                                                                                                        "ancestorOfFocused": true
+                                                                                                      }
+                                                                                                    ],
+                                                                                                    "ancestorOfFocused": true
+                                                                                                  }
+                                                                                                ],
+                                                                                                "ancestorOfFocused": true
+                                                                                              },
+                                                                                              {
+                                                                                                "role": "AXGroup",
+                                                                                                "subrole": "<AXValue 0x79393b020> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                "roleDescription": "group",
+                                                                                                "value": "",
+                                                                                                "title": "",
+                                                                                                "description": "",
+                                                                                                "placeholderValue": null,
+                                                                                                "numberOfCharacters": 0,
+                                                                                                "children": [
+                                                                                                  {
+                                                                                                    "role": "AXGroup",
+                                                                                                    "subrole": "<AXValue 0x79393b520> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                    "roleDescription": "group",
+                                                                                                    "value": "",
+                                                                                                    "title": "",
+                                                                                                    "description": "",
+                                                                                                    "placeholderValue": null,
+                                                                                                    "numberOfCharacters": 0,
+                                                                                                    "children": [
+                                                                                                      {
+                                                                                                        "role": "AXPopUpButton",
+                                                                                                        "subrole": "<AXValue 0x79393b7c0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                        "roleDescription": "pop up button",
+                                                                                                        "value": "",
+                                                                                                        "title": "",
+                                                                                                        "description": "Open upload file menu",
+                                                                                                        "placeholderValue": null,
+                                                                                                        "numberOfCharacters": 0,
+                                                                                                        "children": []
+                                                                                                      }
+                                                                                                    ]
+                                                                                                  }
+                                                                                                ]
+                                                                                              },
+                                                                                              {
+                                                                                                "role": "AXGroup",
+                                                                                                "subrole": "<AXValue 0x793939200> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                "roleDescription": "group",
+                                                                                                "value": "",
+                                                                                                "title": "",
+                                                                                                "description": "",
+                                                                                                "placeholderValue": null,
+                                                                                                "numberOfCharacters": 0,
+                                                                                                "children": [
+                                                                                                  {
+                                                                                                    "role": "AXPopUpButton",
+                                                                                                    "subrole": "<AXValue 0x79393b560> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                    "roleDescription": "pop up button",
+                                                                                                    "value": "",
+                                                                                                    "title": "Tools",
+                                                                                                    "description": "",
+                                                                                                    "placeholderValue": null,
+                                                                                                    "numberOfCharacters": 0,
+                                                                                                    "children": []
+                                                                                                  }
+                                                                                                ]
+                                                                                              },
+                                                                                              {
+                                                                                                "role": "AXGroup",
+                                                                                                "subrole": "<AXValue 0x79393bc00> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                "roleDescription": "group",
+                                                                                                "value": "",
+                                                                                                "title": "",
+                                                                                                "description": "",
+                                                                                                "placeholderValue": null,
+                                                                                                "numberOfCharacters": 0,
+                                                                                                "children": [
+                                                                                                  {
+                                                                                                    "role": "AXGroup",
+                                                                                                    "subrole": "<AXValue 0x79393bd40> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                    "roleDescription": "group",
+                                                                                                    "value": "",
+                                                                                                    "title": "",
+                                                                                                    "description": "",
+                                                                                                    "placeholderValue": null,
+                                                                                                    "numberOfCharacters": 0,
+                                                                                                    "children": [
+                                                                                                      {
+                                                                                                        "role": "AXPopUpButton",
+                                                                                                        "subrole": "<AXValue 0x79393bf40> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                        "roleDescription": "pop up button",
+                                                                                                        "value": "",
+                                                                                                        "title": "",
+                                                                                                        "description": "Open mode picker",
+                                                                                                        "placeholderValue": null,
+                                                                                                        "numberOfCharacters": 0,
+                                                                                                        "children": []
+                                                                                                      }
+                                                                                                    ]
+                                                                                                  },
+                                                                                                  {
+                                                                                                    "role": "AXGroup",
+                                                                                                    "subrole": "<AXValue 0x79393bbe0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                    "roleDescription": "group",
+                                                                                                    "value": "",
+                                                                                                    "title": "",
+                                                                                                    "description": "",
+                                                                                                    "placeholderValue": null,
+                                                                                                    "numberOfCharacters": 0,
+                                                                                                    "children": [
+                                                                                                      {
+                                                                                                        "role": "AXGroup",
+                                                                                                        "subrole": "<AXValue 0x7939395a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                        "roleDescription": "group",
+                                                                                                        "value": "",
+                                                                                                        "title": "",
+                                                                                                        "description": "",
+                                                                                                        "placeholderValue": null,
+                                                                                                        "numberOfCharacters": 0,
+                                                                                                        "children": [
+                                                                                                          {
+                                                                                                            "role": "AXCheckBox",
+                                                                                                            "subrole": "AXToggleButton",
+                                                                                                            "roleDescription": "toggle button",
+                                                                                                            "value": "",
+                                                                                                            "title": "",
+                                                                                                            "description": "Microphone",
+                                                                                                            "placeholderValue": null,
+                                                                                                            "numberOfCharacters": 0,
+                                                                                                            "children": [
+                                                                                                              {
+                                                                                                                "role": "AXGroup",
+                                                                                                                "subrole": "<AXValue 0x79393ba80> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                                                "roleDescription": "group",
+                                                                                                                "value": "",
+                                                                                                                "title": "",
+                                                                                                                "description": "",
+                                                                                                                "placeholderValue": null,
+                                                                                                                "numberOfCharacters": 0,
+                                                                                                                "children": []
+                                                                                                              }
+                                                                                                            ]
+                                                                                                          }
+                                                                                                        ]
+                                                                                                      }
+                                                                                                    ]
+                                                                                                  }
+                                                                                                ]
+                                                                                              }
+                                                                                            ],
+                                                                                            "ancestorOfFocused": true
+                                                                                          }
+                                                                                        ],
+                                                                                        "ancestorOfFocused": true
+                                                                                      }
+                                                                                    ],
+                                                                                    "ancestorOfFocused": true
+                                                                                  },
+                                                                                  {
+                                                                                    "role": "AXGroup",
+                                                                                    "subrole": "<AXValue 0x7939385a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                    "roleDescription": "group",
+                                                                                    "value": "",
+                                                                                    "title": "",
+                                                                                    "description": "",
+                                                                                    "placeholderValue": null,
+                                                                                    "numberOfCharacters": 0,
+                                                                                    "children": [
+                                                                                      {
+                                                                                        "role": "AXGroup",
+                                                                                        "subrole": "<AXValue 0x79393bac0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                                                        "roleDescription": "group",
+                                                                                        "value": "",
+                                                                                        "title": "\n",
+                                                                                        "description": "",
+                                                                                        "placeholderValue": null,
+                                                                                        "numberOfCharacters": 0,
+                                                                                        "children": []
+                                                                                      }
+                                                                                    ]
+                                                                                  }
+                                                                                ],
+                                                                                "ancestorOfFocused": true
+                                                                              }
+                                                                            ],
+                                                                            "ancestorOfFocused": true
+                                                                          }
+                                                                        ],
+                                                                        "ancestorOfFocused": true
+                                                                      }
+                                                                    ],
+                                                                    "ancestorOfFocused": true
+                                                                  }
+                                                                ],
+                                                                "ancestorOfFocused": true
+                                                              }
+                                                            ],
+                                                            "ancestorOfFocused": true
+                                                          }
+                                                        ],
+                                                        "ancestorOfFocused": true
+                                                      },
+                                                      {
+                                                        "role": "AXGroup",
+                                                        "subrole": "<AXValue 0x79393a500> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                        "roleDescription": "group",
+                                                        "value": "",
+                                                        "title": "",
+                                                        "description": "",
+                                                        "placeholderValue": null,
+                                                        "numberOfCharacters": 0,
+                                                        "children": []
+                                                      }
+                                                    ],
+                                                    "ancestorOfFocused": true
+                                                  },
+                                                  {
+                                                    "role": "AXGroup",
+                                                    "subrole": "<AXValue 0x793939980> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                    "roleDescription": "group",
+                                                    "value": "",
+                                                    "title": "",
+                                                    "description": "",
+                                                    "placeholderValue": null,
+                                                    "numberOfCharacters": 0,
+                                                    "children": [
+                                                      {
+                                                        "role": "AXGroup",
+                                                        "subrole": "<AXValue 0x793939e40> {value = error:-25212 type = kAXValueAXErrorType}",
+                                                        "roleDescription": "group",
+                                                        "value": "",
+                                                        "title": "",
+                                                        "description": "",
+                                                        "placeholderValue": null,
+                                                        "numberOfCharacters": 0,
+                                                        "children": []
+                                                      }
+                                                    ]
+                                                  }
+                                                ],
+                                                "ancestorOfFocused": true
+                                              }
+                                            ],
+                                            "ancestorOfFocused": true
+                                          }
+                                        ],
+                                        "ancestorOfFocused": true
+                                      }
+                                    ],
+                                    "ancestorOfFocused": true
+                                  }
+                                ],
+                                "ancestorOfFocused": true
+                              }
+                            ],
+                            "ancestorOfFocused": true
+                          }
+                        ],
+                        "ancestorOfFocused": true
+                      },
+                      {
+                        "role": "AXGroup",
+                        "subrole": "<AXValue 0x793938680> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "group",
+                        "value": "",
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [
+                          {
+                            "role": "AXGroup",
+                            "subrole": "<AXValue 0x79393a020> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "group",
+                            "value": "",
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXButton",
+                                "subrole": "<AXValue 0x79393a400> {value = error:-25212 type = kAXValueAXErrorType}",
+                                "roleDescription": "button",
+                                "value": "",
+                                "title": "",
+                                "description": "Back",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": []
+                              },
+                              {
+                                "role": "AXButton",
+                                "subrole": "<AXValue 0x79393a3c0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                "roleDescription": "button",
+                                "value": "",
+                                "title": "",
+                                "description": "Refresh",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "<AXValue 0x793939640> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "group",
+                            "value": "",
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": []
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "<AXValue 0x7939398e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "group",
+                            "value": "",
+                            "title": "",
+                            "description": "",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 0,
+                            "children": [
+                              {
+                                "role": "AXGroup",
+                                "subrole": "AXWebApplication",
+                                "roleDescription": "group",
+                                "value": "",
+                                "title": "",
+                                "description": "gemini.google.com",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXStaticText",
+                                    "subrole": "<AXValue 0x79393bae0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                    "roleDescription": "text",
+                                    "value": "gemini.google.com",
+                                    "title": "",
+                                    "description": "",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 17,
+                                    "children": []
+                                  }
+                                ]
+                              },
+                              {
+                                "role": "AXButton",
+                                "subrole": "<AXValue 0x79393b440> {value = error:-25212 type = kAXValueAXErrorType}",
+                                "roleDescription": "button",
+                                "value": "",
+                                "title": "",
+                                "description": "Zoom: 90%",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": []
+                              },
+                              {
+                                "role": "AXGroup",
+                                "subrole": "<AXValue 0x79393a1c0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                "roleDescription": "group",
+                                "value": "",
+                                "title": "",
+                                "description": "",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 0,
+                                "children": [
+                                  {
+                                    "role": "AXButton",
+                                    "subrole": "<AXValue 0x793939da0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                    "roleDescription": "button",
+                                    "value": "",
+                                    "title": "",
+                                    "description": "Open sidebar search (⇧⌘E)",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 0,
+                                    "children": []
+                                  },
+                                  {
+                                    "role": "AXPopUpButton",
+                                    "subrole": "<AXValue 0x79393a2e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                    "roleDescription": "pop up button",
+                                    "value": "",
+                                    "title": "",
+                                    "description": "Settings and more (⌘⌃,)",
+                                    "placeholderValue": null,
+                                    "numberOfCharacters": 0,
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "<AXValue 0x79393a420> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "text",
+                        "value": "Google Gemini",
+                        "title": "",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 13,
+                        "children": []
+                      }
+                    ],
+                    "ancestorOfFocused": true
+                  }
+                ],
+                "ancestorOfFocused": true
+              },
+              {
+                "role": "AXGroup",
+                "subrole": "<AXValue 0x79393a480> {value = error:-25212 type = kAXValueAXErrorType}",
+                "roleDescription": "group",
+                "value": "",
+                "title": "",
+                "description": "",
+                "placeholderValue": null,
+                "numberOfCharacters": 0,
+                "children": []
+              }
+            ],
+            "ancestorOfFocused": true
+          }
+        ],
+        "ancestorOfFocused": true
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXCloseButton",
+        "roleDescription": "close button",
+        "value": null,
+        "title": "<AXValue 0x793938a20> {value = error:-25212 type = kAXValueAXErrorType}",
+        "description": "<AXValue 0x7939388a0> {value = error:-25205 type = kAXValueAXErrorType}",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXFullScreenButton",
+        "roleDescription": "full screen button",
+        "value": null,
+        "title": "<AXValue 0x7939386c0> {value = error:-25212 type = kAXValueAXErrorType}",
+        "description": "<AXValue 0x793939960> {value = error:-25205 type = kAXValueAXErrorType}",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "<AXValue 0x793939e60> {value = error:-25205 type = kAXValueAXErrorType}",
+            "roleDescription": "group",
+            "value": null,
+            "title": "<AXValue 0x79393b260> {value = error:-25205 type = kAXValueAXErrorType}",
+            "description": "<AXValue 0x793939f00> {value = error:-25205 type = kAXValueAXErrorType}",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": []
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXMinimizeButton",
+        "roleDescription": "minimize button",
+        "value": null,
+        "title": "<AXValue 0x7939394e0> {value = error:-25212 type = kAXValueAXErrorType}",
+        "description": "<AXValue 0x79393a680> {value = error:-25205 type = kAXValueAXErrorType}",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      }
+    ],
+    "ancestorOfFocused": true
+  }
+}

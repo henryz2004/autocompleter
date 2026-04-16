@@ -1,0 +1,33 @@
+{
+  "extractor": "CodexExtractor",
+  "app": "Codex",
+  "turns": [
+    {
+      "speaker": "User",
+      "text": "current dashboard + watchdog state"
+    },
+    {
+      "speaker": "Assistant",
+      "timestamp": "8:59 PM",
+      "text": "On this machine, I can see the repo’s local watchdog history"
+    },
+    {
+      "speaker": "User",
+      "text": "host target, check the md files"
+    },
+    {
+      "speaker": "Assistant",
+      "timestamp": "9:31 PM",
+      "text": "I checked the VM directly"
+    },
+    {
+      "speaker": "User",
+      "text": "refine the chart and alerts"
+    },
+    {
+      "speaker": "Assistant",
+      "timestamp": "9:39 PM",
+      "text": "I tightened both sides of the noise problem"
+    }
+  ]
+}

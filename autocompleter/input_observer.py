@@ -420,9 +420,9 @@ class InputObserver:
         """Try to extract structured conversation turns from a chat window.
 
         Uses app-specific extractors when available (Gemini, Slack, ChatGPT,
-        Claude Desktop, iMessage). Falls back to a generic heuristic for
-        unknown apps. For browsers, *window_title* is used to pick the
-        right extractor.
+        Claude Desktop, Codex, iMessage, WhatsApp, Discord). Falls back to a
+        generic heuristic for unknown apps. For browsers, *window_title* is
+        used to pick the right extractor.
 
         Results are cached for ``_CONVERSATION_CACHE_TTL`` seconds to avoid
         expensive AX tree traversals on every observer poll cycle.

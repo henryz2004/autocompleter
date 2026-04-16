@@ -1,0 +1,22 @@
+{
+  "extractor": "GeminiExtractor",
+  "app": "Google Gemini",
+  "turns": [
+    {
+      "speaker": "User",
+      "text": "should i be concerned by these things in my w2?"
+    },
+    {
+      "speaker": "Gemini",
+      "text": "you should not be concerned"
+    },
+    {
+      "speaker": "User",
+      "text": "is no state id number bad?"
+    },
+    {
+      "speaker": "Gemini",
+      "text": "not inherently bad"
+    }
+  ]
+}

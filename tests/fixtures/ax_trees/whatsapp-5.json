@@ -1,0 +1,780 @@
+{
+  "artifactType": "ax_tree_fixture_v1",
+  "schemaVersion": 1,
+  "captureTool": "dump_ax_tree_json.py",
+  "app": "‎WhatsApp",
+  "windowTitle": "‎WhatsApp",
+  "sourceUrl": "",
+  "capturedAt": "2026-04-16T01:16:59",
+  "macosVersion": "26.2",
+  "notes": "what was on screen",
+  "captureSettings": {
+    "maxDepth": 35
+  },
+  "focusedElement": {
+    "role": "AXTextArea",
+    "roleDescription": "text entry area",
+    "description": "‎Compose message",
+    "value": null,
+    "placeholderValue": null,
+    "numberOfCharacters": 0
+  },
+  "tree": {
+    "role": "AXWindow",
+    "subrole": "AXStandardWindow",
+    "roleDescription": "standard window",
+    "value": null,
+    "title": "‎WhatsApp",
+    "description": "<AXValue 0x7938e96e0> {value = error:-25205 type = kAXValueAXErrorType}",
+    "placeholderValue": null,
+    "numberOfCharacters": null,
+    "children": [
+      {
+        "role": "AXGroup",
+        "subrole": "iOSContentGroup",
+        "roleDescription": "group",
+        "value": null,
+        "title": "<AXValue 0x7938e9ca0> {value = error:-25205 type = kAXValueAXErrorType}",
+        "description": "<AXValue 0x7938e9e00> {value = error:-25205 type = kAXValueAXErrorType}",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "<AXValue 0x7938e9940> {value = error:-25212 type = kAXValueAXErrorType}",
+            "roleDescription": "group",
+            "value": null,
+            "title": "<AXValue 0x7938e9c80> {value = error:-25212 type = kAXValueAXErrorType}",
+            "description": "<AXValue 0x7938e9ba0> {value = error:-25212 type = kAXValueAXErrorType}",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "<AXValue 0x7938e9d20> {value = error:-25212 type = kAXValueAXErrorType}",
+                "roleDescription": "group",
+                "value": null,
+                "title": "<AXValue 0x7938e9c00> {value = error:-25212 type = kAXValueAXErrorType}",
+                "description": "<AXValue 0x7938e9d80> {value = error:-25212 type = kAXValueAXErrorType}",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": [
+                  {
+                    "role": "AXGroup",
+                    "subrole": "<AXValue 0x7938e9860> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "roleDescription": "group",
+                    "value": null,
+                    "title": "<AXValue 0x7938e9b40> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "description": "<AXValue 0x7938e98c0> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": [
+                      {
+                        "role": "AXGroup",
+                        "subrole": "<AXValue 0x7938e9ce0> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "collection",
+                        "value": null,
+                        "title": "<AXValue 0x7938ea340> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "description": "‎Main Navigation",
+                        "placeholderValue": null,
+                        "numberOfCharacters": null,
+                        "children": [
+                          {
+                            "role": "AXButton",
+                            "subrole": "<AXValue 0x79390b160> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "<AXValue 0x793908580> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "description": "‎Chats",
+                            "placeholderValue": null,
+                            "numberOfCharacters": null,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "<AXValue 0x79390b0a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "<AXValue 0x793908440> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "description": "‎Calls",
+                            "placeholderValue": null,
+                            "numberOfCharacters": null,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "<AXValue 0x793908d40> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "<AXValue 0x79390a2a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "description": "‎Updates",
+                            "placeholderValue": null,
+                            "numberOfCharacters": null,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "<AXValue 0x7939083a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "<AXValue 0x793908900> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "description": "‎Archived",
+                            "placeholderValue": null,
+                            "numberOfCharacters": null,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "<AXValue 0x7939082c0> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "<AXValue 0x793908500> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "description": "‎Starred",
+                            "placeholderValue": null,
+                            "numberOfCharacters": null,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "<AXValue 0x7939085a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "<AXValue 0x79390bcc0> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "description": "‎Chats",
+                            "placeholderValue": null,
+                            "numberOfCharacters": null,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "role": "AXGroup",
+                        "subrole": "<AXValue 0x7939089c0> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "group",
+                        "value": null,
+                        "title": "<AXValue 0x793908460> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "description": "<AXValue 0x79390a260> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "placeholderValue": null,
+                        "numberOfCharacters": null,
+                        "children": [
+                          {
+                            "role": "AXButton",
+                            "subrole": "<AXValue 0x793908a20> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "<AXValue 0x79390b180> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "description": "‎Settings",
+                            "placeholderValue": null,
+                            "numberOfCharacters": null,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "<AXValue 0x79390be00> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "button",
+                            "value": null,
+                            "title": "<AXValue 0x79390b280> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "description": "‎Settings",
+                            "placeholderValue": null,
+                            "numberOfCharacters": null,
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "role": "AXSplitter",
+                "subrole": "<AXValue 0x793908480> {value = error:-25212 type = kAXValueAXErrorType}",
+                "roleDescription": "splitter",
+                "value": null,
+                "title": "<AXValue 0x79390b320> {value = error:-25212 type = kAXValueAXErrorType}",
+                "description": "<AXValue 0x793908a60> {value = error:-25212 type = kAXValueAXErrorType}",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              },
+              {
+                "role": "AXGroup",
+                "subrole": "<AXValue 0x793909920> {value = error:-25212 type = kAXValueAXErrorType}",
+                "roleDescription": "group",
+                "value": null,
+                "title": "<AXValue 0x79390b4a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                "description": "<AXValue 0x79390b060> {value = error:-25212 type = kAXValueAXErrorType}",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": [
+                  {
+                    "role": "AXGroup",
+                    "subrole": "<AXValue 0x79390bd40> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "roleDescription": "Nav bar",
+                    "value": null,
+                    "title": "<AXValue 0x79390b260> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "description": "<AXValue 0x79390b220> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": [
+                      {
+                        "role": "AXHeading",
+                        "subrole": "<AXValue 0x793908980> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "heading",
+                        "value": null,
+                        "title": "<AXValue 0x79390bce0> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "description": "‎Chats",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 6,
+                        "children": []
+                      },
+                      {
+                        "role": "AXButton",
+                        "subrole": "<AXValue 0x79390b240> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "<AXValue 0x79390adc0> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "description": "‎New Chat",
+                        "placeholderValue": null,
+                        "numberOfCharacters": null,
+                        "children": []
+                      },
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "AXSearchField",
+                        "roleDescription": "text",
+                        "value": null,
+                        "title": "<AXValue 0x79390afc0> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "description": "‎Search",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 7,
+                        "children": []
+                      },
+                      {
+                        "role": "AXButton",
+                        "subrole": "<AXValue 0x7938e9920> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "button",
+                        "value": null,
+                        "title": "<AXValue 0x7938e9d40> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "description": "<AXValue 0x7938e9a40> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "placeholderValue": null,
+                        "numberOfCharacters": null,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "role": "AXGroup",
+                    "subrole": "<AXValue 0x7938e9b60> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "roleDescription": "group",
+                    "value": null,
+                    "title": "<AXValue 0x7938e9ae0> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "description": "<AXValue 0x7938e9dc0> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": [
+                      {
+                        "role": "AXGroup",
+                        "subrole": "<AXValue 0x7938e9880> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "table",
+                        "value": null,
+                        "title": "<AXValue 0x7938e96a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "description": "‎List of chats",
+                        "placeholderValue": null,
+                        "numberOfCharacters": null,
+                        "children": [
+                          {
+                            "role": "AXButton",
+                            "subrole": "<AXValue 0x7938e98e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "button",
+                            "value": "‎Message from ‎Maybe Aaron, Hey Adi, I can provide some intel if you DM me, April15,at11:14 AM, ‎Received in Fusen Ignite",
+                            "title": "<AXValue 0x7938e9b20> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "description": "Fusen Ignite, ‎3 unread messages",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 121,
+                            "children": []
+                          },
+                          {
+                            "role": "AXStaticText",
+                            "subrole": "<AXValue 0x7938ea2e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "text",
+                            "value": "‎Message from Jerry Wu, Dream life, April14,at5:44 PM, ‎Received in Wework survivors",
+                            "title": "<AXValue 0x7938e95e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "description": "Wework survivors",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 84,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "<AXValue 0x7938e9620> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "button",
+                            "value": "‎Message from ‎Maybe Thenuka Karunaratne, Hey y’all, we’re looking to move into an office space for ~10 people. Lots of light, meeting rooms, and proximity to transit is important! We’d ideally love to find a spot in/around San Francisco’s financial district. If anyone has leads, let me know!, April6,at9:42 AM, ‎Received in WndrCo Founders",
+                            "title": "<AXValue 0x7938e9780> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "description": "WndrCo Founders, ‎1 unread message",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 341,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "<AXValue 0x7938ea300> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "button",
+                            "value": "‎Your message, was wondering if you were interested in chatting, March29,at8:14 PM, ‎Sent to + 4 4,7 3 9 8,6 6 4 4 5 1, ‎Delivered",
+                            "title": "<AXValue 0x7938ea320> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "description": "+ 4 4,7 3 9 8,6 6 4 4 5 1",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 130,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "<AXValue 0x7938e9e60> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "button",
+                            "value": "‎Mehdi changed their phone number to a new number",
+                            "title": "<AXValue 0x7938ea2c0> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "description": "Mehdi Amara",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 49,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "<AXValue 0x7938ea380> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "button",
+                            "value": "‎message, budget really depends, but for me secure garage, room by myself, bathroom by myyself, in-unit washer/dryer would be most important for me (likely in that order)?, March19,at2:43 AM, ‎Received from Byungkyu Park",
+                            "title": "<AXValue 0x7938e9560> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "description": "Byungkyu Park",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 220,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "<AXValue 0x7938e9ee0> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "button",
+                            "value": "‎message, 2.5 months since early jan, March18,at3:47 PM, ‎Received from Akshay Iyer",
+                            "title": "<AXValue 0x7938e9f20> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "description": "Akshay Iyer",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 83,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "<AXValue 0x7938ea280> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "button",
+                            "value": "‎message, Lolol np actually give it a few days, March18,at1:27 PM, ‎Received from Richard Song",
+                            "title": "<AXValue 0x7938e9e20> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "description": "Richard Song",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 94,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "<AXValue 0x7938e9ec0> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "button",
+                            "value": "‎Your message, [openclaw] i’m following.\n\nit still shows no tab is connected.\n\ncould you check if the openclaw icon is green or active on the tab you want me to search?, March5,at3:47 PM, ‎Sent to ‎You, ‎Red",
+                            "title": "<AXValue 0x7938e94e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "description": "+1 (508) 335-9713",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 207,
+                            "children": []
+                          },
+                          {
+                            "role": "AXButton",
+                            "subrole": "<AXValue 0x7938e9500> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "button",
+                            "value": "‎Your message, thank you, March4,at10:01 PM, ‎Sent to + 5 2,9 9 8,2 2 7,2 5 1 7, ‎Red",
+                            "title": "<AXValue 0x7938e94c0> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "description": "Bahía Tolok Hotel Boutique",
+                            "placeholderValue": null,
+                            "numberOfCharacters": 85,
+                            "children": []
+                          },
+                          {
+                            "role": "AXGroup",
+                            "subrole": "<AXValue 0x7938e9580> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "roleDescription": "group",
+                            "value": null,
+                            "title": "<AXValue 0x7938e97c0> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "description": "<AXValue 0x7938e99e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                            "placeholderValue": null,
+                            "numberOfCharacters": null,
+                            "children": [
+                              {
+                                "role": "AXStaticText",
+                                "subrole": "<AXValue 0x793908940> {value = error:-25212 type = kAXValueAXErrorType}",
+                                "roleDescription": "text",
+                                "value": null,
+                                "title": "<AXValue 0x79390b1c0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                "description": "‎Your personal messages are end-to-end encrypted",
+                                "placeholderValue": null,
+                                "numberOfCharacters": 48,
+                                "children": []
+                              },
+                              {
+                                "role": "AXLink",
+                                "subrole": "<AXValue 0x79390a220> {value = error:-25212 type = kAXValueAXErrorType}",
+                                "roleDescription": "link",
+                                "value": null,
+                                "title": "<AXValue 0x7939082a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                                "description": "end-to-end encrypted",
+                                "placeholderValue": null,
+                                "numberOfCharacters": null,
+                                "children": []
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "role": "AXSplitter",
+                "subrole": "<AXValue 0x79390b120> {value = error:-25212 type = kAXValueAXErrorType}",
+                "roleDescription": "splitter",
+                "value": null,
+                "title": "<AXValue 0x79390af60> {value = error:-25212 type = kAXValueAXErrorType}",
+                "description": "<AXValue 0x7939082e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              },
+              {
+                "role": "AXGroup",
+                "subrole": "<AXValue 0x793908da0> {value = error:-25212 type = kAXValueAXErrorType}",
+                "roleDescription": "Nav bar",
+                "value": null,
+                "title": "<AXValue 0x79390b020> {value = error:-25212 type = kAXValueAXErrorType}",
+                "description": "<AXValue 0x79390bc40> {value = error:-25212 type = kAXValueAXErrorType}",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": [
+                  {
+                    "role": "AXHeading",
+                    "subrole": "<AXValue 0x79390afe0> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "roleDescription": "heading",
+                    "value": "‎Members: ‪Byungkyu, Jerry, Richard, ‎You",
+                    "title": "<AXValue 0x79390b2e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "description": "Wework survivors",
+                    "placeholderValue": null,
+                    "numberOfCharacters": 41,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "<AXValue 0x79390b480> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "roleDescription": "button",
+                    "value": null,
+                    "title": "<AXValue 0x79390b500> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "description": "‎Start video call with Wework survivors",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "<AXValue 0x79390b140> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "roleDescription": "button",
+                    "value": null,
+                    "title": "<AXValue 0x79390b360> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "description": "‎Start voice call with Wework survivors",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "role": "AXGroup",
+                "subrole": "<AXValue 0x7938e9660> {value = error:-25212 type = kAXValueAXErrorType}",
+                "roleDescription": "group",
+                "value": null,
+                "title": "<AXValue 0x7938e9960> {value = error:-25212 type = kAXValueAXErrorType}",
+                "description": "<AXValue 0x7938e9f00> {value = error:-25212 type = kAXValueAXErrorType}",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": [
+                  {
+                    "role": "AXGroup",
+                    "subrole": "<AXValue 0x7938e9740> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "roleDescription": "table",
+                    "value": null,
+                    "title": "<AXValue 0x7938e9a80> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "description": "‎Messages in chat with Wework survivors",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": [
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "<AXValue 0x7938e9480> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "text",
+                        "value": "",
+                        "title": "<AXValue 0x7938e9400> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "description": "‎Message from Jerry Wu, Free coffee?, April14,at2:53 PM, ‎Received in Wework survivors",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 86,
+                        "children": []
+                      },
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "<AXValue 0x7938e93c0> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "text",
+                        "value": "",
+                        "title": "<AXValue 0x7938e92a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "description": "‎Message from Richard Song, Not free but 24 hrs and space to work, April14,at3:04 PM, ‎Received in Wework survivors",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 115,
+                        "children": []
+                      },
+                      {
+                        "role": "AXHeading",
+                        "subrole": "<AXValue 0x7938e92c0> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "heading",
+                        "value": null,
+                        "title": "<AXValue 0x7938e9220> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "description": "",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": []
+                      },
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "<AXValue 0x7938e9240> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "text",
+                        "value": "",
+                        "title": "<AXValue 0x7938e91c0> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "description": "‎Message from Jerry Wu, Oh?, April14,at3:06 PM, ‎Received in Wework survivors",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 77,
+                        "children": []
+                      },
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "<AXValue 0x7938e9300> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "text",
+                        "value": "",
+                        "title": "<AXValue 0x7938e9260> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "description": "‎Message from Jerry Wu, Shit that’s awesome. 24 hrs and not many ppl?, April14,at3:07 PM, ‎Received in Wework survivors",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 119,
+                        "children": []
+                      },
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "<AXValue 0x7938e9340> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "text",
+                        "value": "",
+                        "title": "<AXValue 0x7938e9380> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "description": "‎Message from Byungkyu Park, Yup, though I have not been there after 10pm, April14,at3:25 PM, ‎Received in Wework survivors",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 123,
+                        "children": []
+                      },
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "<AXValue 0x7938e9460> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "text",
+                        "value": "",
+                        "title": "<AXValue 0x7938e93a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "description": "‎Message from Jerry Wu, Are you guys gonna go too, April14,at3:26 PM, ‎Received in Wework survivors",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 99,
+                        "children": []
+                      },
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "<AXValue 0x7938e9360> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "text",
+                        "value": "",
+                        "title": "<AXValue 0x7938e9280> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "description": "‎Message from Jerry Wu, Let’s do it on 17th?, April14,at3:26 PM, ‎Received in Wework survivors",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 94,
+                        "children": []
+                      },
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "<AXValue 0x7938e91a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "text",
+                        "value": "",
+                        "title": "<AXValue 0x7938e92e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "description": "‎Your message, ah it’s kinda crowded ngl, April14,at3:32 PM, ‎Sent to Wework survivors, ‎Delivered.\n‎Replying to Jerry Wu.\nShit that’s awesome. 24 hrs and not many ppl?",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 168,
+                        "children": []
+                      },
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "<AXValue 0x7938e9e40> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "text",
+                        "value": "",
+                        "title": "<AXValue 0x7938e9520> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "description": "‎Your message, lolll, April14,at3:32 PM, ‎Sent to Wework survivors, ‎Delivered",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 78,
+                        "children": []
+                      },
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "<AXValue 0x7938e9bc0> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "text",
+                        "value": "",
+                        "title": "<AXValue 0x7938e9d00> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "description": "‎Your message, before 10 pm u r very welcome to work in my apt, April14,at3:32 PM, ‎Sent to Wework survivors, ‎Delivered",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 120,
+                        "children": []
+                      },
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "<AXValue 0x7938e9ac0> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "text",
+                        "value": "",
+                        "title": "<AXValue 0x7938e9640> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "description": "‎Your message, also we should do a bbq!, April14,at3:33 PM, ‎Sent to Wework survivors, ‎Delivered",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 97,
+                        "children": []
+                      },
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "<AXValue 0x7938e9de0> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "text",
+                        "value": "",
+                        "title": "<AXValue 0x7938e9840> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "description": "‎Your message, all of us, April14,at3:33 PM, ‎Sent to Wework survivors, ‎Delivered",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 82,
+                        "children": []
+                      },
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "<AXValue 0x7938e9200> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "text",
+                        "value": "",
+                        "title": "<AXValue 0x7938e9440> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "description": "‎Message from Jerry Wu, Work at ur apartment until 10 and all nighter at corgi cafe, April14,at5:44 PM, ‎Received in Wework survivors",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 133,
+                        "children": []
+                      },
+                      {
+                        "role": "AXStaticText",
+                        "subrole": "<AXValue 0x7938e94a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "roleDescription": "text",
+                        "value": "",
+                        "title": "<AXValue 0x7938e9320> {value = error:-25212 type = kAXValueAXErrorType}",
+                        "description": "‎Message from Jerry Wu, Dream life, April14,at5:44 PM, ‎Received in Wework survivors",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 84,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "<AXValue 0x7938e93e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "roleDescription": "button",
+                    "value": null,
+                    "title": "<AXValue 0x7938e9700> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "description": "‎Share media",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXTextArea",
+                    "subrole": "<AXValue 0x7938e9160> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "roleDescription": "text entry area",
+                    "value": null,
+                    "title": "<AXValue 0x7938e98a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "description": "‎Compose message",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": [],
+                    "focused": true
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "<AXValue 0x7938e8fc0> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "roleDescription": "button",
+                    "value": null,
+                    "title": "<AXValue 0x7938e9420> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "description": "D9E7E1D4 27F4 4EC0 858F 894E17",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "<AXValue 0x7938e9100> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "roleDescription": "button",
+                    "value": null,
+                    "title": "<AXValue 0x7938e9180> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "description": "‎Voice message",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  }
+                ],
+                "ancestorOfFocused": true
+              }
+            ],
+            "ancestorOfFocused": true
+          }
+        ],
+        "ancestorOfFocused": true
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXCloseButton",
+        "roleDescription": "close button",
+        "value": null,
+        "title": "<AXValue 0x7938e9aa0> {value = error:-25212 type = kAXValueAXErrorType}",
+        "description": "<AXValue 0x7938e9760> {value = error:-25205 type = kAXValueAXErrorType}",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXFullScreenButton",
+        "roleDescription": "full screen button",
+        "value": null,
+        "title": "<AXValue 0x7938e9be0> {value = error:-25212 type = kAXValueAXErrorType}",
+        "description": "<AXValue 0x7938e9c20> {value = error:-25205 type = kAXValueAXErrorType}",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "<AXValue 0x7938e9800> {value = error:-25205 type = kAXValueAXErrorType}",
+            "roleDescription": "group",
+            "value": null,
+            "title": "<AXValue 0x7938e9820> {value = error:-25205 type = kAXValueAXErrorType}",
+            "description": "<AXValue 0x7938e9680> {value = error:-25205 type = kAXValueAXErrorType}",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": []
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXMinimizeButton",
+        "roleDescription": "minimize button",
+        "value": null,
+        "title": "<AXValue 0x7938e9720> {value = error:-25212 type = kAXValueAXErrorType}",
+        "description": "<AXValue 0x7938ea360> {value = error:-25205 type = kAXValueAXErrorType}",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      }
+    ],
+    "ancestorOfFocused": true
+  }
+}

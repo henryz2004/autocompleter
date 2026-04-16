@@ -10,6 +10,7 @@ from autocompleter.conversation_extractors import (
     ActionDelimitedExtractor,
     ChatGPTExtractor,
     ClaudeDesktopExtractor,
+    CodexExtractor,
     ConversationExtractor,
     ConversationTurn,
     DiscordExtractor,
@@ -141,6 +142,10 @@ class TestGetExtractor:
     def test_returns_claude_desktop_extractor(self):
         ext = get_extractor("Claude")
         assert isinstance(ext, ClaudeDesktopExtractor)
+
+    def test_returns_codex_extractor(self):
+        ext = get_extractor("Codex")
+        assert isinstance(ext, CodexExtractor)
 
     def test_returns_imessage_extractor(self):
         ext = get_extractor("Messages")
@@ -452,6 +457,113 @@ class TestGeminiExtractor:
 # ===========================================================================
 # Tests for SlackExtractor
 # ===========================================================================
+
+class TestCodexExtractor:
+    def test_extracts_user_and_assistant_turns_from_codex_layout(self):
+        extractor = CodexExtractor()
+
+        transcript = make_ax_element(
+            role="AXGroup",
+            children=[
+                make_ax_element(
+                    role="AXGroup",
+                    children=[make_ax_element(role="AXStaticText", value="can you check this?")],
+                ),
+                make_ax_element(role="AXStaticText", value="9:31 PM"),
+                make_ax_element(role="AXButton", description="Copy message"),
+                make_ax_element(role="AXButton", description="Fork from this message"),
+                make_ax_element(
+                    role="AXGroup",
+                    children=[make_ax_element(role="AXButton", title="13 previous messages")],
+                ),
+                make_ax_element(
+                    role="AXGroup",
+                    children=[make_ax_element(role="AXStaticText", value="Yes, I checked the logs.")],
+                ),
+                make_ax_element(
+                    role="AXList",
+                    children=[make_ax_element(role="AXStaticText", value="Everything looks healthy.")],
+                ),
+            ],
+        )
+        window = make_ax_element(role="AXWindow", children=[transcript])
+
+        turns = extractor.extract(window)
+        assert turns is not None
+        assert [(t.speaker, t.timestamp) for t in turns] == [
+            ("User", ""),
+            ("Assistant", "9:31 PM"),
+        ]
+        assert "can you check this?" in turns[0].text
+        assert "checked the logs" in turns[1].text
+        assert "Everything looks healthy." in turns[1].text
+
+
+class TestGeminiNestedWrappers:
+    def test_extracts_headings_from_deeply_wrapped_conversation_branch(self):
+        extractor = GeminiExtractor()
+
+        conversation_branch = make_ax_element(
+            role="AXGroup",
+            children=[
+                make_ax_element(
+                    role="AXGroup",
+                    children=[
+                        make_ax_element(
+                            role="AXGroup",
+                            children=[
+                                make_ax_element(
+                                    role="AXHeading",
+                                    title="You said temporary env vars on mac",
+                                ),
+                            ],
+                        ),
+                        make_ax_element(
+                            role="AXGroup",
+                            children=[
+                                make_ax_element(
+                                    role="AXGroup",
+                                    children=[
+                                        make_ax_element(
+                                            role="AXHeading",
+                                            title="Gemini said",
+                                        ),
+                                        make_ax_element(
+                                            role="AXGroup",
+                                            children=[
+                                                make_ax_element(
+                                                    role="AXStaticText",
+                                                    value="Use VAR=value command for one-shot execution.",
+                                                ),
+                                            ],
+                                        ),
+                                    ],
+                                ),
+                            ],
+                        ),
+                    ],
+                ),
+            ],
+        )
+
+        container = make_ax_element(
+            role="AXGroup",
+            children=[
+                make_ax_element(role="AXHeading", value="Conversation with Gemini"),
+                conversation_branch,
+                make_ax_element(
+                    role="AXGroup",
+                    children=[make_ax_element(role="AXStaticText", value="Ask Gemini")],
+                ),
+            ],
+        )
+
+        turns = extractor._extract_messages_from_container(container, max_turns=6)
+        assert [(t.speaker, t.text) for t in turns] == [
+            ("User", "temporary env vars on mac"),
+            ("Gemini", "Use VAR=value command for one-shot execution."),
+        ]
+
 
 class TestSlackExtractor:
     def _build_slack_message(self, sender: str, body: str) -> MagicMock:

@@ -1,0 +1,14 @@
+{
+  "extractor": "GeminiExtractor",
+  "app": "Google Gemini",
+  "turns": [
+    {
+      "speaker": "User",
+      "text": "temporarily like don't override system environment variables"
+    },
+    {
+      "speaker": "Gemini",
+      "text": "prepending them to the command in your terminal"
+    }
+  ]
+}
