@@ -61,3 +61,40 @@ class TestSupabaseStore:
         assert row["key_hash"] == key_hash
         assert "install_key" not in row
         assert plaintext_key not in json.dumps(row)
+
+    def test_insert_error_includes_supabase_response_body(self):
+        def dispatch(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                400,
+                json={
+                    "code": "PGRST204",
+                    "details": None,
+                    "hint": None,
+                    "message": "Could not find the 'invocation_id' column of 'beta_telemetry_events' in the schema cache",
+                },
+                request=request,
+            )
+
+        async def run_test() -> str:
+            client = httpx.AsyncClient(transport=httpx.MockTransport(dispatch))
+            store = SupabaseStore(make_config(), client=client)
+            try:
+                try:
+                    await store.record_telemetry_event(
+                        {
+                            "event_id": "evt-1",
+                            "install_id": "inst-1",
+                            "event_name": "trigger_fired",
+                            "payload_json": {"event": "trigger_fired"},
+                        }
+                    )
+                except httpx.HTTPStatusError as exc:
+                    return str(exc)
+                raise AssertionError("expected HTTPStatusError")
+            finally:
+                await store.close()
+
+        message = asyncio.run(run_test())
+
+        assert "Supabase response body:" in message
+        assert "invocation_id" in message

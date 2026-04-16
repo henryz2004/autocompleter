@@ -142,7 +142,7 @@ class SupabaseStore:
             params=params,
             headers=self._headers(),
         )
-        response.raise_for_status()
+        self._raise_for_status(response)
         return list(response.json())
 
     async def _insert_row(
@@ -158,7 +158,7 @@ class SupabaseStore:
             json=row,
             headers=headers,
         )
-        response.raise_for_status()
+        self._raise_for_status(response)
         if not return_representation:
             return row
         payload = response.json()
@@ -180,7 +180,7 @@ class SupabaseStore:
             json=row,
             headers=self._headers(prefer=prefer),
         )
-        response.raise_for_status()
+        self._raise_for_status(response)
         if not return_representation:
             return row
         payload = response.json()
@@ -199,8 +199,31 @@ class SupabaseStore:
             json=row,
             headers=self._headers(prefer="return=representation"),
         )
-        response.raise_for_status()
+        self._raise_for_status(response)
         return list(response.json())
+
+    def _raise_for_status(self, response: httpx.Response) -> None:
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            detail = self._error_detail(response)
+            if detail:
+                message = f"{exc}\nSupabase response body: {detail}"
+                raise httpx.HTTPStatusError(
+                    message,
+                    request=exc.request,
+                    response=exc.response,
+                ) from exc
+            raise
+
+    @staticmethod
+    def _error_detail(response: httpx.Response, *, max_chars: int = 500) -> str:
+        text = response.text.strip()
+        if not text:
+            return ""
+        if len(text) > max_chars:
+            return text[: max_chars - 3] + "..."
+        return text
 
     def _headers(self, *, prefer: str | None = None) -> dict[str, str]:
         headers = {
