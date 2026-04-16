@@ -1,0 +1,405 @@
+{
+  "artifactType": "ax_tree_fixture_v1",
+  "schemaVersion": 1,
+  "captureTool": "dump_ax_tree_json.py",
+  "app": "ChatGPT",
+  "windowTitle": "ChatGPT",
+  "sourceUrl": "",
+  "capturedAt": "2026-04-16T01:16:21",
+  "macosVersion": "26.2",
+  "notes": "what was on screen",
+  "captureSettings": {
+    "maxDepth": 35
+  },
+  "focusedElement": {
+    "role": "AXTextArea",
+    "roleDescription": "text entry area",
+    "description": "",
+    "value": "",
+    "placeholderValue": null,
+    "numberOfCharacters": 0
+  },
+  "tree": {
+    "role": "AXWindow",
+    "subrole": "AXStandardWindow",
+    "roleDescription": "standard window",
+    "value": null,
+    "title": "ChatGPT",
+    "description": "<AXValue 0x79393b100> {value = error:-25205 type = kAXValueAXErrorType}",
+    "placeholderValue": null,
+    "numberOfCharacters": null,
+    "children": [
+      {
+        "role": "AXGroup",
+        "subrole": "AXHostingView",
+        "roleDescription": "group",
+        "value": null,
+        "title": "<AXValue 0x79393b060> {value = error:-25205 type = kAXValueAXErrorType}",
+        "description": "<AXValue 0x79393af00> {value = error:-25205 type = kAXValueAXErrorType}",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXSplitGroup",
+            "subrole": "<AXValue 0x79393b260> {value = error:-25205 type = kAXValueAXErrorType}",
+            "roleDescription": "split group",
+            "value": null,
+            "title": "<AXValue 0x79393b000> {value = error:-25205 type = kAXValueAXErrorType}",
+            "description": "<AXValue 0x79393b1e0> {value = error:-25205 type = kAXValueAXErrorType}",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "AXHostingView",
+                "roleDescription": "group",
+                "value": null,
+                "title": "<AXValue 0x79393b360> {value = error:-25205 type = kAXValueAXErrorType}",
+                "description": "<AXValue 0x79393afe0> {value = error:-25205 type = kAXValueAXErrorType}",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": [
+                  {
+                    "role": "AXScrollArea",
+                    "subrole": "<AXValue 0x7938e9b20> {value = error:-25205 type = kAXValueAXErrorType}",
+                    "roleDescription": "scroll area",
+                    "value": null,
+                    "title": "<AXValue 0x79393b180> {value = error:-25205 type = kAXValueAXErrorType}",
+                    "description": "<AXValue 0x79393b540> {value = error:-25205 type = kAXValueAXErrorType}",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": [
+                      {
+                        "role": "AXList",
+                        "subrole": "AXCollectionList",
+                        "roleDescription": "collection",
+                        "value": null,
+                        "title": "<AXValue 0x79393b320> {value = error:-25205 type = kAXValueAXErrorType}",
+                        "description": "<AXValue 0x79393b580> {value = error:-25205 type = kAXValueAXErrorType}",
+                        "placeholderValue": null,
+                        "numberOfCharacters": null,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "role": "AXScrollArea",
+                    "subrole": "<AXValue 0x79393af80> {value = error:-25205 type = kAXValueAXErrorType}",
+                    "roleDescription": "scroll area",
+                    "value": null,
+                    "title": "<AXValue 0x79393b300> {value = error:-25205 type = kAXValueAXErrorType}",
+                    "description": "<AXValue 0x79393b3e0> {value = error:-25205 type = kAXValueAXErrorType}",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": [
+                      {
+                        "role": "AXTextArea",
+                        "subrole": "<AXValue 0x79393b4c0> {value = error:-25205 type = kAXValueAXErrorType}",
+                        "roleDescription": "text entry area",
+                        "value": "",
+                        "title": "<AXValue 0x79393b420> {value = error:-25205 type = kAXValueAXErrorType}",
+                        "description": "<AXValue 0x79393b4a0> {value = error:-25200 type = kAXValueAXErrorType}",
+                        "placeholderValue": null,
+                        "numberOfCharacters": 0,
+                        "children": [],
+                        "focused": true
+                      }
+                    ],
+                    "ancestorOfFocused": true
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "<AXValue 0x7938e9b80> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "roleDescription": "button",
+                    "value": null,
+                    "title": "<AXValue 0x79393b500> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "description": "Attach",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "<AXValue 0x79393b5c0> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "roleDescription": "button",
+                    "value": null,
+                    "title": "<AXValue 0x79393b480> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "description": "Search",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "<AXValue 0x79393af20> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "roleDescription": "button",
+                    "value": null,
+                    "title": "<AXValue 0x79393b5a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "description": "Agent",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "<AXValue 0x79393b560> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "roleDescription": "button",
+                    "value": null,
+                    "title": "<AXValue 0x79393af60> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "description": "Work with Apps",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "<AXValue 0x79393b6a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "roleDescription": "button",
+                    "value": "Auto",
+                    "title": "<AXValue 0x79393b460> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "description": "Options",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "<AXValue 0x79393b680> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "roleDescription": "button",
+                    "value": null,
+                    "title": "<AXValue 0x79393b6e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "description": "Record meeting",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "<AXValue 0x79393b7a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "roleDescription": "button",
+                    "value": null,
+                    "title": "<AXValue 0x79393b3c0> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "description": "Dictation",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXButton",
+                    "subrole": "<AXValue 0x79393b7c0> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "roleDescription": "button",
+                    "value": null,
+                    "title": "<AXValue 0x79393b4e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                    "description": "Send",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  },
+                  {
+                    "role": "AXScrollArea",
+                    "subrole": "<AXValue 0x79393b6c0> {value = error:-25205 type = kAXValueAXErrorType}",
+                    "roleDescription": "scroll area",
+                    "value": null,
+                    "title": "<AXValue 0x79393b780> {value = error:-25205 type = kAXValueAXErrorType}",
+                    "description": "<AXValue 0x79393b400> {value = error:-25205 type = kAXValueAXErrorType}",
+                    "placeholderValue": null,
+                    "numberOfCharacters": null,
+                    "children": []
+                  }
+                ],
+                "ancestorOfFocused": true
+              }
+            ],
+            "ancestorOfFocused": true
+          }
+        ],
+        "ancestorOfFocused": true
+      },
+      {
+        "role": "AXToolbar",
+        "subrole": "<AXValue 0x79393b160> {value = error:-25205 type = kAXValueAXErrorType}",
+        "roleDescription": "toolbar",
+        "value": null,
+        "title": "<AXValue 0x79393af40> {value = error:-25205 type = kAXValueAXErrorType}",
+        "description": "<AXValue 0x79393b2a0> {value = error:-25205 type = kAXValueAXErrorType}",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXButton",
+            "subrole": "<AXValue 0x79393b220> {value = error:-25200 type = kAXValueAXErrorType}",
+            "roleDescription": "button",
+            "value": null,
+            "title": "<AXValue 0x79393b2e0> {value = error:-25205 type = kAXValueAXErrorType}",
+            "description": "Toggle Sidebar",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXButton",
+                "subrole": "<AXValue 0x79393b7e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                "roleDescription": "button",
+                "value": null,
+                "title": "<AXValue 0x79393b840> {value = error:-25212 type = kAXValueAXErrorType}",
+                "description": "<AXValue 0x79393b800> {value = error:-25212 type = kAXValueAXErrorType}",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          },
+          {
+            "role": "AXButton",
+            "subrole": "<AXValue 0x79393b720> {value = error:-25200 type = kAXValueAXErrorType}",
+            "roleDescription": "button",
+            "value": null,
+            "title": "<AXValue 0x79393b340> {value = error:-25205 type = kAXValueAXErrorType}",
+            "description": "New chat",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXButton",
+                "subrole": "<AXValue 0x79393b8e0> {value = error:-25212 type = kAXValueAXErrorType}",
+                "roleDescription": "button",
+                "value": null,
+                "title": "<AXValue 0x79393b960> {value = error:-25212 type = kAXValueAXErrorType}",
+                "description": "New chat",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          },
+          {
+            "role": "AXButton",
+            "subrole": "<AXValue 0x79393b8c0> {value = error:-25200 type = kAXValueAXErrorType}",
+            "roleDescription": "button",
+            "value": null,
+            "title": "<AXValue 0x79393b380> {value = error:-25205 type = kAXValueAXErrorType}",
+            "description": "ChatGPT Auto",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXButton",
+                "subrole": "<AXValue 0x79393b980> {value = error:-25212 type = kAXValueAXErrorType}",
+                "roleDescription": "button",
+                "value": null,
+                "title": "<AXValue 0x79393ba00> {value = error:-25212 type = kAXValueAXErrorType}",
+                "description": "ChatGPT Auto",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          },
+          {
+            "role": "AXButton",
+            "subrole": "<AXValue 0x79393b200> {value = error:-25200 type = kAXValueAXErrorType}",
+            "roleDescription": "button",
+            "value": null,
+            "title": "<AXValue 0x79393b920> {value = error:-25205 type = kAXValueAXErrorType}",
+            "description": "Share",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXButton",
+                "subrole": "<AXValue 0x79393b9a0> {value = error:-25212 type = kAXValueAXErrorType}",
+                "roleDescription": "button",
+                "value": null,
+                "title": "<AXValue 0x79393ba60> {value = error:-25212 type = kAXValueAXErrorType}",
+                "description": "<AXValue 0x79393ba20> {value = error:-25212 type = kAXValueAXErrorType}",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          },
+          {
+            "role": "AXButton",
+            "subrole": "<AXValue 0x79393b9e0> {value = error:-25200 type = kAXValueAXErrorType}",
+            "roleDescription": "button",
+            "value": null,
+            "title": "<AXValue 0x79393b940> {value = error:-25205 type = kAXValueAXErrorType}",
+            "description": "Move to new window",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXButton",
+                "subrole": "<AXValue 0x79393b9c0> {value = error:-25212 type = kAXValueAXErrorType}",
+                "roleDescription": "button",
+                "value": null,
+                "title": "<AXValue 0x79393b740> {value = error:-25212 type = kAXValueAXErrorType}",
+                "description": "Move to new window",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXCloseButton",
+        "roleDescription": "close button",
+        "value": null,
+        "title": "<AXValue 0x79393b120> {value = error:-25212 type = kAXValueAXErrorType}",
+        "description": "<AXValue 0x79393b0a0> {value = error:-25205 type = kAXValueAXErrorType}",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXFullScreenButton",
+        "roleDescription": "full screen button",
+        "value": null,
+        "title": "<AXValue 0x79393b280> {value = error:-25212 type = kAXValueAXErrorType}",
+        "description": "<AXValue 0x79393b1a0> {value = error:-25205 type = kAXValueAXErrorType}",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": [
+          {
+            "role": "AXGroup",
+            "subrole": "<AXValue 0x79393bb40> {value = error:-25205 type = kAXValueAXErrorType}",
+            "roleDescription": "group",
+            "value": null,
+            "title": "<AXValue 0x79393b880> {value = error:-25205 type = kAXValueAXErrorType}",
+            "description": "<AXValue 0x79393bbc0> {value = error:-25205 type = kAXValueAXErrorType}",
+            "placeholderValue": null,
+            "numberOfCharacters": null,
+            "children": [
+              {
+                "role": "AXGroup",
+                "subrole": "<AXValue 0x79393bc20> {value = error:-25205 type = kAXValueAXErrorType}",
+                "roleDescription": "group",
+                "value": null,
+                "title": "<AXValue 0x79393bb60> {value = error:-25205 type = kAXValueAXErrorType}",
+                "description": "<AXValue 0x79393b900> {value = error:-25205 type = kAXValueAXErrorType}",
+                "placeholderValue": null,
+                "numberOfCharacters": null,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "AXButton",
+        "subrole": "AXMinimizeButton",
+        "roleDescription": "minimize button",
+        "value": null,
+        "title": "<AXValue 0x7938e9b40> {value = error:-25212 type = kAXValueAXErrorType}",
+        "description": "<AXValue 0x7938e9ba0> {value = error:-25205 type = kAXValueAXErrorType}",
+        "placeholderValue": null,
+        "numberOfCharacters": null,
+        "children": []
+      }
+    ],
+    "ancestorOfFocused": true
+  }
+}

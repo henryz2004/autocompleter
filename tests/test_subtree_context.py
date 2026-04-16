@@ -960,6 +960,26 @@ class TestExtractContextFixtures:
         assert bundle.top_down_context is not None
         assert "<focusPath>" in bundle.top_down_context
 
+    def test_claude_fixture_prefers_active_transcript_over_sidebar_recents(self):
+        for name, expected_text in (
+            ("claude-9", "usb-a sources just dumbly output 5v without any negotiation"),
+            ("claude-10", "&quot;remote&quot; is the general concept"),
+        ):
+            data = _load(name)
+            bundle = build_context_bundle_from_tree(
+                data["tree"],
+                token_budget=500,
+                overview_token_budget=80,
+            )
+            assert bundle is not None
+            assert bundle.selection_debug is not None
+            assert bundle.selection_debug["strategy"] == "transcript_branch"
+            assert bundle.bottom_up_context is not None
+            assert expected_text in bundle.bottom_up_context
+            assert "Killing a tmux session from within" not in bundle.bottom_up_context
+            assert "App bundler cache corruption issues" not in bundle.bottom_up_context
+            assert "Updated to 1.2278.0 Relaunch to apply" not in bundle.bottom_up_context
+
     def test_unfocused_fixtures_return_none(self):
         """Fixtures without focus annotations should return None gracefully."""
         for path in sorted(FIXTURES.glob("*.json")):

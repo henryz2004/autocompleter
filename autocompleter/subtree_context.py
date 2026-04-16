@@ -714,6 +714,24 @@ def _score_transcript_branch(
     return score, qualifies
 
 
+def _is_nav_dominant_transcript_candidate(candidate: _BranchCandidate) -> bool:
+    """Return True when a candidate mostly looks like nav/sidebar chrome.
+
+    Some apps place a dense recent-thread sidebar next to the real transcript.
+    Those sidebars can score highly on sheer text volume even though they lack
+    conversation markers like action controls, timestamps, or genuinely long
+    prose blocks.
+    """
+    summary = candidate.summary
+    if summary.nav_nodes < 2:
+        return False
+    if summary.action_nodes > 0 or summary.timestamp_nodes > 0:
+        return False
+    if summary.long_text_nodes > 0:
+        return False
+    return summary.medium_text_nodes >= 3 or summary.text_nodes >= 8
+
+
 def _collect_branch_candidates(
     path: list[dict],
     memo: dict[int, _SubtreeSummary],
@@ -722,9 +740,11 @@ def _collect_branch_candidates(
     for i in range(len(path) - 2, -1, -1):
         ancestor = path[i]
         ancestor_distance = len(path) - 1 - i
+        sibling_children: list[dict] = []
         for child in ancestor.get("children", []):
             if child.get("ancestorOfFocused") or child.get("focused"):
                 continue
+            sibling_children.append(child)
             summary = _summarize_subtree(child, memo)
             if summary.text_nodes == 0:
                 continue
@@ -741,9 +761,33 @@ def _collect_branch_candidates(
                     preview=_preview_text(child),
                 )
             )
+        if len(sibling_children) >= 2:
+            combined_branch = {
+                "role": "AXGroup",
+                "title": "",
+                "description": "",
+                "value": "",
+                "children": sibling_children,
+            }
+            summary = _summarize_subtree(combined_branch, memo)
+            if summary.text_nodes > 0:
+                score, qualifies = _score_transcript_branch(
+                    combined_branch, summary, memo, ancestor_distance,
+                )
+                candidates.append(
+                    _BranchCandidate(
+                        node=combined_branch,
+                        ancestor_distance=ancestor_distance,
+                        score=score,
+                        qualifies_as_transcript=qualifies,
+                        summary=summary,
+                        preview=_preview_text(combined_branch),
+                    )
+                )
     candidates.sort(
         key=lambda item: (
             item.qualifies_as_transcript,
+            not _is_nav_dominant_transcript_candidate(item),
             item.score,
             -item.ancestor_distance,
             item.summary.text_chars,

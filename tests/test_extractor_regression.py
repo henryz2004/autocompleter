@@ -28,6 +28,7 @@ _EXTRACTOR_CLASS_TO_APP = {
     "SlackExtractor": "Slack",
     "ChatGPTExtractor": "ChatGPT",
     "ClaudeDesktopExtractor": "Claude",
+    "CodexExtractor": "Codex",
     "IMessageExtractor": "Messages",
     "WhatsAppExtractor": "\u200eWhatsApp",
     "GenericExtractor": "",

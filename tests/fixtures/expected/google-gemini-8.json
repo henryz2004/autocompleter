@@ -1,0 +1,14 @@
+{
+  "extractor": "GeminiExtractor",
+  "app": "Google Gemini",
+  "turns": [
+    {
+      "speaker": "User",
+      "text": "Harvard gse waitlist"
+    },
+    {
+      "speaker": "Gemini",
+      "text": "does not publicly disclose a specific, fixed admission rate"
+    }
+  ]
+}

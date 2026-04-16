@@ -1,0 +1,14 @@
+{
+  "extractor": "GeminiExtractor",
+  "app": "Google Gemini",
+  "turns": [
+    {
+      "speaker": "User",
+      "text": "Spera move in deposit"
+    },
+    {
+      "speaker": "Gemini",
+      "text": "security deposit"
+    }
+  ]
+}

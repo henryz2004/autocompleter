@@ -1,0 +1,10 @@
+{
+  "mode": "reply",
+  "extractor": "ChatGPTExtractor",
+  "context_contains": [
+    "App: ChatGPT | Channel: ChatGPT",
+    "Conversation:",
+    "- User: i hear you.",
+    "- ChatGPT: what is fidelity cash sweep"
+  ]
+}
