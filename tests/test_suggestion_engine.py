@@ -252,7 +252,6 @@ class TestSuggestionEngine:
         assert result == [
             " what if we slow down spaces a bit",
         ]
-
     @patch("autocompleter.suggestion_engine.SuggestionEngine._call_llm")
     def test_continuation_postprocess_keeps_literal_completion(self, mock_call, engine):
         mock_call.return_value = [

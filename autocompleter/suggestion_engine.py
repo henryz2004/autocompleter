@@ -141,8 +141,6 @@ def _apply_avoidance_with_fallback(
         return texts
 
     return [_filter_avoided_text(text, avoid_texts) for text in texts]
-
-
 def _strip_repeated_prefix(text: str, before_cursor: str | None) -> str:
     suggestion = text.strip()
     if not suggestion or not before_cursor:
@@ -194,7 +192,7 @@ def postprocess_suggestion_texts(
         _normalize_similarity_text(text)
         for text in (avoid_texts or [])
         if _normalize_similarity_text(text)
-    }
+    } 
     if mode != AutocompleteMode.CONTINUATION:
         processed = [_postprocess_reply_text(text, before_cursor) for text in texts]
         return _apply_avoidance_with_fallback(processed, avoid)

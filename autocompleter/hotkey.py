@@ -34,6 +34,8 @@ KEY_CODES = {
     "1": 18,
     "2": 19,
     "3": 20,
+    "/": 44,
+    "?": 44,
 }
 
 # Modifier flag masks

@@ -18,6 +18,17 @@ class TestFollowupAfterAcceptConfig:
         cfg = load_config()
         assert cfg.followup_after_accept_enabled is False
 
+    def test_help_and_report_hotkeys_can_be_overridden(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("AUTOCOMPLETER_HELP_HOTKEY", "cmd+/")
+        monkeypatch.setenv("AUTOCOMPLETER_REPORT_HOTKEY", "cmd+shift+b")
+
+        cfg = load_config()
+
+        assert cfg.help_hotkey == "cmd+/"
+        assert cfg.report_hotkey == "cmd+shift+b"
+        assert cfg.feedback_dir == Path(tmp_path) / ".autocompleter" / "feedback"
+
 
 class TestBetaProxyConfig:
     def test_proxy_enabled_overrides_effective_inference(self, monkeypatch, tmp_path):
@@ -41,6 +52,8 @@ class TestBetaProxyConfig:
     def test_byo_mode_keeps_existing_provider_fields(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.delenv("AUTOCOMPLETER_PROXY_ENABLED", raising=False)
+        # Avoid inheriting repository .env defaults during tests.
+        monkeypatch.setenv("AUTOCOMPLETER_PROXY_ENABLED", "0")
         monkeypatch.setenv("AUTOCOMPLETER_LLM_PROVIDER", "anthropic")
         monkeypatch.setenv("AUTOCOMPLETER_LLM_BASE_URL", "https://api.example/v1")
 
@@ -76,6 +89,8 @@ class TestBetaProxyConfig:
     def test_install_id_is_created_and_reused(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.delenv("AUTOCOMPLETER_INSTALL_ID", raising=False)
+        # Ensure repository default install id from .env does not leak into tests.
+        monkeypatch.setenv("AUTOCOMPLETER_INSTALL_ID", "")
 
         cfg1 = load_config()
         cfg2 = load_config()

@@ -40,3 +40,6 @@ dumps/
 benchmark_key.json
 benchmark_responses.jsonl
 tests/fixtures/ax_trees/*-depth35.json
+
+# Local Supabase CLI metadata
+supabase/.temp/
