@@ -466,12 +466,27 @@ class TestCallLlm:
     """Test the non-streaming _call_llm method."""
 
     def _mock_engine_with_list(self, engine, items: list[SuggestionItem]):
-        """Set up a mock Instructor client that returns a mock SuggestionList."""
-        mock_result = MagicMock()
-        mock_result.suggestions = items
+        """Set up a mock client that returns the desired suggestion list."""
+        if engine.config.effective_llm_provider == "anthropic":
+            mock_result = MagicMock()
+            mock_result.suggestions = items
+            mock_client = MagicMock()
+            mock_client.create.return_value = mock_result
+            engine._client = mock_client
+            return mock_client
+
+        payload = {
+            "suggestions": [{"text": item.text} for item in items],
+        }
+        mock_message = MagicMock()
+        mock_message.content = json.dumps(payload)
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
         mock_client = MagicMock()
-        mock_client.create.return_value = mock_result
-        engine._client = mock_client
+        mock_client.chat.completions.create.return_value = mock_response
+        engine._raw_client = mock_client
         return mock_client
 
     def test_basic_suggestions(self, engine):
@@ -501,15 +516,24 @@ class TestCallLlm:
 
         engine._call_llm("system prompt", "user message", temperature=0.7, max_tokens=200)
 
-        mock_client.create.assert_called_once()
-        call_kwargs = mock_client.create.call_args[1]
+        if engine.config.effective_llm_provider == "anthropic":
+            mock_client.create.assert_called_once()
+            call_kwargs = mock_client.create.call_args[1]
+            assert call_kwargs["response_model"] is SuggestionList
+        else:
+            mock_client.chat.completions.create.assert_called_once()
+            call_kwargs = mock_client.chat.completions.create.call_args[1]
+            assert call_kwargs["stream"] is False
         assert call_kwargs["model"] == engine.config.effective_llm_model
-        assert call_kwargs["response_model"] is SuggestionList
         assert call_kwargs["temperature"] == 0.7
         assert call_kwargs["max_tokens"] == 200
         msgs = call_kwargs["messages"]
-        assert msgs[0] == {"role": "system", "content": "system prompt"}
-        assert msgs[1] == {"role": "user", "content": "user message"}
+        if engine.config.effective_llm_provider == "anthropic":
+            assert msgs[0] == {"role": "system", "content": "system prompt"}
+            assert msgs[1] == {"role": "user", "content": "user message"}
+        else:
+            assert msgs[0] == {"role": "system", "content": "system prompt"}
+            assert msgs[1] == {"role": "user", "content": "user message"}
 
     def test_passes_empty_model_in_proxy_mode(self):
         """Proxy mode still passes an explicit empty model for backend defaulting."""
@@ -524,8 +548,32 @@ class TestCallLlm:
 
         proxy_engine._call_llm("system prompt", "user message", temperature=0.7, max_tokens=200)
 
-        call_kwargs = mock_client.create.call_args[1]
+        call_kwargs = mock_client.chat.completions.create.call_args[1]
         assert call_kwargs["model"] == ""
+
+    def test_proxy_mode_uses_raw_client_not_instructor(self):
+        """Proxy-mode blocking fallback should parse raw JSON via the proxy client."""
+        proxy_engine = SuggestionEngine(
+            Config(
+                proxy_enabled=True,
+                proxy_base_url="https://autocompleter-beta-backend.onrender.com/v1",
+                proxy_api_key="proxy-key",
+            )
+        )
+        mock_client = self._mock_engine_with_list(
+            proxy_engine,
+            [SuggestionItem(text="Hi"), SuggestionItem(text="Hello")],
+        )
+
+        results = proxy_engine._call_llm(
+            "system prompt",
+            "user message",
+            temperature=0.7,
+            max_tokens=200,
+        )
+
+        assert [item.text for item in results] == ["Hi", "Hello"]
+        mock_client.chat.completions.create.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

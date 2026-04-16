@@ -475,7 +475,38 @@ class SuggestionEngine:
         max_tokens: Optional[int] = None,
         request_headers: Optional[dict[str, str]] = None,
     ) -> list[Suggestion]:
-        """Call the LLM via Instructor and return parsed suggestions."""
+        """Call the LLM non-streaming and return parsed suggestions."""
+        if self.config.effective_llm_provider != "anthropic":
+            raw_client = self._get_raw_client()
+            create_kwargs: dict = dict(
+                model=self.config.effective_llm_model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user_msg},
+                ],
+                stream=False,
+                temperature=temperature,
+                max_tokens=max_tokens or 1024,
+            )
+            if request_headers:
+                create_kwargs["extra_headers"] = request_headers
+
+            from urllib.parse import urlparse
+            hostname = urlparse(self.config.effective_llm_base_url).hostname or ""
+            if hostname.endswith("groq.com"):
+                create_kwargs["extra_body"] = {"reasoning_effort": "none"}
+
+            response = raw_client.chat.completions.create(**create_kwargs)
+            content = ""
+            if response.choices:
+                message = response.choices[0].message
+                content = message.content or ""
+            suggestions = _extract_complete_suggestions(content)
+            return [
+                Suggestion(text=text, index=i)
+                for i, text in enumerate(suggestions)
+            ]
+
         client = self._get_client()
         create_kwargs: dict = dict(
             model=self.config.effective_llm_model,
@@ -987,10 +1018,10 @@ class SuggestionEngine:
                     yield suggestion
                 # else: discard suggestions from the loser
 
-            # If no suggestions were yielded, fall back to blocking path
+            # If no suggestions were yielded, fall back to raw non-streaming completion
             if winner is None:
                 logger.warning(
-                    "Streams produced no suggestions, falling back to blocking"
+                    "Streams produced no suggestions, falling back to non-streaming completion"
                 )
                 cancel_primary.set()
                 cancel_fallback.set()
