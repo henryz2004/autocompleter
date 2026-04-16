@@ -58,6 +58,16 @@ class TestBackendTelemetry:
                     "trigger_type": "manual",
                     "source_app": "Slack",
                     "app_category": "chat",
+                    "requested_route": "proxy",
+                    "profile": {
+                        "routing": {
+                            "requested_route": "proxy",
+                            "model_label": "backend-default",
+                        },
+                        "latency": {
+                            "durations_ms": {"context": 12, "llm_ttft": 240},
+                        },
+                    },
                     "prompt": "do not persist me",
                     "url": "https://sensitive.example/path",
                 },
@@ -70,12 +80,16 @@ class TestBackendTelemetry:
         assert row["event_name"] == "trigger_fired"
         assert row["invocation_id"] == "inv-123"
         assert row["source_app"] == "Slack"
+        assert row["requested_route"] == "proxy"
+        assert row["profile_json"]["routing"]["model_label"] == "backend-default"
         assert row["payload_json"]["install_id"] == record.install_id
         assert row["payload_json"]["mode"] == "reply"
         assert "prompt" not in row["payload_json"]
         assert "url" not in row["payload_json"]
         assert store.invocations["inv-123"]["trigger_type"] == "manual"
         assert store.invocations["inv-123"]["source_app"] == "Slack"
+        assert store.invocations["inv-123"]["requested_route"] == "proxy"
+        assert store.invocations["inv-123"]["profile_json"]["latency"]["durations_ms"]["llm_ttft"] == 240
 
     def test_malformed_telemetry_payload_is_rejected(self):
         store = InMemoryStore()

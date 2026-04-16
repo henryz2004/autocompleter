@@ -124,6 +124,42 @@ class LatencyTracker:
             return (self._stamps[end] - self._stamps[start]) * 1000
         return None
 
+    def profile(self, record: LatencyRecord | None = None) -> dict[str, object]:
+        """Return a JSON-safe latency profile for telemetry/debugging."""
+        trigger_stamp = self._stamps.get("trigger")
+        stage_offsets_ms: dict[str, int] = {}
+        if trigger_stamp is not None:
+            for stage, stamp in sorted(self._stamps.items(), key=lambda item: item[1]):
+                stage_offsets_ms[stage] = int((stamp - trigger_stamp) * 1000)
+
+        durations_ms = {
+            "context": self._delta_ms("trigger", "context_ready"),
+            "llm_ttft": self._delta_ms("llm_start", "first_suggestion"),
+            "llm_total": self._delta_ms("llm_start", "llm_done"),
+            "e2e_first": self._delta_ms("trigger", "first_suggestion"),
+            "e2e_total": self._delta_ms("trigger", "displayed"),
+            "focus": self._delta_ms("trigger", "focused_ready"),
+            "caret": self._delta_ms("focused_ready", "caret_ready"),
+            "subtree": self._delta_ms("subtree_start", "subtree_ready"),
+            "visible_fetch": self._delta_ms("visible_start", "visible_ready"),
+            "context_build": self._delta_ms("context_build_start", "context_ready"),
+            "overlay_first_show": self._delta_ms("trigger", "overlay_first_show"),
+            "overlay_final_show": self._delta_ms("trigger", "displayed"),
+        }
+        normalized_durations = {
+            key: int(value)
+            for key, value in durations_ms.items()
+            if value is not None
+        }
+        if record is not None and record.visible_cache_age_ms is not None:
+            normalized_durations["visible_cache_age"] = int(record.visible_cache_age_ms)
+
+        return {
+            "generation_id": self._generation_id,
+            "stage_offsets_ms": stage_offsets_ms,
+            "durations_ms": normalized_durations,
+        }
+
     def finish(
         self,
         app_name: str = "",

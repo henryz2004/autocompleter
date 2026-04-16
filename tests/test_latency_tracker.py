@@ -122,6 +122,18 @@ class TestLatencyTracker:
         assert "mode=continuation" in log_msg
         assert "n=2" in log_msg
 
+    def test_profile_returns_stage_offsets_and_durations(self):
+        tracker = LatencyTracker()
+        tracker.start(generation_id=9)
+        tracker.mark("trigger")
+        time.sleep(0.002)
+        tracker.mark("context_ready")
+        profile = tracker.profile()
+
+        assert profile["generation_id"] == 9
+        assert "trigger" in profile["stage_offsets_ms"]
+        assert profile["durations_ms"]["context"] >= 0
+
 
 # ── LatencyStore ────────────────────────────────────────────────────────────
 

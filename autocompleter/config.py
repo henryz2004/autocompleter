@@ -142,7 +142,21 @@ class Config:
 
     @property
     def effective_llm_model(self) -> str:
+        if self.proxy_enabled:
+            return ""
         return self.llm_model
+
+    @property
+    def effective_model_label(self) -> str:
+        if self.proxy_enabled:
+            return "backend-default"
+        return self.llm_model
+
+    @property
+    def effective_request_route(self) -> str:
+        if self.proxy_enabled:
+            return "proxy"
+        return "direct"
 
     @property
     def effective_fallback_provider(self) -> str:

@@ -39,7 +39,9 @@ make friend-beta-bootstrap
 
 That will use `uv` to install Python 3.11 if needed, create `./venv`, install the app, and create `./.env` from `./.env.example` if it does not already exist.
 
-Then edit `.env` with your provider settings and API key, or with your beta `AUTOCOMPLETER_INSTALL_ID` and `AUTOCOMPLETER_PROXY_API_KEY`.
+Then edit `.env` with either:
+- beta proxy credentials: `AUTOCOMPLETER_INSTALL_ID` and `AUTOCOMPLETER_PROXY_API_KEY`
+- or your own provider settings if you are explicitly turning proxy mode off
 
 Manual alternative:
 
@@ -79,6 +81,7 @@ AUTOCOMPLETER_PROXY_ENABLED=0
 ```
 
 Then fill in the relevant BYO provider credentials below it in `.env`.
+When `AUTOCOMPLETER_PROXY_ENABLED=1`, the app routes generation through the hosted proxy only. Local `AUTOCOMPLETER_LLM_*` and fallback model/provider settings do not control hosted beta routing.
 
 See [docs/friend-beta.md](docs/friend-beta.md) for the beta-specific setup flow.
 If you want to run the included beta backend from this repo, see [docs/backend-beta.md](docs/backend-beta.md).
@@ -95,6 +98,7 @@ The current defaults are tuned for OpenAI-compatible endpoints:
 - Anthropic is also supported
 
 Start with `.env.example`, then set at least the variables needed for the provider you want to use.
+In beta proxy mode, the important settings are `AUTOCOMPLETER_PROXY_*`, `AUTOCOMPLETER_TELEMETRY_*`, and `AUTOCOMPLETER_INSTALL_ID`; the local `AUTOCOMPLETER_LLM_*` settings only apply in BYO mode.
 
 Common options:
 

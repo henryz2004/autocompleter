@@ -53,6 +53,8 @@ AUTOCOMPLETER_TELEMETRY_URL=https://autocompleter-beta-backend.onrender.com/v1/t
 AUTOCOMPLETER_INSTALL_ID=<install id>
 ```
 
+When `AUTOCOMPLETER_PROXY_ENABLED=1`, the hosted backend owns model/provider selection. Do not try to combine the beta proxy with local `AUTOCOMPLETER_LLM_*` or fallback provider settings in the same run.
+
 Then rerun:
 
 ```bash

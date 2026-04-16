@@ -120,6 +120,8 @@ The backend expects these tables:
 
 The backend stores install/auth data, invocation-level product analytics, metadata-only proxy request rows, per-attempt upstream metadata, and raw telemetry events. It does not persist raw prompt or completion bodies by default.
 
+Detailed beta profiling now rides alongside telemetry and proxy metadata in `profile_json` fields keyed by `invocation_id`. This captures stage timings and routing diagnostics without storing prompt or completion text.
+
 Current correlation model:
 
 - the desktop client sends one `invocation_id` per autocomplete lifecycle
@@ -172,6 +174,8 @@ AUTOCOMPLETER_TELEMETRY_ENABLED=1
 AUTOCOMPLETER_TELEMETRY_URL=http://127.0.0.1:8000/v1/telemetry/events
 AUTOCOMPLETER_INSTALL_ID=<install_id>
 ```
+
+In proxy mode, the desktop app sends generation traffic only to the backend. Local `AUTOCOMPLETER_LLM_*` and fallback provider/model env vars are BYO-only and do not control hosted beta routing.
 
 For Render, replace `http://127.0.0.1:8000` with your public Render domain:
 

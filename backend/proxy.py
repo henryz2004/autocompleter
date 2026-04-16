@@ -148,10 +148,12 @@ class ProxyService:
         request_id: str,
         request: Request,
     ) -> Response:
-        started_at = time.perf_counter()
+        request_received_at = utcnow_iso()
+        started_perf = time.perf_counter()
         first_attempt_started_at: str | None = None
         attempts = self._build_attempts(payload.model, request)
         request_body = self._build_upstream_payload(payload, attempts[0].resolved_model)
+        input_chars_estimate = estimate_input_chars(payload.messages)
         response_json: dict[str, Any] | None = None
         status_label = "error"
         error_type: str | None = None
@@ -163,11 +165,13 @@ class ProxyService:
             attempt_started_at = utcnow_iso()
             first_attempt_started_at = first_attempt_started_at or attempt_started_at
             attempt_started_perf = time.perf_counter()
+            attempt_start_offset_ms = self._offset_ms(started_perf, attempt_started_perf)
             request_body["model"] = attempt.resolved_model
             try:
                 response = await self._post_json(attempt.upstream, request_body)
             except Exception as exc:
                 attempt_latency_ms = self._elapsed_ms(attempt_started_perf)
+                completed_at = utcnow_iso()
                 await self._record_proxy_attempt(
                     attempt_id=str(uuid.uuid4()),
                     request_id=request_id,
@@ -179,10 +183,17 @@ class ProxyService:
                     status="error",
                     error_type=type(exc).__name__,
                     latency_ms=attempt_latency_ms,
-                    input_chars_estimate=estimate_input_chars(payload.messages),
+                    input_chars_estimate=input_chars_estimate,
                     output_chars_estimate=0,
                     started_at=attempt_started_at,
-                    completed_at=utcnow_iso(),
+                    completed_at=completed_at,
+                    profile_json={
+                        "request_route": "proxy",
+                        "timings_ms": {
+                            "attempt_start_offset": attempt_start_offset_ms,
+                            "upstream_response_complete": attempt_latency_ms,
+                        },
+                    },
                 )
                 if self._should_fallback_on_exception(exc) and attempt is attempts[0] and len(attempts) > 1:
                     logger.warning("Primary upstream failed before response; retrying fallback", exc_info=True)
@@ -197,13 +208,22 @@ class ProxyService:
                     stream=False,
                     status=status_label,
                     error_type=error_type,
-                    latency_ms=self._elapsed_ms(started_at),
+                    latency_ms=self._elapsed_ms(started_perf),
                     message_count=len(payload.messages),
-                    input_chars_estimate=estimate_input_chars(payload.messages),
+                    input_chars_estimate=input_chars_estimate,
                     output_chars_estimate=0,
                     attempt_count=attempt_count,
                     first_attempt_started_at=first_attempt_started_at or attempt_started_at,
-                    completed_at=utcnow_iso(),
+                    completed_at=completed_at,
+                    profile_json={
+                        "request_route": "proxy",
+                        "request_received_at": request_received_at,
+                        "timings_ms": {
+                            "proxy_total": self._elapsed_ms(started_perf),
+                            "attempt_start_offset": attempt_start_offset_ms,
+                            "upstream_response_complete": attempt_latency_ms,
+                        },
+                    },
                 )
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
@@ -211,6 +231,7 @@ class ProxyService:
                 ) from exc
 
             if self._should_fallback_on_status(response.status_code) and attempt is attempts[0] and len(attempts) > 1:
+                completed_at = utcnow_iso()
                 await self._record_proxy_attempt(
                     attempt_id=str(uuid.uuid4()),
                     request_id=request_id,
@@ -222,10 +243,18 @@ class ProxyService:
                     status="error",
                     error_type=f"http_{response.status_code}",
                     latency_ms=self._elapsed_ms(attempt_started_perf),
-                    input_chars_estimate=estimate_input_chars(payload.messages),
+                    input_chars_estimate=input_chars_estimate,
                     output_chars_estimate=0,
                     started_at=attempt_started_at,
-                    completed_at=utcnow_iso(),
+                    completed_at=completed_at,
+                    profile_json={
+                        "request_route": "proxy",
+                        "http_status": response.status_code,
+                        "timings_ms": {
+                            "attempt_start_offset": attempt_start_offset_ms,
+                            "upstream_response_complete": self._elapsed_ms(attempt_started_perf),
+                        },
+                    },
                 )
                 logger.warning("Primary upstream returned %s; retrying fallback", response.status_code)
                 continue
@@ -237,6 +266,7 @@ class ProxyService:
             else:
                 status_label = "success"
                 response_json = response.json()
+            completed_at = utcnow_iso()
             await self._record_proxy_attempt(
                 attempt_id=str(uuid.uuid4()),
                 request_id=request_id,
@@ -248,14 +278,22 @@ class ProxyService:
                 status=status_label,
                 error_type=error_type,
                 latency_ms=self._elapsed_ms(attempt_started_perf),
-                input_chars_estimate=estimate_input_chars(payload.messages),
+                input_chars_estimate=input_chars_estimate,
                 output_chars_estimate=(
                     estimate_output_chars(response_json)
                     if status_label == "success"
                     else 0
                 ),
                 started_at=attempt_started_at,
-                completed_at=utcnow_iso(),
+                completed_at=completed_at,
+                profile_json={
+                    "request_route": "proxy",
+                    "http_status": response.status_code,
+                    "timings_ms": {
+                        "attempt_start_offset": attempt_start_offset_ms,
+                        "upstream_response_complete": self._elapsed_ms(attempt_started_perf),
+                    },
+                },
             )
             break
 
@@ -274,13 +312,21 @@ class ProxyService:
             stream=False,
             status=status_label,
             error_type=error_type,
-            latency_ms=self._elapsed_ms(started_at),
+            latency_ms=self._elapsed_ms(started_perf),
             message_count=len(payload.messages),
-            input_chars_estimate=estimate_input_chars(payload.messages),
+            input_chars_estimate=input_chars_estimate,
             output_chars_estimate=estimate_output_chars(response_json),
             attempt_count=attempt_count,
             first_attempt_started_at=first_attempt_started_at or utcnow_iso(),
             completed_at=utcnow_iso(),
+            profile_json={
+                "request_route": "proxy",
+                "request_received_at": request_received_at,
+                "stream": False,
+                "timings_ms": {
+                    "proxy_total": self._elapsed_ms(started_perf),
+                },
+            },
         )
         status_code = 200
         if status_label != "success":
@@ -300,7 +346,8 @@ class ProxyService:
         request_id: str,
         request: Request,
     ) -> Response:
-        started_at = time.perf_counter()
+        request_received_at = utcnow_iso()
+        started_perf = time.perf_counter()
         first_attempt_started_at: str | None = None
         attempts = self._build_attempts(payload.model, request)
         request_body = self._build_upstream_payload(payload, attempts[0].resolved_model)
@@ -315,11 +362,14 @@ class ProxyService:
         attempt_used_number = 0
         attempt_used_started_at: str | None = None
         attempt_used_perf = 0.0
+        attempt_used_headers_ms: int | None = None
+        attempt_used_first_chunk_ms: int | None = None
 
         for attempt_number, attempt in enumerate(attempts, start=1):
             attempt_started_at = utcnow_iso()
             first_attempt_started_at = first_attempt_started_at or attempt_started_at
             attempt_started_perf = time.perf_counter()
+            attempt_start_offset_ms = self._offset_ms(started_perf, attempt_started_perf)
             request_body["model"] = attempt.resolved_model
             timeout = httpx.Timeout(
                 self.config.request_timeout_s,
@@ -334,8 +384,10 @@ class ProxyService:
             )
             try:
                 upstream_response = await response_cm.__aenter__()
+                response_headers_ms = self._elapsed_ms(attempt_started_perf)
                 if self._should_fallback_on_status(upstream_response.status_code) and attempt is attempts[0] and len(attempts) > 1:
                     await upstream_response.aread()
+                    completed_at = utcnow_iso()
                     await self._record_proxy_attempt(
                         attempt_id=str(uuid.uuid4()),
                         request_id=request_id,
@@ -346,11 +398,19 @@ class ProxyService:
                         stream=True,
                         status="error",
                         error_type=f"http_{upstream_response.status_code}",
-                        latency_ms=self._elapsed_ms(attempt_started_perf),
+                        latency_ms=response_headers_ms,
                         input_chars_estimate=input_chars_estimate,
                         output_chars_estimate=0,
                         started_at=attempt_started_at,
-                        completed_at=utcnow_iso(),
+                        completed_at=completed_at,
+                        profile_json={
+                            "request_route": "proxy",
+                            "http_status": upstream_response.status_code,
+                            "timings_ms": {
+                                "attempt_start_offset": attempt_start_offset_ms,
+                                "upstream_response_headers": response_headers_ms,
+                            },
+                        },
                     )
                     await response_cm.__aexit__(None, None, None)
                     await client.aclose()
@@ -362,6 +422,7 @@ class ProxyService:
                     body = await upstream_response.aread()
                     await response_cm.__aexit__(None, None, None)
                     await client.aclose()
+                    completed_at = utcnow_iso()
                     await self._record_proxy_attempt(
                         attempt_id=str(uuid.uuid4()),
                         request_id=request_id,
@@ -372,11 +433,19 @@ class ProxyService:
                         stream=True,
                         status="error",
                         error_type=f"http_{upstream_response.status_code}",
-                        latency_ms=self._elapsed_ms(attempt_started_perf),
+                        latency_ms=response_headers_ms,
                         input_chars_estimate=input_chars_estimate,
                         output_chars_estimate=0,
                         started_at=attempt_started_at,
-                        completed_at=utcnow_iso(),
+                        completed_at=completed_at,
+                        profile_json={
+                            "request_route": "proxy",
+                            "http_status": upstream_response.status_code,
+                            "timings_ms": {
+                                "attempt_start_offset": attempt_start_offset_ms,
+                                "upstream_response_headers": response_headers_ms,
+                            },
+                        },
                     )
                     await self._record_proxy_request(
                         request_id=request_id,
@@ -387,13 +456,23 @@ class ProxyService:
                         stream=True,
                         status="error",
                         error_type=f"http_{upstream_response.status_code}",
-                        latency_ms=self._elapsed_ms(started_at),
+                        latency_ms=self._elapsed_ms(started_perf),
                         message_count=message_count,
                         input_chars_estimate=input_chars_estimate,
                         output_chars_estimate=0,
                         attempt_count=attempt_number,
                         first_attempt_started_at=first_attempt_started_at or attempt_started_at,
-                        completed_at=utcnow_iso(),
+                        completed_at=completed_at,
+                        profile_json={
+                            "request_route": "proxy",
+                            "request_received_at": request_received_at,
+                            "stream": True,
+                            "timings_ms": {
+                                "proxy_total": self._elapsed_ms(started_perf),
+                                "attempt_start_offset": attempt_start_offset_ms,
+                                "upstream_response_headers": response_headers_ms,
+                            },
+                        },
                     )
                     return Response(
                         content=body,
@@ -405,11 +484,14 @@ class ProxyService:
                     first_chunk = await iterator.__anext__()
                 except StopAsyncIteration:
                     first_chunk = b""
+                first_chunk_ms = self._elapsed_ms(attempt_started_perf)
                 stream_iterator = iterator
                 attempt_used = attempt
                 attempt_used_number = attempt_number
                 attempt_used_started_at = attempt_started_at
                 attempt_used_perf = attempt_started_perf
+                attempt_used_headers_ms = response_headers_ms
+                attempt_used_first_chunk_ms = first_chunk_ms
                 break
             except Exception as exc:
                 if response_cm is not None:
@@ -419,6 +501,7 @@ class ProxyService:
                 client = None
                 response_cm = None
                 upstream_response = None
+                completed_at = utcnow_iso()
                 await self._record_proxy_attempt(
                     attempt_id=str(uuid.uuid4()),
                     request_id=request_id,
@@ -433,7 +516,14 @@ class ProxyService:
                     input_chars_estimate=input_chars_estimate,
                     output_chars_estimate=0,
                     started_at=attempt_started_at,
-                    completed_at=utcnow_iso(),
+                    completed_at=completed_at,
+                    profile_json={
+                        "request_route": "proxy",
+                        "timings_ms": {
+                            "attempt_start_offset": attempt_start_offset_ms,
+                            "upstream_response_headers": self._elapsed_ms(attempt_started_perf),
+                        },
+                    },
                 )
                 if self._should_fallback_on_exception(exc) and attempt is attempts[0] and len(attempts) > 1:
                     logger.warning("Primary upstream failed before first stream chunk; retrying fallback", exc_info=True)
@@ -447,13 +537,23 @@ class ProxyService:
                     stream=True,
                     status="error",
                     error_type=type(exc).__name__,
-                    latency_ms=self._elapsed_ms(started_at),
+                    latency_ms=self._elapsed_ms(started_perf),
                     message_count=message_count,
                     input_chars_estimate=input_chars_estimate,
                     output_chars_estimate=0,
                     attempt_count=attempt_number,
                     first_attempt_started_at=first_attempt_started_at or attempt_started_at,
-                    completed_at=utcnow_iso(),
+                    completed_at=completed_at,
+                    profile_json={
+                        "request_route": "proxy",
+                        "request_received_at": request_received_at,
+                        "stream": True,
+                        "timings_ms": {
+                            "proxy_total": self._elapsed_ms(started_perf),
+                            "attempt_start_offset": attempt_start_offset_ms,
+                            "upstream_response_headers": self._elapsed_ms(attempt_started_perf),
+                        },
+                    },
                 )
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
@@ -506,6 +606,14 @@ class ProxyService:
                     output_chars_estimate=counter.output_chars_estimate,
                     started_at=attempt_used_started_at or utcnow_iso(),
                     completed_at=utcnow_iso(),
+                    profile_json={
+                        "request_route": "proxy",
+                        "timings_ms": {
+                            "upstream_response_headers": attempt_used_headers_ms,
+                            "upstream_first_chunk": attempt_used_first_chunk_ms,
+                            "upstream_stream_complete": self._elapsed_ms(attempt_used_perf),
+                        },
+                    },
                 )
                 await self._record_proxy_request(
                     request_id=request_id,
@@ -516,13 +624,24 @@ class ProxyService:
                     stream=True,
                     status=status_label,
                     error_type=error_type,
-                    latency_ms=self._elapsed_ms(started_at),
+                    latency_ms=self._elapsed_ms(started_perf),
                     message_count=message_count,
                     input_chars_estimate=input_chars_estimate,
                     output_chars_estimate=counter.output_chars_estimate,
                     attempt_count=attempt_used_number,
                     first_attempt_started_at=first_attempt_started_at or utcnow_iso(),
                     completed_at=utcnow_iso(),
+                    profile_json={
+                        "request_route": "proxy",
+                        "request_received_at": request_received_at,
+                        "stream": True,
+                        "timings_ms": {
+                            "proxy_total": self._elapsed_ms(started_perf),
+                            "upstream_response_headers": attempt_used_headers_ms,
+                            "upstream_first_chunk": attempt_used_first_chunk_ms,
+                            "upstream_stream_complete": self._elapsed_ms(attempt_used_perf),
+                        },
+                    },
                 )
 
         return StreamingResponse(
@@ -622,6 +741,10 @@ class ProxyService:
     def _elapsed_ms(self, started_at: float) -> int:
         return int((time.perf_counter() - started_at) * 1000)
 
+    @staticmethod
+    def _offset_ms(origin: float, point: float) -> int:
+        return int((point - origin) * 1000)
+
     async def _record_proxy_request(
         self,
         *,
@@ -640,29 +763,31 @@ class ProxyService:
         attempt_count: int,
         first_attempt_started_at: str,
         completed_at: str,
+        profile_json: dict[str, Any] | None = None,
     ) -> None:
-        await self.store.record_proxy_request(
-            {
-                "request_id": request_id,
-                "install_id": install_id,
-                "invocation_id": invocation_id,
-                "requested_model": requested_model,
-                "resolved_model": attempt.resolved_model,
-                "primary_upstream": self.config.primary_upstream.name,
-                "fallback_used": attempt.fallback_used,
-                "stream": stream,
-                "status": status,
-                "error_type": error_type,
-                "latency_ms": latency_ms,
-                "message_count": message_count,
-                "input_chars_estimate": input_chars_estimate,
-                "output_chars_estimate": output_chars_estimate,
-                "attempt_count": attempt_count,
-                "first_attempt_started_at": first_attempt_started_at,
-                "completed_at": completed_at,
-                "created_at": first_attempt_started_at,
-            }
-        )
+        row = {
+            "request_id": request_id,
+            "install_id": install_id,
+            "invocation_id": invocation_id,
+            "requested_model": requested_model,
+            "resolved_model": attempt.resolved_model,
+            "primary_upstream": self.config.primary_upstream.name,
+            "fallback_used": attempt.fallback_used,
+            "stream": stream,
+            "status": status,
+            "error_type": error_type,
+            "latency_ms": latency_ms,
+            "message_count": message_count,
+            "input_chars_estimate": input_chars_estimate,
+            "output_chars_estimate": output_chars_estimate,
+            "attempt_count": attempt_count,
+            "first_attempt_started_at": first_attempt_started_at,
+            "completed_at": completed_at,
+            "created_at": first_attempt_started_at,
+        }
+        if profile_json is not None:
+            row["profile_json"] = profile_json
+        await self.store.record_proxy_request(row)
 
     async def _record_proxy_attempt(
         self,
@@ -681,25 +806,27 @@ class ProxyService:
         output_chars_estimate: int,
         started_at: str,
         completed_at: str,
+        profile_json: dict[str, Any] | None = None,
     ) -> None:
-        await self.store.record_proxy_attempt(
-            {
-                "attempt_id": attempt_id,
-                "request_id": request_id,
-                "install_id": install_id,
-                "invocation_id": invocation_id,
-                "attempt_number": attempt_number,
-                "upstream_name": attempt.upstream.name,
-                "resolved_model": attempt.resolved_model,
-                "is_fallback_attempt": attempt.fallback_used,
-                "stream": stream,
-                "status": status,
-                "error_type": error_type,
-                "latency_ms": latency_ms,
-                "input_chars_estimate": input_chars_estimate,
-                "output_chars_estimate": output_chars_estimate,
-                "started_at": started_at,
-                "completed_at": completed_at,
-                "created_at": started_at,
-            }
-        )
+        row = {
+            "attempt_id": attempt_id,
+            "request_id": request_id,
+            "install_id": install_id,
+            "invocation_id": invocation_id,
+            "attempt_number": attempt_number,
+            "upstream_name": attempt.upstream.name,
+            "resolved_model": attempt.resolved_model,
+            "is_fallback_attempt": attempt.fallback_used,
+            "stream": stream,
+            "status": status,
+            "error_type": error_type,
+            "latency_ms": latency_ms,
+            "input_chars_estimate": input_chars_estimate,
+            "output_chars_estimate": output_chars_estimate,
+            "started_at": started_at,
+            "completed_at": completed_at,
+            "created_at": started_at,
+        }
+        if profile_json is not None:
+            row["profile_json"] = profile_json
+        await self.store.record_proxy_attempt(row)

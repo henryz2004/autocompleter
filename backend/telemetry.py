@@ -77,6 +77,8 @@ def build_telemetry_row(
         "mode": _string_value(sanitized.get("mode")),
         "source_app": _string_value(sanitized.get("source_app")),
         "app_category": _string_value(sanitized.get("app_category")),
+        "requested_route": _string_value(sanitized.get("requested_route")),
+        "profile_json": _json_object(sanitized.get("profile")),
         "payload_json": sanitized,
         "received_at": utcnow_iso(),
     }
@@ -104,9 +106,15 @@ def build_invocation_row(
         value = _string_value(sanitized.get(field))
         if value:
             row[field] = value
+    requested_route = _string_value(sanitized.get("requested_route"))
+    if requested_route:
+        row["requested_route"] = requested_route
     request_id = _string_value(sanitized.get("request_id"))
     if request_id:
         row["proxy_request_id"] = request_id
+    profile_json = _json_object(sanitized.get("profile"))
+    if profile_json is not None:
+        row["profile_json"] = profile_json
 
     first_display_latency_ms = _int_value(sanitized.get("first_display_latency_ms"))
     if first_display_latency_ms is not None:
@@ -178,5 +186,11 @@ def _int_value(value: Any) -> int | None:
 
 def _bool_value(value: Any) -> bool | None:
     if isinstance(value, bool):
+        return value
+    return None
+
+
+def _json_object(value: Any) -> dict[str, Any] | None:
+    if isinstance(value, dict):
         return value
     return None

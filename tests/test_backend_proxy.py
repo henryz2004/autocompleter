@@ -88,7 +88,7 @@ class TestBackendProxy:
                     "X-Autocompleter-Invocation-Id": "inv-123",
                 },
                 json={
-                    "model": "beta-model",
+                    "model": "",
                     "messages": [{"role": "user", "content": "hello backend"}],
                     "stream": False,
                     "temperature": 0.2,
@@ -104,17 +104,22 @@ class TestBackendProxy:
         assert len(store.proxy_attempts) == 1
         row = store.proxy_requests[0]
         assert row["invocation_id"] == "inv-123"
+        assert row["requested_model"] == ""
+        assert row["resolved_model"] == "beta-model"
         assert row["fallback_used"] is False
         assert row["status"] == "success"
         assert row["attempt_count"] == 1
         assert row["input_chars_estimate"] >= len("hello backend")
         assert row["output_chars_estimate"] == len("hello there")
+        assert row["profile_json"]["request_route"] == "proxy"
+        assert row["profile_json"]["timings_ms"]["proxy_total"] >= 0
         assert "messages" not in row
         assert "prompt" not in row
         attempt = store.proxy_attempts[0]
         assert attempt["request_id"] == row["request_id"]
         assert attempt["attempt_number"] == 1
         assert attempt["is_fallback_attempt"] is False
+        assert attempt["profile_json"]["timings_ms"]["upstream_response_complete"] >= 0
 
     def test_streaming_proxy_passthrough_and_server_side_fallback(self):
         calls: list[str] = []
@@ -156,7 +161,7 @@ class TestBackendProxy:
                     "X-Autocompleter-Invocation-Id": "inv-456",
                 },
                 json={
-                    "model": "beta-model",
+                    "model": "",
                     "messages": [{"role": "user", "content": "hello backend"}],
                     "stream": True,
                 },
@@ -174,9 +179,12 @@ class TestBackendProxy:
         assert len(store.proxy_attempts) == 2
         row = store.proxy_requests[0]
         assert row["invocation_id"] == "inv-456"
+        assert row["requested_model"] == ""
         assert row["fallback_used"] is True
         assert row["status"] == "success"
         assert row["attempt_count"] == 2
         assert row["output_chars_estimate"] == len("hi there")
+        assert row["profile_json"]["timings_ms"]["upstream_first_chunk"] >= 0
         assert store.proxy_attempts[0]["is_fallback_attempt"] is False
         assert store.proxy_attempts[1]["is_fallback_attempt"] is True
+        assert store.proxy_attempts[1]["profile_json"]["timings_ms"]["upstream_first_chunk"] >= 0

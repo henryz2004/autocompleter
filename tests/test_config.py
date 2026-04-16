@@ -46,7 +46,9 @@ class TestBetaProxyConfig:
         assert cfg.effective_llm_provider == "openai"
         assert cfg.effective_llm_base_url == "https://proxy.example/v1"
         assert cfg.effective_openai_api_key == "proxy-key"
-        assert cfg.effective_llm_model == "beta-model"
+        assert cfg.effective_llm_model == ""
+        assert cfg.effective_model_label == "backend-default"
+        assert cfg.effective_request_route == "proxy"
         assert cfg.effective_fallback_api_key == ""
 
     def test_byo_mode_keeps_existing_provider_fields(self, monkeypatch, tmp_path):
@@ -62,6 +64,8 @@ class TestBetaProxyConfig:
         assert cfg.proxy_enabled is False
         assert cfg.effective_llm_provider == "anthropic"
         assert cfg.effective_llm_base_url == "https://api.example/v1"
+        assert cfg.effective_llm_model == "qwen-3-235b-a22b-instruct-2507"
+        assert cfg.effective_request_route == "direct"
 
     def test_telemetry_opt_out_does_not_disable_proxy_mode(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HOME", str(tmp_path))

@@ -427,6 +427,8 @@ class TestTelemetryHooks:
         assert events[0][1]["trigger_type"] == "manual"
         assert events[0][1]["app_category"] == "chat"
         assert events[0][1]["source_app"] == "Slack"
+        assert events[0][1]["requested_route"] == "direct"
+        assert events[0][1]["profile"]["requested_route"] == "direct"
         assert events[0][1]["invocation_id"] == invocation_id
 
     def test_accept_selected_suggestion_emits_accepted_event(self):
@@ -463,6 +465,7 @@ class TestTelemetryHooks:
             mode="reply",
             source_app="Slack",
             app_category="chat",
+            requested_route="proxy",
             started_monotonic=0.0,
             started_at="2026-04-16T00:00:00Z",
         )
@@ -506,6 +509,7 @@ class TestTelemetryHooks:
             mode="reply",
             source_app="Slack",
             app_category="chat",
+            requested_route="proxy",
             started_monotonic=0.0,
             started_at="2026-04-16T00:00:00Z",
         )
@@ -542,6 +546,7 @@ class TestTelemetryHooks:
             mode="reply",
             source_app="Slack",
             app_category="chat",
+            requested_route="proxy",
             started_monotonic=0.0,
             started_at="2026-04-16T00:00:00Z",
         )

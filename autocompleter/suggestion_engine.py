@@ -429,7 +429,7 @@ class SuggestionEngine:
             )
 
         logger.debug(
-            f"--- LLM REQUEST ({self.config.effective_llm_provider}/{self.config.effective_llm_model}, "
+            f"--- LLM REQUEST ({self.config.effective_llm_provider}/{self.config.effective_model_label}, "
             f"mode={mode.value}, temp={temperature}, max_tok={max_tokens}) ---"
         )
         logger.debug(f"System prompt ({len(system)} chars): {system[:200]!r}...")
@@ -588,7 +588,7 @@ class SuggestionEngine:
                 )
 
         logger.debug(
-            f"--- LLM STREAM REQUEST ({self.config.effective_llm_provider}/{self.config.effective_llm_model}, "
+            f"--- LLM STREAM REQUEST ({self.config.effective_llm_provider}/{self.config.effective_model_label}, "
             f"mode={mode.value}, temp={temperature}, max_tok={max_tokens}) ---"
         )
         if event_callback is not None:
@@ -598,6 +598,8 @@ class SuggestionEngine:
                     "provider": self.config.effective_llm_provider,
                     "base_url": self.config.effective_llm_base_url,
                     "model": self.config.effective_llm_model,
+                    "model_label": self.config.effective_model_label,
+                    "requested_route": self.config.effective_request_route,
                     "fallback_provider": self.config.effective_fallback_provider,
                     "fallback_base_url": self.config.effective_fallback_base_url,
                     "fallback_model": self.config.effective_fallback_model,
@@ -950,7 +952,7 @@ class SuggestionEngine:
                     loser_cancel.set()
                     logger.info(
                         f"Provider '{tag}' won the race "
-                        f"(model={self.config.effective_llm_model if tag == 'primary' else self.config.effective_fallback_model})"
+                        f"(model={self.config.effective_model_label if tag == 'primary' else self.config.effective_fallback_model})"
                     )
                     if event_callback is not None:
                         event_callback(
@@ -959,6 +961,11 @@ class SuggestionEngine:
                                 "provider": tag,
                                 "model": (
                                     self.config.effective_llm_model
+                                    if tag == "primary"
+                                    else self.config.effective_fallback_model
+                                ),
+                                "model_label": (
+                                    self.config.effective_model_label
                                     if tag == "primary"
                                     else self.config.effective_fallback_model
                                 ),

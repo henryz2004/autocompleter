@@ -14,8 +14,9 @@ import sys
 import threading
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -68,9 +69,14 @@ class _InvocationTelemetryState:
     mode: str
     source_app: str
     app_category: str
+    requested_route: str
     started_monotonic: float
     started_at: str
     first_displayed_monotonic: float | None = None
+    request_profile: dict[str, object] = field(default_factory=dict)
+    request_events: list[dict[str, object]] = field(default_factory=list)
+    fallback_used: bool = False
+    latency_profile: dict[str, object] = field(default_factory=dict)
 
 
 class _Debouncer:
@@ -277,6 +283,104 @@ class Autocompleter:
     def _telemetry_timestamp() -> str:
         return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
+    @staticmethod
+    def _base_url_host(url: str) -> str:
+        if not url:
+            return ""
+        try:
+            return (urlparse(url).hostname or "").lower()
+        except Exception:
+            return ""
+
+    def _safe_request_profile(
+        self,
+        payload: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        payload = payload or {}
+        config = getattr(self, "config", None)
+        request_route = getattr(config, "effective_request_route", "direct")
+        provider = getattr(config, "effective_llm_provider", "")
+        base_url = getattr(config, "effective_llm_base_url", "")
+        requested_model = getattr(config, "effective_llm_model", "")
+        model_label = getattr(config, "effective_model_label", requested_model)
+        fallback_provider = getattr(config, "effective_fallback_provider", "")
+        fallback_base_url = getattr(config, "effective_fallback_base_url", "")
+        fallback_model = getattr(config, "effective_fallback_model", "")
+        return {
+            "requested_route": request_route,
+            "provider": provider,
+            "base_url_host": self._base_url_host(base_url),
+            "requested_model": requested_model,
+            "model_label": model_label,
+            "fallback_provider": fallback_provider,
+            "fallback_base_url_host": self._base_url_host(fallback_base_url),
+            "fallback_model": fallback_model,
+            "temperature": payload.get("temperature"),
+            "max_tokens": payload.get("max_tokens"),
+            "num_suggestions": payload.get("num_suggestions"),
+            "streaming": payload.get("streaming"),
+        }
+
+    def _build_invocation_profile(
+        self,
+        *,
+        record: LatencyRecord | None = None,
+        request_profile: dict[str, object] | None = None,
+        extra: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        active = getattr(self, "_active_invocation", None)
+        config = getattr(self, "config", None)
+        latency_tracker = getattr(self, "_latency_tracker", None)
+        if active is not None and active.latency_profile and record is None:
+            latency_profile = dict(active.latency_profile)
+        elif latency_tracker is not None and hasattr(latency_tracker, "profile"):
+            latency_profile = latency_tracker.profile(record)
+        else:
+            latency_profile = {"generation_id": 0, "stage_offsets_ms": {}, "durations_ms": {}}
+        profile = {
+            "requested_route": getattr(config, "effective_request_route", "direct"),
+            "routing": dict(request_profile or (active.request_profile if active else {})),
+            "latency": latency_profile,
+            "flags": {
+                "fallback_used": bool(
+                    getattr(record, "fallback_used", False)
+                    if record is not None
+                    else getattr(active, "fallback_used", False)
+                ),
+            },
+        }
+        if active is not None and active.request_events:
+            profile["events"] = [dict(item) for item in active.request_events]
+        if extra:
+            profile.update(extra)
+        return profile
+
+    def _record_invocation_request_event(
+        self,
+        invocation_id: str | None,
+        event_name: str,
+        payload: dict[str, object] | None = None,
+    ) -> None:
+        if not invocation_id:
+            return
+        active = getattr(self, "_active_invocation", None)
+        if active is None or active.invocation_id != invocation_id:
+            return
+
+        safe_payload = dict(payload or {})
+        if event_name == "request_built":
+            active.request_profile = self._safe_request_profile(safe_payload)
+            return
+        if event_name == "fallback_started":
+            active.fallback_used = True
+        active.request_events.append(
+            {
+                "name": event_name,
+                "payload": safe_payload,
+                "timestamp": self._telemetry_timestamp(),
+            }
+        )
+
     def _emit_invocation_terminal_event(
         self,
         invocation_id: str | None,
@@ -294,6 +398,8 @@ class Autocompleter:
                 "dwell_ms",
                 int((resolved_monotonic - active.first_displayed_monotonic) * 1000),
             )
+        payload.setdefault("requested_route", active.requested_route)
+        payload.setdefault("profile", self._build_invocation_profile())
         self._emit_telemetry(event, **payload)
         self._active_invocation = None
 
@@ -308,9 +414,11 @@ class Autocompleter:
         active.first_displayed_monotonic = time.monotonic()
         self._emit_telemetry(
             "first_suggestion_displayed",
+            requested_route=active.requested_route,
             first_display_latency_ms=int(
                 (active.first_displayed_monotonic - active.started_monotonic) * 1000
             ),
+            profile=self._build_invocation_profile(),
         )
 
     def _mark_invocation_stream_completed(
@@ -326,8 +434,10 @@ class Autocompleter:
         if active is None or active.invocation_id != invocation_id:
             return
         completed_monotonic = time.monotonic()
+        active.fallback_used = fallback_used
         self._emit_telemetry(
             "suggestions_returned",
+            requested_route=active.requested_route,
             count=count,
             latency_bucket_ms=bucket_latency_ms(
                 (completed_monotonic - active.started_monotonic) * 1000
@@ -336,6 +446,11 @@ class Autocompleter:
                 (completed_monotonic - active.started_monotonic) * 1000
             ),
             fallback_used=fallback_used,
+            profile=self._build_invocation_profile(
+                extra={
+                    "suggestion_count": count,
+                }
+            ),
         )
 
     def _supersede_active_invocation(self) -> None:
@@ -361,14 +476,17 @@ class Autocompleter:
         trigger_type: str,
         app_name: str,
     ) -> str:
+        config = getattr(self, "config", None)
         self._active_invocation = _InvocationTelemetryState(
             invocation_id=str(uuid.uuid4()),
             trigger_type=trigger_type,
             mode=mode.value,
             source_app=app_name,
             app_category=categorize_app(app_name),
+            requested_route=getattr(config, "effective_request_route", "direct"),
             started_monotonic=time.monotonic(),
             started_at=self._telemetry_timestamp(),
+            request_profile=self._safe_request_profile(),
         )
         self._emit_telemetry(
             "trigger_fired",
@@ -376,6 +494,8 @@ class Autocompleter:
             trigger_type=trigger_type,
             source_app=app_name,
             app_category=categorize_app(app_name),
+            requested_route=getattr(config, "effective_request_route", "direct"),
+            profile=self._build_invocation_profile(),
         )
         return self._active_invocation.invocation_id
 
@@ -1024,6 +1144,11 @@ class Autocompleter:
 
         self._latency_tracker.mark("context_ready")
         self._latency_tracker.mark("llm_start")
+        self._record_invocation_request_event(
+            invocation_id,
+            "request_built",
+            {"streaming": False},
+        )
 
         t0 = time.time()
         suggestions = self.suggestion_engine.generate_suggestions(
@@ -1087,9 +1212,15 @@ class Autocompleter:
             app_name=app_name,
             mode=mode.value,
             provider=self.config.effective_llm_provider,
-            model=self.config.effective_llm_model,
+            model=self.config.effective_model_label,
             suggestion_count=len(suggestions),
         )
+        if (
+            invocation_id
+            and self._active_invocation is not None
+            and self._active_invocation.invocation_id == invocation_id
+        ):
+            self._active_invocation.latency_profile = self._latency_tracker.profile(record)
         self._latency_store.save(record)
         self._last_latency_record = record
         self._last_fallback_used = False
@@ -1293,6 +1424,7 @@ class Autocompleter:
             nonlocal fallback_used
             if event_name == "fallback_started":
                 fallback_used = True
+            self._record_invocation_request_event(invocation_id, event_name, payload)
             if snapshot is not None and payload is not None:
                 if event_name == "request_built":
                     snapshot.request = dict(payload)
@@ -1393,7 +1525,7 @@ class Autocompleter:
                 app_name=app_name,
                 mode=mode.value,
                 provider=self.config.effective_llm_provider,
-                model=self.config.effective_llm_model,
+                model=self.config.effective_model_label,
                 suggestion_count=0,
                 trigger_type=trigger_type,
                 use_shell=is_terminal,
@@ -1441,7 +1573,7 @@ class Autocompleter:
             app_name=app_name,
             mode=mode.value,
             provider=self.config.effective_llm_provider,
-            model=self.config.effective_llm_model,
+            model=self.config.effective_model_label,
             suggestion_count=len(suggestions),
             trigger_type=trigger_type,
             use_shell=is_terminal,
@@ -1451,6 +1583,12 @@ class Autocompleter:
             used_memory_context=bool(memory_context),
             fallback_used=fallback_used,
         )
+        if (
+            invocation_id
+            and self._active_invocation is not None
+            and self._active_invocation.invocation_id == invocation_id
+        ):
+            self._active_invocation.latency_profile = self._latency_tracker.profile(record)
         self._latency_store.save(record)
         self._last_latency_record = record
         self._last_fallback_used = fallback_used
@@ -2255,11 +2393,16 @@ class Autocompleter:
         )
 
     def _build_feedback_context(self) -> FeedbackContext:
+        config = getattr(self, "config", None)
         ctx = FeedbackContext(
-            llm_provider=self.config.effective_llm_provider,
-            llm_model=self.config.effective_llm_model,
-            fallback_provider=self.config.effective_fallback_provider or None,
-            fallback_model=self.config.effective_fallback_model or None,
+            llm_provider=getattr(config, "effective_llm_provider", None),
+            llm_model=getattr(
+                config,
+                "effective_model_label",
+                getattr(config, "effective_llm_model", None),
+            ),
+            fallback_provider=getattr(config, "effective_fallback_provider", "") or None,
+            fallback_model=getattr(config, "effective_fallback_model", "") or None,
         )
 
         args = self._last_trigger_args
