@@ -9,6 +9,7 @@ import uuid
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import HTTPException, Request, status
@@ -152,7 +153,7 @@ class ProxyService:
         started_perf = time.perf_counter()
         first_attempt_started_at: str | None = None
         attempts = self._build_attempts(payload.model, request)
-        request_body = self._build_upstream_payload(payload, attempts[0].resolved_model)
+        request_body = self._build_upstream_payload(payload, attempts[0].resolved_model, attempts[0].upstream)
         input_chars_estimate = estimate_input_chars(payload.messages)
         response_json: dict[str, Any] | None = None
         status_label = "error"
@@ -350,7 +351,7 @@ class ProxyService:
         started_perf = time.perf_counter()
         first_attempt_started_at: str | None = None
         attempts = self._build_attempts(payload.model, request)
-        request_body = self._build_upstream_payload(payload, attempts[0].resolved_model)
+        request_body = self._build_upstream_payload(payload, attempts[0].resolved_model, attempts[0].upstream)
         message_count = len(payload.messages)
         input_chars_estimate = estimate_input_chars(payload.messages)
         attempt_used: ProxyAttempt | None = None
@@ -693,6 +694,7 @@ class ProxyService:
         self,
         payload: ChatCompletionRequest,
         resolved_model: str,
+        upstream: UpstreamConfig,
     ) -> dict[str, Any]:
         body = {
             "model": resolved_model,
@@ -706,6 +708,9 @@ class ProxyService:
         for key, value in payload.model_extra.items():
             if key != "extra_body":
                 body[key] = value
+        hostname = urlparse(upstream.base_url).hostname or ""
+        if hostname.endswith("groq.com"):
+            body["reasoning_effort"] = "none"
         if payload.extra_body:
             body.update(payload.extra_body)
         return body

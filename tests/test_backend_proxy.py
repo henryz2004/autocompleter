@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import replace
 from collections.abc import AsyncIterator
 
 import httpx
@@ -51,6 +52,56 @@ def make_config() -> BackendConfig:
 
 
 class TestBackendProxy:
+    def test_proxy_adds_groq_reasoning_effort_none_by_default(self):
+        captured_bodies: list[dict] = []
+
+        def dispatch(request: httpx.Request) -> httpx.Response:
+            captured_bodies.append(json.loads(request.content.decode("utf-8")))
+            return httpx.Response(
+                200,
+                json={
+                    "id": "chatcmpl-1",
+                    "object": "chat.completion",
+                    "choices": [
+                        {"index": 0, "message": {"role": "assistant", "content": "hello there"}}
+                    ],
+                },
+            )
+
+        store = InMemoryStore()
+        config = make_config()
+        config = replace(
+            config,
+            primary_upstream=replace(
+                config.primary_upstream,
+                base_url="https://api.groq.com/openai/v1",
+            ),
+        )
+        proxy = ProxyService(
+            config,
+            store,
+            client_factory=lambda timeout: httpx.AsyncClient(
+                transport=httpx.MockTransport(dispatch),
+                timeout=timeout,
+            ),
+        )
+        app = create_app(config=config, store=store, proxy_service=proxy)
+        _, install_key = asyncio.run(store.create_install(label="friend"))
+
+        with TestClient(app) as client:
+            response = client.post(
+                "/v1/chat/completions",
+                headers={"Authorization": f"Bearer {install_key}"},
+                json={
+                    "model": "",
+                    "messages": [{"role": "user", "content": "hello backend"}],
+                    "stream": False,
+                },
+            )
+
+        assert response.status_code == 200
+        assert captured_bodies[0]["reasoning_effort"] == "none"
+
     def test_non_streaming_proxy_passthrough_logs_metadata_only(self):
         calls: list[str] = []
 
