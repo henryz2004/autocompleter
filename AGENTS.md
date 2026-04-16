@@ -59,6 +59,8 @@ Five execution paths matter:
 - Manual trigger: `AUTOCOMPLETER_HOTKEY` (default `ctrl+space`)
 - Auto-trigger toggle: `shift+<hotkey>`
 - Regenerate: `AUTOCOMPLETER_REGENERATE_HOTKEY` (default `ctrl+r`)
+- Help panel: `AUTOCOMPLETER_HELP_HOTKEY` (default `ctrl+/`)
+- Bug report: `AUTOCOMPLETER_REPORT_HOTKEY` (default `ctrl+shift+b`) — pings a content-free report to `~/.autocompleter/feedback/` and, if `AUTOCOMPLETER_FEEDBACK_URL` is set, POSTs it to that URL.
 - Navigation: `up` / `down` / `tab` / `return` / `shift+tab` / `escape` / `1..3`
 
 ### Mode-aware pipeline

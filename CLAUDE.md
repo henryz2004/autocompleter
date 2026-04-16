@@ -57,6 +57,12 @@ LLM outputs JSON (`{"suggestions": [{"text": "..."}]}`). `generate_suggestions_s
 
 When the overlay is visible, `Ctrl+R` (configurable via `AUTOCOMPLETER_REGENERATE_HOTKEY`) re-triggers the LLM with the same context but fresh sampling, producing different suggestions. Validates the user is still in the same app (by PID) and re-captures the caret position to track window movement. Saved trigger state is cleared on dismiss to avoid memory leaks.
 
+### Help panel & bug reports
+
+`Ctrl+/` (configurable via `AUTOCOMPLETER_HELP_HOTKEY`) toggles a help overlay (`help_overlay.py`) that lists every shortcut. Centered on the primary screen, dismisses on Esc / click-outside / same hotkey.
+
+`Ctrl+Shift+B` (configurable via `AUTOCOMPLETER_REPORT_HOTKEY`) submits a content-free bug report via `feedback.py`. The report captures app name, element role, URL domain (host only — no path/query), detected mode, extractor class name, LLM provider/model, and the last generation's latency. It NEVER captures cursor text, visible text, suggestion text, window title, or full URL. Reports are always written to `~/.autocompleter/feedback/<ts>-<id>.json`; if `AUTOCOMPLETER_FEEDBACK_URL` is set, the JSON payload is also POSTed to that URL on a daemon thread.
+
 ### Context assembly tiers (continuation mode)
 
 1. **Metadata**: App name, window title, URL

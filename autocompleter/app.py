@@ -27,14 +27,17 @@ except ImportError:
 from .config import Config, load_config
 from .context_store import ContextStore
 from .context_trail import ContextTrail, _filter_ui_chrome
+from .conversation_extractors import get_extractor
 from .embeddings import (
     AnthropicEmbeddingProvider,
     OpenAIEmbeddingProvider,
     TFIDFEmbeddingProvider,
 )
+from .feedback import FeedbackContext, FeedbackReporter, extract_url_domain
+from .help_overlay import HelpOverlay
 from .hotkey import HotkeyListener
 from .input_observer import InputObserver, VisibleContent
-from .latency_tracker import LatencyStore, LatencyTracker
+from .latency_tracker import LatencyRecord, LatencyStore, LatencyTracker
 from .overlay import OverlayConfig, SuggestionOverlay
 from .quality_review import (
     LIVE_CONTINUATION_VARIANT,
@@ -186,6 +189,16 @@ class Autocompleter:
         self.hotkey_listener = HotkeyListener()
         self.context_trail = ContextTrail()
         self.memory = MemoryStore(self.config)
+        self.help_overlay = HelpOverlay(
+            trigger_hotkey=self.config.hotkey,
+            regenerate_hotkey=self.config.regenerate_hotkey,
+            help_hotkey=self.config.help_hotkey,
+            report_hotkey=self.config.report_hotkey,
+        )
+        self.feedback_reporter = FeedbackReporter(
+            feedback_dir=self.config.feedback_dir,
+            webhook_url=self.config.feedback_webhook_url or None,
+        )
 
         # Initialize embedding provider for semantic context
         self._embedding_provider = None
@@ -236,6 +249,11 @@ class Autocompleter:
         # replay the LLM call with a fresh generation_id (new sampling).
         self._last_trigger_args: dict | None = None
 
+        # Last generation's telemetry (used by the feedback reporter).
+        # These are updated at the end of each streaming generation.
+        self._last_latency_record: LatencyRecord | None = None
+        self._last_fallback_used: bool = False
+
         # Auto-trigger state
         self._auto_trigger_enabled: bool = self.config.auto_trigger_enabled
         self._last_dismiss_time: float = 0.0
@@ -282,6 +300,11 @@ class Autocompleter:
             self._on_nav_dismiss()
         self.overlay.set_dismiss_callback(_click_dismiss)
 
+        # Help overlay dismisses on click-outside
+        def _help_click_dismiss():
+            self._run_on_main(self.help_overlay.hide)
+        self.help_overlay.set_dismiss_callback(_help_click_dismiss)
+
         # Dismiss overlay when user starts typing (any non-hotkey keydown),
         # and poke the auto-trigger debouncer.
         def _on_typing():
@@ -300,6 +323,12 @@ class Autocompleter:
         )
         self.hotkey_listener.register(
             self.config.regenerate_hotkey, self._on_regenerate
+        )
+        self.hotkey_listener.register(
+            self.config.help_hotkey, self._on_toggle_help
+        )
+        self.hotkey_listener.register(
+            self.config.report_hotkey, self._on_report_feedback
         )
         self.hotkey_listener.register("up", self._on_nav_up)
         self.hotkey_listener.register("down", self._on_nav_down)
@@ -328,9 +357,11 @@ class Autocompleter:
             f"Provider: {self.config.llm_provider} | Model: {self.config.llm_model}"
         )
         print(f"Autocompleter running. Press {self.config.hotkey} to get suggestions.")
-        print(f"Press {self.config.regenerate_hotkey} to regenerate suggestions.")
-        print(f"Press Shift+{self.config.hotkey} to toggle auto-trigger (currently {auto_state}).")
-        print("Press Ctrl+C to exit.")
+        print(f"  {self.config.regenerate_hotkey}: regenerate suggestions")
+        print(f"  Shift+{self.config.hotkey}: toggle auto-trigger (currently {auto_state})")
+        print(f"  {self.config.help_hotkey}: show all shortcuts")
+        print(f"  {self.config.report_hotkey}: report a bug for the current app")
+        print("  Ctrl+C: exit")
 
         # Run the main application loop
         if HAS_APPKIT:
@@ -345,6 +376,7 @@ class Autocompleter:
         self._auto_trigger_debouncer.stop()
         self.hotkey_listener.stop()
         self.overlay.hide()
+        self.help_overlay.hide()
         self.context_store.close()
 
     def _run_appkit_loop(self) -> None:
@@ -1558,6 +1590,8 @@ class Autocompleter:
                 ),
             )
             self._latency_store.save(record)
+            self._last_latency_record = record
+            self._last_fallback_used = fallback_used
             # Save snapshot even with no suggestions (useful for debugging)
             if snapshot and self._dumper:
                 snapshot.latency = {
@@ -1611,6 +1645,8 @@ class Autocompleter:
             ),
         )
         self._latency_store.save(record)
+        self._last_latency_record = record
+        self._last_fallback_used = fallback_used
         if snapshot and self._dumper:
             snapshot.latency = {
                 k: v for k, v in vars(record).items()
@@ -2234,6 +2270,162 @@ class Autocompleter:
         self._run_on_main(_accept_partial)
         return True
 
+    def _on_toggle_help(self) -> bool:
+        """Show or hide the help / shortcuts panel."""
+        def _toggle():
+            # If suggestions are visible, close them first so the help panel
+            # isn't hidden behind the suggestion overlay.
+            if self.overlay.is_visible and not self.help_overlay.is_visible:
+                self.overlay.hide()
+            self.help_overlay.toggle()
+        self._run_on_main(_toggle)
+        return True
+
+    def _on_report_feedback(self) -> bool:
+        """Capture content-free metadata about the current app and ping a report.
+
+        Safe to press at any time. When pressed while suggestions are visible,
+        the currently-saved trigger context is used (so the report reflects
+        the interaction the user is reacting to). Otherwise a minimal report
+        is built from the currently focused element.
+
+        Runs context-building and I/O on a worker thread — the event tap
+        thread must return quickly or macOS disables it.
+        """
+        def _submit():
+            try:
+                ctx = self._build_feedback_context()
+            except Exception:
+                logger.exception("Failed to build feedback context")
+                ctx = FeedbackContext()
+            try:
+                self.feedback_reporter.submit(ctx)
+            except Exception:
+                logger.exception("Failed to submit feedback report")
+            # Confirmation toast on the main thread, after the report is
+            # persisted (so the toast's app-name matches what was reported).
+            self._run_on_main(lambda: self._show_feedback_toast(ctx.app_name))
+
+        threading.Thread(target=_submit, daemon=True).start()
+        return True
+
+    def _show_feedback_toast(self, app_name: str | None) -> None:
+        """Briefly show a 'Report sent' toast, then hide after ~1.5s."""
+        label = f"✓ Report sent ({app_name})" if app_name else "✓ Report sent"
+        feedback = Suggestion(text=label, index=0)
+        caret_pos = _get_caret_screen_position()
+        caret_height = 20.0
+        if caret_pos:
+            x, y, caret_height = caret_pos
+        else:
+            focused = self.observer.get_focused_element()
+            if focused and focused.position:
+                x, y = focused.position
+                if focused.size:
+                    y += focused.size[1]
+            else:
+                x, y = 200.0, 200.0
+
+        # Bump generation_id so any in-flight LLM stream won't overwrite the toast
+        self._generation_id += 1
+        toast_gen = self._generation_id
+        self.overlay.show([feedback], x, y, caret_height=caret_height)
+
+        import Foundation
+        Foundation.NSTimer.scheduledTimerWithTimeInterval_repeats_block_(
+            1.5, False,
+            lambda timer: self.overlay.hide() if self._generation_id == toast_gen else None,
+        )
+
+    def _build_feedback_context(self) -> FeedbackContext:
+        """Gather content-free metadata for a feedback report.
+
+        Never includes: cursor text, visible text, suggestion text, window
+        title, or full URL. Only metadata — app name, element role, URL
+        domain, mode, extractor name, LLM config, and latency numbers.
+        """
+        ctx = FeedbackContext()
+
+        ctx.llm_provider = self.config.llm_provider
+        ctx.llm_model = self.config.llm_model
+        ctx.fallback_provider = self.config.fallback_provider
+        ctx.fallback_model = self.config.fallback_model
+
+        # Prefer the saved trigger args (they reflect what the user is looking at).
+        args = self._last_trigger_args
+        if args:
+            focused = args.get("focused")
+            if focused is not None:
+                ctx.app_name = focused.app_name
+                ctx.app_bundle_role = focused.role
+                ctx.placeholder_detected = bool(focused.placeholder_detected)
+            mode = args.get("mode")
+            if mode is not None:
+                ctx.mode = getattr(mode, "value", str(mode))
+            ctx.trigger_type = args.get("trigger_type")
+            ctx.url_domain = extract_url_domain(args.get("source_url") or "")
+            turns = args.get("conversation_turns") or []
+            ctx.conversation_turns_detected = len(turns)
+            ctx.conversation_speakers = len({t["speaker"] for t in turns}) if turns else 0
+            ctx.visible_text_elements_count = len(args.get("visible_text_elements") or [])
+            subtree = args.get("subtree_context")
+            ctx.subtree_context_chars = len(subtree) if isinstance(subtree, str) else 0
+            visible_meta = args.get("visible_meta") or {}
+            vs = visible_meta.get("visible_source")
+            ctx.visible_source = str(vs) if vs else None
+
+            extractor = get_extractor(
+                focused.app_name if focused else "",
+                args.get("window_title") or "",
+            )
+            ctx.extractor_name = type(extractor).__name__
+            ctx.shell_detected = bool(focused and is_shell_app(focused.app_name))
+        else:
+            # No saved trigger — best-effort: grab current focus directly.
+            try:
+                focused = self.observer.get_focused_element()
+            except Exception:
+                focused = None
+            if focused is not None:
+                ctx.app_name = focused.app_name
+                ctx.app_bundle_role = focused.role
+                ctx.placeholder_detected = bool(focused.placeholder_detected)
+                ctx.shell_detected = is_shell_app(focused.app_name)
+                try:
+                    visible = self.observer.get_visible_content()
+                except Exception:
+                    visible = None
+                window_title = visible.window_title if visible else ""
+                if visible:
+                    ctx.url_domain = extract_url_domain(visible.url or "")
+                extractor = get_extractor(focused.app_name, window_title)
+                ctx.extractor_name = type(extractor).__name__
+                ctx.note = "no_active_trigger"
+
+        # Timing & fallback info from the most recent generation
+        record = self._last_latency_record
+        if record is not None:
+            ctx.fallback_used = bool(self._last_fallback_used)
+            ctx.suggestion_count = int(getattr(record, "suggestion_count", 0) or 0)
+            total = getattr(record, "e2e_total_ms", None)
+            if total is not None:
+                ctx.latency_ms = float(total)
+            first = getattr(record, "e2e_first_ms", None)
+            if first is not None:
+                ctx.first_suggestion_ms = float(first)
+            if getattr(record, "use_tui", None) is not None:
+                ctx.tui_detected = bool(record.use_tui)
+            if getattr(record, "use_shell", None) is not None and ctx.shell_detected is None:
+                ctx.shell_detected = bool(record.use_shell)
+            if getattr(record, "used_subtree_context", None) is not None:
+                ctx.used_subtree_context = bool(record.used_subtree_context)
+            if getattr(record, "used_semantic_context", None) is not None:
+                ctx.used_semantic_context = bool(record.used_semantic_context)
+            if getattr(record, "used_memory_context", None) is not None:
+                ctx.used_memory_context = bool(record.used_memory_context)
+
+        return ctx
+
     def _on_nav_dismiss(self, *, set_cooldown: bool = True) -> bool:
         """Handle escape / click-outside / typing — only intercept when overlay is visible.
 
@@ -2242,6 +2434,12 @@ class Autocompleter:
                 respects the cooldown period. Pass False for "typing through"
                 dismissals where the user didn't intentionally reject suggestions.
         """
+        # Escape also closes the help panel.
+        if self.help_overlay.is_visible:
+            self._run_on_main(self.help_overlay.hide)
+            if not self.overlay.is_visible:
+                return True
+
         if not self.overlay.is_visible:
             return False
 

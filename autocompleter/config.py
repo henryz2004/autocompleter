@@ -18,6 +18,10 @@ class Config:
     def db_path(self) -> Path:
         return self.data_dir / "context.db"
 
+    @property
+    def feedback_dir(self) -> Path:
+        return self.data_dir / "feedback"
+
     # LLM API
     llm_provider: str = "openai"  # "anthropic" or "openai" (cerebras/groq/etc. use "openai")
     llm_base_url: str = "https://api.cerebras.ai/v1"  # empty = SDK default
@@ -43,7 +47,12 @@ class Config:
     debounce_ms: int = 500
     hotkey: str = "ctrl+space"
     regenerate_hotkey: str = "ctrl+r"
+    help_hotkey: str = "ctrl+/"
+    report_hotkey: str = "ctrl+shift+b"
     followup_after_accept_enabled: bool = True
+
+    # Feedback reporting (bug / context-extraction-issue hotkey)
+    feedback_webhook_url: str = ""  # Empty disables webhook; reports are still saved locally.
 
     # Context store
     max_context_age_hours: int = 72
@@ -149,6 +158,9 @@ def load_config() -> Config:
         )),
         hotkey=os.environ.get("AUTOCOMPLETER_HOTKEY", "ctrl+space"),
         regenerate_hotkey=os.environ.get("AUTOCOMPLETER_REGENERATE_HOTKEY", "ctrl+r"),
+        help_hotkey=os.environ.get("AUTOCOMPLETER_HELP_HOTKEY", "ctrl+/"),
+        report_hotkey=os.environ.get("AUTOCOMPLETER_REPORT_HOTKEY", "ctrl+shift+b"),
+        feedback_webhook_url=os.environ.get("AUTOCOMPLETER_FEEDBACK_URL", ""),
         followup_after_accept_enabled=os.environ.get(
             "AUTOCOMPLETER_FOLLOWUP_AFTER_ACCEPT", "1"
         ).lower() in ("1", "true"),

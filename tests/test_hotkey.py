@@ -68,6 +68,23 @@ class TestParseHotkey:
         assert keycode == KEY_CODES["space"]
         assert flags & MODIFIER_FLAGS["ctrl"]
 
+    def test_ctrl_slash_help_hotkey(self):
+        """The default help hotkey (ctrl+/) must parse to a real keycode."""
+        keycode, flags = parse_hotkey("ctrl+/")
+        assert keycode == KEY_CODES["/"]
+        assert keycode != 0  # must be a real keycode, not the unknown sentinel
+        # ctrl flag check only works when Quartz is loaded (macOS).
+        if MODIFIER_FLAGS["ctrl"]:
+            assert flags & MODIFIER_FLAGS["ctrl"]
+
+    def test_ctrl_shift_b_report_hotkey(self):
+        """The default report hotkey (ctrl+shift+b) must parse to b's keycode."""
+        keycode, flags = parse_hotkey("ctrl+shift+b")
+        assert keycode == 11  # 'b'
+        if MODIFIER_FLAGS["ctrl"]:
+            assert flags & MODIFIER_FLAGS["ctrl"]
+            assert flags & MODIFIER_FLAGS["shift"]
+
 
 # ---------------------------------------------------------------------------
 # HotkeyListener tests
