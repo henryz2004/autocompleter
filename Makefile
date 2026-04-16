@@ -51,7 +51,7 @@ check-uv:
 friend-beta-bootstrap: check-uv
 	@$(UV) python install 3.11
 	@$(UV) venv --python 3.11 --seed --allow-existing venv
-	@./venv/bin/python -c "import autocompleter" >/dev/null 2>&1 || { \
+	@./venv/bin/python -c "import importlib.util, sys; required=('pydantic','openai','anthropic','instructor'); missing=[name for name in required if importlib.util.find_spec(name) is None]; sys.exit(1 if missing else 0)" >/dev/null 2>&1 || { \
 		echo "Installing autocompleter into ./venv"; \
 		./venv/bin/python -m pip install -r requirements.txt; \
 		./venv/bin/python -m pip install -e .; \
