@@ -13,6 +13,9 @@ import signal
 import sys
 import threading
 import time
+import uuid
+from dataclasses import dataclass
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +41,13 @@ from .quality_review import (
 )
 from .shell_parser import strip_tmux_split_panes
 from .suggestion_engine import AutocompleteMode, Suggestion, SuggestionEngine, detect_mode, is_shell_app
-from .telemetry import TelemetryClient, bucket_latency_ms, bucket_length, categorize_app
+from .telemetry import (
+    INVOCATION_HEADER,
+    TelemetryClient,
+    bucket_latency_ms,
+    bucket_length,
+    categorize_app,
+)
 from .memory import MemoryStore
 from .text_injector import TextInjector
 from .trigger_dump import TriggerDumper, TriggerSnapshot
@@ -47,6 +56,18 @@ from .trigger_dump import TriggerDumper, TriggerSnapshot
 # Shell parser uses 1500 for structured history; 3000 gives ~50-60 lines of
 # unstructured conversation context without the 145K+ noise from full buffers.
 _TUI_CONTEXT_TAIL_CHARS = 3000
+
+
+@dataclass
+class _InvocationTelemetryState:
+    invocation_id: str
+    trigger_type: str
+    mode: str
+    source_app: str
+    app_category: str
+    started_monotonic: float
+    started_at: str
+    first_displayed_monotonic: float | None = None
 
 
 class _Debouncer:
@@ -201,6 +222,7 @@ class Autocompleter:
         self._latency_store = LatencyStore(self.config.data_dir / "context.db")
         self._trigger_before_cursor: str = ""  # before_cursor at trigger time (for leading-space stripping)
         self._trigger_after_cursor: str = ""   # after_cursor at trigger time (for trailing-space stripping)
+        self._active_invocation: _InvocationTelemetryState | None = None
 
         # Observer loop state
         self._observe_consecutive_errors: int = 0  # For exponential backoff
@@ -228,7 +250,88 @@ class Autocompleter:
         telemetry = getattr(self, "telemetry", None)
         if telemetry is None:
             return
+        active = getattr(self, "_active_invocation", None)
+        if active is not None:
+            payload.setdefault("invocation_id", active.invocation_id)
+            payload.setdefault("trigger_type", active.trigger_type)
+            payload.setdefault("mode", active.mode)
+            payload.setdefault("source_app", active.source_app)
+            payload.setdefault("app_category", active.app_category)
         telemetry.emit(event, **payload)
+
+    @staticmethod
+    def _telemetry_timestamp() -> str:
+        return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    def _emit_invocation_terminal_event(
+        self,
+        invocation_id: str | None,
+        event: str,
+        **payload: object,
+    ) -> None:
+        if not invocation_id:
+            return
+        active = getattr(self, "_active_invocation", None)
+        if active is None or active.invocation_id != invocation_id:
+            return
+        resolved_monotonic = time.monotonic()
+        if active.first_displayed_monotonic is not None:
+            payload.setdefault(
+                "dwell_ms",
+                int((resolved_monotonic - active.first_displayed_monotonic) * 1000),
+            )
+        self._emit_telemetry(event, **payload)
+        self._active_invocation = None
+
+    def _mark_invocation_first_displayed(self, invocation_id: str | None) -> None:
+        if not invocation_id:
+            return
+        active = getattr(self, "_active_invocation", None)
+        if active is None or active.invocation_id != invocation_id:
+            return
+        if active.first_displayed_monotonic is not None:
+            return
+        active.first_displayed_monotonic = time.monotonic()
+        self._emit_telemetry(
+            "first_suggestion_displayed",
+            first_display_latency_ms=int(
+                (active.first_displayed_monotonic - active.started_monotonic) * 1000
+            ),
+        )
+
+    def _mark_invocation_stream_completed(
+        self,
+        invocation_id: str | None,
+        *,
+        count: int,
+        fallback_used: bool,
+    ) -> None:
+        if not invocation_id:
+            return
+        active = getattr(self, "_active_invocation", None)
+        if active is None or active.invocation_id != invocation_id:
+            return
+        completed_monotonic = time.monotonic()
+        self._emit_telemetry(
+            "suggestions_returned",
+            count=count,
+            latency_bucket_ms=bucket_latency_ms(
+                (completed_monotonic - active.started_monotonic) * 1000
+            ),
+            stream_complete_latency_ms=int(
+                (completed_monotonic - active.started_monotonic) * 1000
+            ),
+            fallback_used=fallback_used,
+        )
+
+    def _supersede_active_invocation(self) -> None:
+        active = getattr(self, "_active_invocation", None)
+        if active is None:
+            return
+        self._emit_invocation_terminal_event(
+            active.invocation_id,
+            "invocation_superseded",
+        )
 
     def _emit_error_telemetry(self, component: str, exc: BaseException) -> None:
         self._emit_telemetry(
@@ -243,13 +346,24 @@ class Autocompleter:
         mode: AutocompleteMode,
         trigger_type: str,
         app_name: str,
-    ) -> None:
+    ) -> str:
+        self._active_invocation = _InvocationTelemetryState(
+            invocation_id=str(uuid.uuid4()),
+            trigger_type=trigger_type,
+            mode=mode.value,
+            source_app=app_name,
+            app_category=categorize_app(app_name),
+            started_monotonic=time.monotonic(),
+            started_at=self._telemetry_timestamp(),
+        )
         self._emit_telemetry(
             "trigger_fired",
             mode=mode.value,
             trigger_type=trigger_type,
+            source_app=app_name,
             app_category=categorize_app(app_name),
         )
+        return self._active_invocation.invocation_id
 
     def start(self) -> None:
         """Start the autocompleter."""
@@ -606,10 +720,7 @@ class Autocompleter:
 
         if self.overlay.is_visible:
             logger.debug("Overlay visible, hiding it")
-            # Bump generation_id so any in-flight LLM stream is discarded
-            self._generation_id += 1
-            self._run_on_main(self.overlay.hide)
-            return True
+            return self._on_nav_dismiss()
 
         # Gather info quickly (AX calls are fast) then dispatch heavy work
         focused = self.observer.get_focused_element()
@@ -678,7 +789,7 @@ class Autocompleter:
             self._capture_live_trigger_context(focused, trigger_type="manual")
         )
         logger.info(f"Mode: {mode.value} (before_cursor len={len(focused.before_cursor.strip())})")
-        self._emit_trigger_telemetry(
+        invocation_id = self._emit_trigger_telemetry(
             mode=mode,
             trigger_type="manual",
             app_name=focused.app_name,
@@ -755,6 +866,7 @@ class Autocompleter:
             tree_overview_context=tree_overview_context,
             context_tree=context_tree,
             trigger_type="manual",
+            invocation_id=invocation_id,
         )
 
         # Dispatch the LLM call to a worker thread so we don't block the tap.
@@ -773,6 +885,7 @@ class Autocompleter:
                 "temperature_boost": 0.0,
                 "extra_negative_patterns": None,
                 "trigger_type": "manual",
+                "invocation_id": invocation_id,
             },
             daemon=True,
         ).start()
@@ -792,6 +905,7 @@ class Autocompleter:
         cross_app_context: str = "",
         subtree_context: str | None = None,
         tree_overview_context: str | None = None,
+        invocation_id: str = "",
     ) -> None:
         """Run the LLM call on a worker thread and show the overlay."""
         app_name = focused.app_name
@@ -890,6 +1004,7 @@ class Autocompleter:
             feedback_stats=feedback_stats,
             negative_patterns=negative_patterns,
             prompt_placeholder_aware=True,
+            request_headers={INVOCATION_HEADER: invocation_id} if invocation_id else None,
         )
         elapsed = time.time() - t0
 
@@ -908,6 +1023,10 @@ class Autocompleter:
 
         if not suggestions:
             logger.info(f"No suggestions generated (took {elapsed:.2f}s)")
+            self._emit_invocation_terminal_event(
+                invocation_id,
+                "invocation_no_suggestions",
+            )
             self._run_on_main(self.overlay.hide)
             return
 
@@ -918,10 +1037,10 @@ class Autocompleter:
             logger.info(f"  [{i}]: {s.text[:120]}")
 
         self._current_suggestions = suggestions
-        self._emit_telemetry(
-            "suggestions_returned",
+        self._mark_invocation_first_displayed(invocation_id)
+        self._mark_invocation_stream_completed(
+            invocation_id,
             count=len(suggestions),
-            latency_bucket_ms=bucket_latency_ms(elapsed * 1000),
             fallback_used=False,
         )
 
@@ -960,6 +1079,7 @@ class Autocompleter:
         temperature_boost: float = 0.0,
         extra_negative_patterns: list[str] | None = None,
         trigger_type: str = "",
+        invocation_id: str = "",
     ) -> None:
         """Run the streaming LLM call on a worker thread, updating the overlay incrementally."""
         try:
@@ -968,11 +1088,16 @@ class Autocompleter:
                 conversation_turns, generation_id,
                 cross_app_context, snapshot, subtree_context, tree_overview_context,
                 context_tree, temperature_boost,
-                extra_negative_patterns, trigger_type,
+                extra_negative_patterns, trigger_type, invocation_id,
             )
         except Exception:
             logger.error("Worker thread crashed", exc_info=True)
             self._emit_error_telemetry("streaming_worker", sys.exc_info()[1] or RuntimeError("unknown"))
+            self._emit_invocation_terminal_event(
+                invocation_id,
+                "invocation_errored",
+                error_type=type(sys.exc_info()[1] or RuntimeError("unknown")).__name__,
+            )
             self._run_on_main(self.overlay.hide)
 
     def _generate_and_show_streaming_inner(
@@ -993,6 +1118,7 @@ class Autocompleter:
         temperature_boost: float = 0.0,
         extra_negative_patterns: list[str] | None = None,
         trigger_type: str = "",
+        invocation_id: str = "",
     ) -> None:
         app_name = focused.app_name
         current_input = focused.value
@@ -1128,6 +1254,7 @@ class Autocompleter:
         self._latency_tracker.mark("context_ready")
         self._latency_tracker.mark("llm_start")
         fallback_used = False
+        generation_error_type: str | None = None
 
         def _on_stream_event(event_name: str, payload: dict[str, object] | None = None) -> None:
             nonlocal fallback_used
@@ -1156,6 +1283,7 @@ class Autocompleter:
                 temperature_boost=temperature_boost,
                 event_callback=_on_stream_event,
                 prompt_placeholder_aware=True,
+                request_headers={INVOCATION_HEADER: invocation_id} if invocation_id else None,
             ):
                 # Check if a newer trigger has superseded this one
                 if generation_id != self._generation_id:
@@ -1163,6 +1291,10 @@ class Autocompleter:
                     logger.info(
                         f"Generation {generation_id} superseded by {self._generation_id}, "
                         f"abandoning stream after {len(suggestions)} suggestions ({elapsed:.2f}s)"
+                    )
+                    self._emit_invocation_terminal_event(
+                        invocation_id,
+                        "invocation_superseded",
                     )
                     return
 
@@ -1184,11 +1316,13 @@ class Autocompleter:
                     if generation_id == self._generation_id:
                         if len(snp) == 1:
                             self._latency_tracker.mark("overlay_first_show")
+                            self._mark_invocation_first_displayed(invocation_id)
                         self.overlay.show(snp, x, y, caret_height=caret_height)
 
                 self._run_on_main(_update)
 
-        except Exception:
+        except Exception as exc:
+            generation_error_type = type(exc).__name__
             logger.exception(f"Error during streaming generation {generation_id}")
             self._emit_error_telemetry("streaming_generation", sys.exc_info()[1] or RuntimeError("unknown"))
 
@@ -1201,11 +1335,26 @@ class Autocompleter:
                 f"Generation {generation_id} superseded by {self._generation_id}, "
                 f"discarding after stream completed ({elapsed:.2f}s)"
             )
+            self._emit_invocation_terminal_event(
+                invocation_id,
+                "invocation_superseded",
+            )
             return
 
         if not suggestions:
             logger.info(f"No suggestions from stream (took {elapsed:.2f}s)")
             self._run_on_main(self.overlay.hide)
+            if generation_error_type:
+                self._emit_invocation_terminal_event(
+                    invocation_id,
+                    "invocation_errored",
+                    error_type=generation_error_type,
+                )
+            else:
+                self._emit_invocation_terminal_event(
+                    invocation_id,
+                    "invocation_no_suggestions",
+                )
             record = self._latency_tracker.finish(
                 app_name=app_name,
                 mode=mode.value,
@@ -1240,10 +1389,9 @@ class Autocompleter:
             logger.info(f"  [{i}]: {s.text[:120]}")
 
         self._current_suggestions = suggestions
-        self._emit_telemetry(
-            "suggestions_returned",
+        self._mark_invocation_stream_completed(
+            invocation_id,
             count=len(suggestions),
-            latency_bucket_ms=bucket_latency_ms(elapsed * 1000),
             fallback_used=fallback_used,
         )
 
@@ -1314,7 +1462,7 @@ class Autocompleter:
         mode = detect_mode(before_cursor=focused.before_cursor)
         self._trigger_mode = mode.value
         self._trigger_app = focused.app_name
-        self._emit_trigger_telemetry(
+        invocation_id = self._emit_trigger_telemetry(
             mode=mode,
             trigger_type="auto",
             app_name=focused.app_name,
@@ -1409,6 +1557,7 @@ class Autocompleter:
                 "temperature_boost": 0.0,
                 "extra_negative_patterns": None,
                 "trigger_type": "auto",
+                "invocation_id": invocation_id,
             },
             daemon=True,
         ).start()
@@ -1484,6 +1633,7 @@ class Autocompleter:
         self._trigger_time = time.time()
         self._latency_tracker.start(generation_id=self._generation_id + 1)
         self._latency_tracker.mark("trigger")
+        self._supersede_active_invocation()
 
         args = self._last_trigger_args
         self._trigger_before_cursor = focused.before_cursor
@@ -1505,7 +1655,7 @@ class Autocompleter:
         ) = self._expand_live_trigger_context(
             self._capture_live_trigger_context(focused, trigger_type="regenerate")
         )
-        self._emit_trigger_telemetry(
+        invocation_id = self._emit_trigger_telemetry(
             mode=mode,
             trigger_type="regenerate",
             app_name=focused.app_name,
@@ -1569,6 +1719,7 @@ class Autocompleter:
                 "trigger_type": "regenerate",
                 "tree_overview_context": tree_overview_context,
                 "context_tree": context_tree,
+                "invocation_id": invocation_id,
             },
             daemon=True,
         ).start()
@@ -1838,7 +1989,7 @@ class Autocompleter:
         self._replace_on_inject = focused_for_generation.placeholder_detected
         if is_shell_app(focused_for_generation.app_name):
             self._replace_on_inject = True
-        self._emit_trigger_telemetry(
+        invocation_id = self._emit_trigger_telemetry(
             mode=mode,
             trigger_type="post_accept",
             app_name=focused_for_generation.app_name,
@@ -1902,6 +2053,7 @@ class Autocompleter:
                 "temperature_boost": 0.0,
                 "extra_negative_patterns": None,
                 "trigger_type": "post_accept",
+                "invocation_id": invocation_id,
             },
             daemon=True,
         ).start()
@@ -1909,9 +2061,9 @@ class Autocompleter:
     def _accept_selected_suggestion(self, index: int | None = None) -> None:
         """Accept the current or specified suggestion, then optionally chain follow-up."""
         focused = self.observer.get_focused_element()
-        cursor_pos = focused.insertion_point if focused else None
         app_name = focused.app_name if focused else "Unknown"
         app_pid = focused.app_pid if focused else 0
+        invocation_id = self._active_invocation.invocation_id if self._active_invocation else None
 
         if index is not None:
             self.overlay._selected_index = index
@@ -1936,10 +2088,10 @@ class Autocompleter:
 
         logger.info(f"Injected: {text[:60]}")
         self._record_accepted_suggestion(suggestion, app_name, focused)
-        self._emit_telemetry(
+        self._emit_invocation_terminal_event(
+            invocation_id,
             "suggestion_accepted",
             suggestion_rank=suggestion.index + 1,
-            mode=self._trigger_mode,
             accepted_length_bucket=bucket_length(len(text)),
         )
         self._start_post_accept_followup(text)
@@ -1950,6 +2102,9 @@ class Autocompleter:
             return False
 
         def _accept_partial():
+            focused_before = self.observer.get_focused_element()
+            app_name = focused_before.app_name if focused_before else "Unknown"
+            app_pid = focused_before.app_pid if focused_before else 0
             suggestion = self.overlay.accept_selection()
             if suggestion:
                 partial_text = self._extract_first_segment(suggestion.text)
@@ -1965,9 +2120,13 @@ class Autocompleter:
                 )
                 if success:
                     logger.info(f"Partial inject: {partial_text[:60]}")
-                    focused = self.observer.get_focused_element()
-                    app_name = focused.app_name if focused else "Unknown"
-                    self._emit_telemetry(
+                    invocation_id = (
+                        self._active_invocation.invocation_id
+                        if self._active_invocation
+                        else None
+                    )
+                    self._emit_invocation_terminal_event(
+                        invocation_id,
                         "partial_accept_used",
                         suggestion_rank=suggestion.index + 1,
                         accepted_length_bucket=bucket_length(len(partial_text)),
@@ -2020,11 +2179,21 @@ class Autocompleter:
                     )
                 except Exception:
                     logger.debug("Failed to record dismissed feedback", exc_info=True)
-            if set_cooldown and self._current_suggestions:
-                self._emit_telemetry(
+            invocation_id = (
+                self._active_invocation.invocation_id
+                if self._active_invocation
+                else None
+            )
+            if set_cooldown:
+                self._emit_invocation_terminal_event(
+                    invocation_id,
                     "suggestion_dismissed",
                     count_shown=len(self._current_suggestions),
-                    mode=self._trigger_mode,
+                )
+            else:
+                self._emit_invocation_terminal_event(
+                    invocation_id,
+                    "typed_through",
                 )
             self.overlay.hide()
 

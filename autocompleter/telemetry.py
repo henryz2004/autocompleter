@@ -14,6 +14,9 @@ from .suggestion_engine import is_shell_app
 
 logger = logging.getLogger(__name__)
 
+INVOCATION_HEADER = "X-Autocompleter-Invocation-Id"
+REQUEST_HEADER = "X-Autocompleter-Request-Id"
+
 _BROWSER_APPS = {
     "Arc",
     "Brave Browser",
@@ -85,6 +88,10 @@ def categorize_app(app_name: str) -> str:
     if app_name in _EDITOR_APPS:
         return "editor"
     return "other"
+
+
+def utcnow_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 class TelemetryClient:

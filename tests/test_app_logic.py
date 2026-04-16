@@ -345,6 +345,7 @@ class TestRegenerateDiversity:
         app._run_on_main = lambda fn: None
         app._auto_trigger_debouncer = SimpleNamespace(cancel=lambda: None)
         app._latency_tracker = SimpleNamespace(start=lambda **kwargs: None, mark=lambda *args, **kwargs: None)
+        app._active_invocation = None
         app._capture_live_trigger_context = lambda focused, trigger_type: (
             app_module.AutocompleteMode.CONTINUATION,
             10.0, 20.0, 20.0,
@@ -397,6 +398,7 @@ class TestTelemetryHooks:
         app._auto_trigger_debouncer = SimpleNamespace(stop=lambda: None, cancel=lambda: None, poke=lambda: None)
         app._observe_loop = lambda: None
         app._run_simple_loop = lambda: None
+        app._active_invocation = None
 
         app.start()
 
@@ -406,21 +408,21 @@ class TestTelemetryHooks:
         app = Autocompleter.__new__(Autocompleter)
         events = []
         app.telemetry = SimpleNamespace(emit=lambda event, **payload: events.append((event, payload)))
+        app._active_invocation = None
 
-        app._emit_trigger_telemetry(
+        invocation_id = app._emit_trigger_telemetry(
             mode=app_module.AutocompleteMode.REPLY,
             trigger_type="manual",
             app_name="Slack",
         )
 
-        assert events == [(
-            "trigger_fired",
-            {
-                "mode": "reply",
-                "trigger_type": "manual",
-                "app_category": "chat",
-            },
-        )]
+        assert invocation_id
+        assert events[0][0] == "trigger_fired"
+        assert events[0][1]["mode"] == "reply"
+        assert events[0][1]["trigger_type"] == "manual"
+        assert events[0][1]["app_category"] == "chat"
+        assert events[0][1]["source_app"] == "Slack"
+        assert events[0][1]["invocation_id"] == invocation_id
 
     def test_accept_selected_suggestion_emits_accepted_event(self):
         app = Autocompleter.__new__(Autocompleter)
@@ -439,7 +441,7 @@ class TestTelemetryHooks:
 
         app.observer = SimpleNamespace(get_focused_element=lambda: focused)
         app.overlay = SimpleNamespace(accept_selection=lambda: app_module.Suggestion(text=" world", index=1))
-        app.injector = SimpleNamespace(inject=lambda text: True)
+        app.injector = SimpleNamespace(inject=lambda text, **kwargs: True)
         app.telemetry = SimpleNamespace(emit=lambda event, **payload: events.append((event, payload)))
         app.memory = SimpleNamespace(enabled=False)
         app.context_store = SimpleNamespace(record_feedback=lambda **kwargs: None)
@@ -450,18 +452,23 @@ class TestTelemetryHooks:
         app._current_suggestions = [app_module.Suggestion(text="a", index=0), app_module.Suggestion(text=" world", index=1)]
         app._trigger_time = None
         app._start_post_accept_followup = lambda text: followup.append(text)
+        app._active_invocation = app_module._InvocationTelemetryState(
+            invocation_id="inv-1",
+            trigger_type="manual",
+            mode="reply",
+            source_app="Slack",
+            app_category="chat",
+            started_monotonic=0.0,
+            started_at="2026-04-16T00:00:00Z",
+        )
 
         app._accept_selected_suggestion()
 
         assert followup == [" world"]
-        assert events == [(
-            "suggestion_accepted",
-            {
-                "suggestion_rank": 2,
-                "mode": "reply",
-                "accepted_length_bucket": "1-10",
-            },
-        )]
+        assert events[0][0] == "suggestion_accepted"
+        assert events[0][1]["suggestion_rank"] == 2
+        assert events[0][1]["accepted_length_bucket"] == "1-10"
+        assert events[0][1]["invocation_id"] == "inv-1"
 
     def test_partial_accept_emits_partial_event(self):
         app = Autocompleter.__new__(Autocompleter)
@@ -482,22 +489,28 @@ class TestTelemetryHooks:
             is_visible=True,
             accept_selection=lambda: app_module.Suggestion(text="Hello world. Next sentence", index=0),
         )
-        app.injector = SimpleNamespace(inject=lambda text: injected.append(text) or True)
+        app.injector = SimpleNamespace(inject=lambda text, **kwargs: injected.append(text) or True)
         app.observer = SimpleNamespace(get_focused_element=lambda: focused)
         app.telemetry = SimpleNamespace(emit=lambda event, **payload: events.append((event, payload)))
         app._trigger_before_cursor = ""
         app._trigger_after_cursor = ""
         app._run_on_main = lambda fn: fn()
+        app._active_invocation = app_module._InvocationTelemetryState(
+            invocation_id="inv-2",
+            trigger_type="manual",
+            mode="reply",
+            source_app="Slack",
+            app_category="chat",
+            started_monotonic=0.0,
+            started_at="2026-04-16T00:00:00Z",
+        )
 
         assert app._on_partial_accept() is True
         assert injected == ["Hello world."]
-        assert events == [(
-            "partial_accept_used",
-            {
-                "suggestion_rank": 1,
-                "accepted_length_bucket": "11-30",
-            },
-        )]
+        assert events[0][0] == "partial_accept_used"
+        assert events[0][1]["suggestion_rank"] == 1
+        assert events[0][1]["accepted_length_bucket"] == "11-30"
+        assert events[0][1]["invocation_id"] == "inv-2"
 
     def test_dismiss_emits_single_event(self):
         app = Autocompleter.__new__(Autocompleter)
@@ -518,16 +531,21 @@ class TestTelemetryHooks:
         app.context_store = SimpleNamespace(record_feedback=lambda **kwargs: None)
         app.telemetry = SimpleNamespace(emit=lambda event, **payload: events.append((event, payload)))
         app._run_on_main = lambda fn: fn()
+        app._active_invocation = app_module._InvocationTelemetryState(
+            invocation_id="inv-3",
+            trigger_type="manual",
+            mode="reply",
+            source_app="Slack",
+            app_category="chat",
+            started_monotonic=0.0,
+            started_at="2026-04-16T00:00:00Z",
+        )
 
         assert app._on_nav_dismiss() is True
         assert hidden == [True]
-        assert events == [(
-            "suggestion_dismissed",
-            {
-                "count_shown": 2,
-                "mode": "reply",
-            },
-        )]
+        assert events[0][0] == "suggestion_dismissed"
+        assert events[0][1]["count_shown"] == 2
+        assert events[0][1]["invocation_id"] == "inv-3"
 
     def test_streaming_worker_error_emits_error_event(self):
         app = Autocompleter.__new__(Autocompleter)
@@ -538,6 +556,7 @@ class TestTelemetryHooks:
         app.overlay = SimpleNamespace(hide=lambda: hidden.append(True))
         app._run_on_main = lambda fn: fn()
         app._generate_and_show_streaming_inner = lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("boom"))
+        app._active_invocation = None
 
         app._generate_and_show_streaming(SimpleNamespace(app_name="Slack"), 1.0, 2.0)
 

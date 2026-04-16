@@ -332,6 +332,7 @@ class SuggestionEngine:
         feedback_stats: Optional[dict] = None,
         negative_patterns: Optional[list[str]] = None,
         prompt_placeholder_aware: bool = False,
+        request_headers: Optional[dict[str, str]] = None,
     ) -> list[Suggestion]:
         """Generate completion suggestions using the configured LLM.
 
@@ -409,7 +410,11 @@ class SuggestionEngine:
 
         try:
             results = self._call_llm(
-                system, user_msg, temperature=temperature, max_tokens=max_tokens,
+                system,
+                user_msg,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                request_headers=request_headers,
             )
             if prompt_placeholder_aware:
                 processed = postprocess_suggestion_texts(
@@ -433,10 +438,11 @@ class SuggestionEngine:
         self, system: str, user_msg: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        request_headers: Optional[dict[str, str]] = None,
     ) -> list[Suggestion]:
         """Call the LLM via Instructor and return parsed suggestions."""
         client = self._get_client()
-        result = client.create(
+        create_kwargs: dict = dict(
             response_model=SuggestionList,
             max_retries=2,
             messages=[
@@ -446,6 +452,9 @@ class SuggestionEngine:
             temperature=temperature,
             max_tokens=max_tokens,
         )
+        if request_headers:
+            create_kwargs["extra_headers"] = request_headers
+        result = client.create(**create_kwargs)
         return [
             Suggestion(text=item.text, index=i)
             for i, item in enumerate(result.suggestions)
@@ -465,6 +474,7 @@ class SuggestionEngine:
         temperature_boost: float = 0.0,
         event_callback: Optional[Callable[[str, dict | None], None]] = None,
         prompt_placeholder_aware: bool = False,
+        request_headers: Optional[dict[str, str]] = None,
     ) -> Generator[Suggestion, None, None]:
         """Generate completion suggestions via streaming, yielding each as it completes.
 
@@ -583,6 +593,7 @@ class SuggestionEngine:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 event_callback=event_callback,
+                request_headers=request_headers,
             ):
                 if prompt_placeholder_aware:
                     suggestion.text = postprocess_suggestion_text(
@@ -616,6 +627,7 @@ class SuggestionEngine:
         cancel: threading.Event,
         tag: str,
         extra_body: Optional[dict] = None,
+        request_headers: Optional[dict[str, str]] = None,
     ) -> None:
         """Run an OpenAI-compatible streaming call, pushing suggestions to *out_q*.
 
@@ -635,6 +647,8 @@ class SuggestionEngine:
             )
             if extra_body:
                 create_kwargs["extra_body"] = extra_body
+            if request_headers:
+                create_kwargs["extra_headers"] = request_headers
             response = client.chat.completions.create(**create_kwargs)
             json_buf = ""
             last_yielded = 0
@@ -701,6 +715,7 @@ class SuggestionEngine:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         event_callback: Optional[Callable[[str, dict | None], None]] = None,
+        request_headers: Optional[dict[str, str]] = None,
     ) -> Generator[Suggestion, None, None]:
         """Stream suggestions with timeout-based provider escalation.
 
@@ -741,6 +756,10 @@ class SuggestionEngine:
         ]
         if primary_fn == self._stream_openai_to_queue and primary_extra:
             primary_args.append(primary_extra)
+        elif primary_fn == self._stream_openai_to_queue:
+            primary_args.append(None)
+        if primary_fn == self._stream_openai_to_queue:
+            primary_args.append(request_headers)
 
         primary_thread = threading.Thread(
             target=primary_fn,
@@ -760,7 +779,9 @@ class SuggestionEngine:
                 out_q, cancel_fallback, "fallback",
             )
             if fallback_extra:
-                args = args + (fallback_extra,)
+                args = args + (fallback_extra, request_headers)
+            else:
+                args = args + (None, request_headers)
             t = threading.Thread(
                 target=self._stream_openai_to_queue,
                 args=args, daemon=True,
