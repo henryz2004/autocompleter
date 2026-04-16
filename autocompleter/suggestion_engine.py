@@ -268,7 +268,13 @@ class SuggestionEngine:
                 if self.config.effective_llm_base_url:
                     kwargs["base_url"] = self.config.effective_llm_base_url
                 raw = openai.OpenAI(**kwargs)
-                self._client = instructor.from_openai(raw)
+                mode = instructor.Mode.TOOLS
+                if self.config.effective_llm_base_url in {
+                    "https://api.groq.com/openai/v1",
+                    "https://api.cerebras.ai/v1",
+                }:
+                    mode = instructor.Mode.JSON
+                self._client = instructor.from_openai(raw, mode=mode)
         return self._client
 
     def _get_raw_client(self):

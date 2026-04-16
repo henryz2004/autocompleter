@@ -213,6 +213,32 @@ class TestStreamingSuggestions:
         assert results[0].text == "Just one suggestion"
         assert results[0].index == 0
 
+    def test_groq_client_uses_json_mode_for_blocking_path(self):
+        """Groq-backed blocking calls should use Instructor JSON mode, not tool calls."""
+        cfg = Config(
+            llm_provider="openai",
+            llm_base_url="https://api.groq.com/openai/v1",
+            llm_model="qwen/qwen3-32b",
+            openai_api_key="groq-key",
+        )
+        engine = SuggestionEngine(cfg)
+
+        with patch("openai.OpenAI") as mock_openai, patch("instructor.from_openai") as mock_from_openai:
+            raw_client = MagicMock()
+            wrapped_client = MagicMock()
+            mock_openai.return_value = raw_client
+            mock_from_openai.return_value = wrapped_client
+
+            client = engine._get_client()
+
+        assert client is wrapped_client
+        mock_openai.assert_called_once_with(
+            api_key="groq-key",
+            base_url="https://api.groq.com/openai/v1",
+        )
+        import instructor
+        mock_from_openai.assert_called_once_with(raw_client, mode=instructor.Mode.JSON)
+
     def test_empty_json_falls_back(self, engine):
         """Empty suggestions array falls back to blocking path."""
         _mock_anthropic_stream(engine, ['{"suggestions": []}'])
