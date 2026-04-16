@@ -235,6 +235,15 @@ class TestStreamingPostprocess:
             index=1,
         ) == " any errors show up?"
 
+    def test_streaming_postprocess_filters_avoided_reply_text(self):
+        assert postprocess_suggestion_text(
+            "sounds good",
+            mode=AutocompleteMode.REPLY,
+            before_cursor="",
+            index=0,
+            avoid_texts=["sounds good"],
+        ) == ""
+
     def test_unicode_in_suggestions(self, engine):
         """Unicode characters pass through correctly."""
         _mock_engine_stream(engine, ["Bonjour le monde", "\u00e9\u00e8\u00ea", "\u4f60\u597d\u4e16\u754c"])

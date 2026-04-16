@@ -351,11 +351,14 @@ if HAS_APPKIT:
                 AppKit.NSFontAttributeName: hint_font,
                 AppKit.NSForegroundColorAttributeName: hint_color,
             }
-            hint_text = "1-3 or Tab accept  \u2303R regen  Esc dismiss"
+            hint_text = (
+                "1-3/Tab accept  \u21e7Tab partial  \u2303R regen  "
+                "\u2303/ help  Esc dismiss"
+            )
             hint_str = AppKit.NSAttributedString.alloc().initWithString_attributes_(
                 hint_text, hint_attrs
             )
-            hint_text_rect = NSMakeRect(cfg.padding + 4, hint_bar_y + 2, bounds_w * 0.7, hint_bar_h - 4)
+            hint_text_rect = NSMakeRect(cfg.padding + 4, hint_bar_y + 2, bounds_w * 0.82, hint_bar_h - 4)
             hint_str.drawInRect_(hint_text_rect)
 
             # AUTO badge (right side of hint bar)

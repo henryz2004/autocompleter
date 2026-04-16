@@ -68,6 +68,20 @@ class TestParseHotkey:
         assert keycode == KEY_CODES["space"]
         assert flags & MODIFIER_FLAGS["ctrl"]
 
+    def test_ctrl_slash_help_hotkey(self):
+        keycode, flags = parse_hotkey("ctrl+/")
+        assert keycode == KEY_CODES["/"]
+        assert keycode != 0
+        if MODIFIER_FLAGS["ctrl"]:
+            assert flags & MODIFIER_FLAGS["ctrl"]
+
+    def test_ctrl_shift_b_report_hotkey(self):
+        keycode, flags = parse_hotkey("ctrl+shift+b")
+        assert keycode == 11
+        if MODIFIER_FLAGS["ctrl"]:
+            assert flags & MODIFIER_FLAGS["ctrl"]
+            assert flags & MODIFIER_FLAGS["shift"]
+
 
 # ---------------------------------------------------------------------------
 # HotkeyListener tests

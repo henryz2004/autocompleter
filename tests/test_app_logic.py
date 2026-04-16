@@ -11,6 +11,7 @@ import pytest
 # these are guarded by try/except, so the import should succeed.
 import autocompleter.app as app_module
 from autocompleter.app import Autocompleter
+from autocompleter.feedback import FeedbackContext
 from autocompleter.input_observer import FocusedElement
 
 
@@ -353,6 +354,7 @@ class TestRegenerateDiversity:
 
         assert app._on_regenerate() is True
         assert captured["kwargs"]["temperature_boost"] == 0.5
+        assert captured["kwargs"]["extra_negative_patterns"] == ["old one", "old two"]
         assert captured["args"][10] == "snapshot"
         assert captured["snapshot_kwargs"]["trigger_type"] == "regenerate"
         assert captured["snapshot_kwargs"]["generation_id"] == 1
@@ -377,6 +379,8 @@ class TestTelemetryHooks:
             db_path="/tmp/context.db",
             hotkey="ctrl+space",
             regenerate_hotkey="ctrl+r",
+            help_hotkey="ctrl+/",
+            report_hotkey="ctrl+shift+b",
             llm_provider="openai",
             llm_model="ignored",
             effective_llm_provider="openai",
@@ -386,6 +390,7 @@ class TestTelemetryHooks:
         app.context_store = SimpleNamespace(open=lambda: None, close=lambda: None)
         app.memory = SimpleNamespace(enabled=False)
         app.overlay = SimpleNamespace(set_dismiss_callback=lambda cb: None, hide=lambda: None)
+        app.help_overlay = SimpleNamespace(set_dismiss_callback=lambda cb: None, hide=lambda: None)
         app.hotkey_listener = SimpleNamespace(
             set_unhandled_key_callback=lambda cb: None,
             register=lambda *args, **kwargs: None,
@@ -439,7 +444,7 @@ class TestTelemetryHooks:
 
         app.observer = SimpleNamespace(get_focused_element=lambda: focused)
         app.overlay = SimpleNamespace(accept_selection=lambda: app_module.Suggestion(text=" world", index=1))
-        app.injector = SimpleNamespace(inject=lambda text: True)
+        app.injector = SimpleNamespace(inject=lambda text, **kwargs: True)
         app.telemetry = SimpleNamespace(emit=lambda event, **payload: events.append((event, payload)))
         app.memory = SimpleNamespace(enabled=False)
         app.context_store = SimpleNamespace(record_feedback=lambda **kwargs: None)
@@ -482,7 +487,7 @@ class TestTelemetryHooks:
             is_visible=True,
             accept_selection=lambda: app_module.Suggestion(text="Hello world. Next sentence", index=0),
         )
-        app.injector = SimpleNamespace(inject=lambda text: injected.append(text) or True)
+        app.injector = SimpleNamespace(inject=lambda text, **kwargs: injected.append(text) or True)
         app.observer = SimpleNamespace(get_focused_element=lambda: focused)
         app.telemetry = SimpleNamespace(emit=lambda event, **payload: events.append((event, payload)))
         app._trigger_before_cursor = ""
@@ -547,5 +552,129 @@ class TestTelemetryHooks:
             {
                 "component": "streaming_worker",
                 "error_type": "ValueError",
+            },
+        )]
+
+    def test_build_feedback_context_uses_saved_trigger_metadata(self):
+        app = Autocompleter.__new__(Autocompleter)
+        focused = FocusedElement(
+            app_name="Slack",
+            app_pid=1,
+            role="AXTextArea",
+            value="hidden",
+            selected_text="",
+            position=None,
+            size=None,
+            insertion_point=0,
+            placeholder_detected=True,
+        )
+        app.config = SimpleNamespace(
+            effective_llm_provider="openai",
+            effective_llm_model="beta-model",
+            effective_fallback_provider="openai",
+            effective_fallback_model="fallback-model",
+        )
+        app._last_trigger_args = {
+            "focused": focused,
+            "mode": app_module.AutocompleteMode.REPLY,
+            "trigger_type": "manual",
+            "source_url": "https://slack.com/app_redirect?channel=C123",
+            "conversation_turns": [{"speaker": "User"}, {"speaker": "Assistant"}],
+            "subtree_context": "<TextArea>hidden</TextArea>",
+            "window_title": "Slack",
+        }
+        app._last_latency_record = SimpleNamespace(
+            suggestion_count=3,
+            e2e_total_ms=950.0,
+            e2e_first_ms=420.0,
+            use_tui=False,
+            use_shell=False,
+            used_subtree_context=True,
+            used_semantic_context=False,
+            used_memory_context=True,
+            visible_source="cache",
+        )
+        app._last_fallback_used = True
+
+        context = app._build_feedback_context()
+
+        assert isinstance(context, FeedbackContext)
+        assert context.app_name == "Slack"
+        assert context.app_bundle_role == "AXTextArea"
+        assert context.url_domain == "slack.com"
+        assert context.mode == "reply"
+        assert context.trigger_type == "manual"
+        assert context.conversation_turns_detected == 2
+        assert context.conversation_speakers == 2
+        assert context.subtree_context_chars == len("<TextArea>hidden</TextArea>")
+        assert context.fallback_used is True
+        assert context.suggestion_count == 3
+
+    def test_report_feedback_persists_and_emits_telemetry(self, monkeypatch):
+        app = Autocompleter.__new__(Autocompleter)
+        events = []
+        shown = []
+        focused = FocusedElement(
+            app_name="Slack",
+            app_pid=1,
+            role="AXTextArea",
+            value="hidden",
+            selected_text="",
+            position=(10.0, 10.0),
+            size=(100.0, 20.0),
+            insertion_point=0,
+        )
+
+        class FakeThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None):
+                self._target = target
+
+            def start(self):
+                self._target()
+
+        monkeypatch.setattr(app_module.threading, "Thread", FakeThread)
+        monkeypatch.setattr(app_module, "_get_caret_screen_position", lambda: (10.0, 10.0, 20.0))
+
+        app.config = SimpleNamespace(
+            install_id="install-123",
+            effective_llm_provider="openai",
+            effective_llm_model="beta-model",
+            effective_fallback_provider="openai",
+            effective_fallback_model="fallback-model",
+        )
+        app.feedback_reporter = SimpleNamespace(
+            submit=lambda ctx, installation_id=None: {
+                "report_id": "report-123",
+                "installation_id": installation_id,
+                "app": {"name": ctx.app_name},
+            }
+        )
+        app.overlay = SimpleNamespace(show=lambda suggestions, x, y, caret_height=20.0: shown.append(suggestions[0].text), hide=lambda: None)
+        app.observer = SimpleNamespace(get_focused_element=lambda: focused)
+        app._emit_telemetry = lambda event, **payload: events.append((event, payload))
+        app._run_on_main = lambda fn: fn()
+        app._generation_id = 0
+        app._last_latency_record = None
+        app._last_fallback_used = False
+        app._last_trigger_args = {
+            "focused": focused,
+            "mode": app_module.AutocompleteMode.REPLY,
+            "trigger_type": "manual",
+            "source_url": "https://slack.com/client/T123",
+            "conversation_turns": [],
+            "subtree_context": None,
+            "window_title": "Slack",
+        }
+
+        assert app._on_report_feedback() is True
+        assert shown == ["Report captured (Slack)"]
+        assert events == [(
+            "feedback_reported",
+            {
+                "report": {
+                    "report_id": "report-123",
+                    "installation_id": "install-123",
+                    "app": {"name": "Slack"},
+                },
             },
         )]

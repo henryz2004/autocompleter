@@ -18,6 +18,17 @@ class TestFollowupAfterAcceptConfig:
         cfg = load_config()
         assert cfg.followup_after_accept_enabled is False
 
+    def test_help_and_report_hotkeys_can_be_overridden(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("AUTOCOMPLETER_HELP_HOTKEY", "cmd+/")
+        monkeypatch.setenv("AUTOCOMPLETER_REPORT_HOTKEY", "cmd+shift+b")
+
+        cfg = load_config()
+
+        assert cfg.help_hotkey == "cmd+/"
+        assert cfg.report_hotkey == "cmd+shift+b"
+        assert cfg.feedback_dir == Path(tmp_path) / ".autocompleter" / "feedback"
+
 
 class TestBetaProxyConfig:
     def test_proxy_enabled_overrides_effective_inference(self, monkeypatch, tmp_path):
