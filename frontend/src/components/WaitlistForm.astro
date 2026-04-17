@@ -82,13 +82,14 @@ const backendBaseUrl = import.meta.env.PUBLIC_BACKEND_BASE_URL ?? "";
 
             <!-- Honeypot. Hidden from humans, attractive to bots. -->
             <div class="hp" aria-hidden="true">
-              <label for="f-company">Company (leave blank)</label>
+              <label for="f-checkpoint">Leave this field blank</label>
               <input
-                id="f-company"
-                name="company"
+                id="f-checkpoint"
+                name="checkpoint"
                 type="text"
                 tabindex="-1"
-                autocomplete="off"
+                autocomplete="new-password"
+                data-honeypot
               />
             </div>
           </div>

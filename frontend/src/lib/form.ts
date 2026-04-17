@@ -53,7 +53,7 @@ export function initWaitlistForm({ root, baseUrl }: InitFormOptions): void {
     setLoading(submitButton, true);
 
     const honeypot =
-      (form.elements.namedItem("company") as HTMLInputElement | null)?.value ?? "";
+      form.querySelector<HTMLInputElement>("[data-honeypot]")?.value ?? "";
 
     const result = await submitBetaApplication(data, {
       baseUrl,
