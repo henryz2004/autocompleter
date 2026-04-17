@@ -40,10 +40,9 @@ function buildMarkup(): HTMLElement {
     </div>
 
     <div data-success-container hidden tabindex="-1">
-      <code data-install-id></code>
-      <code data-install-key></code>
       <pre><code data-env-setup></code></pre>
       <a data-docs-link></a>
+      <button data-copy-target="[data-env-setup]">Copy</button>
     </div>
   `;
   document.body.appendChild(root);
@@ -142,12 +141,6 @@ describe("waitlist form wiring", () => {
     expect(formContainer.hidden).toBe(true);
     expect(successContainer.hidden).toBe(false);
 
-    expect(
-      root.querySelector<HTMLElement>("[data-install-id]")!.textContent,
-    ).toBe("ins_abc");
-    expect(
-      root.querySelector<HTMLElement>("[data-install-key]")!.textContent,
-    ).toBe("key_xyz_plaintext");
     expect(
       root.querySelector<HTMLElement>("[data-env-setup]")!.textContent,
     ).toContain("AUTOCOMPLETER_INSTALL_ID=ins_abc");
