@@ -30,7 +30,7 @@ function buildMarkup(): HTMLElement {
           <p data-field-error="primary_use_case" hidden></p>
         </div>
 
-        <input name="company" />
+        <input name="checkpoint" data-honeypot />
 
         <button type="submit" data-submit>
           <span data-label>Get my install key</span>
@@ -223,6 +223,40 @@ describe("waitlist form wiring", () => {
     const body = JSON.parse((init as RequestInit).body as string);
     expect(body.company).toBe("");
     expect(body.email).toBe("ada@example.com");
+  });
+
+  it("reads the honeypot from the hidden data-honeypot field", async () => {
+    const root = buildMarkup();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          application_id: "app_1",
+          install_id: "ins_1",
+          install_key: "key_1",
+          status: "granted",
+          proxy_base_url: "https://p/v1",
+          telemetry_url: "https://p/v1/telemetry/events",
+          install_docs_url: "https://docs",
+          env_setup: "AUTOCOMPLETER_INSTALL_ID=ins_1\n",
+        }),
+        { status: 201, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    initWaitlistForm({ root, baseUrl: "https://api.test" });
+    fill(root, {
+      name: "Ada",
+      email: "ada@example.com",
+      role: "Engineer",
+      primary_use_case: "Terminal commits.",
+      checkpoint: "bot-value",
+    });
+    submitForm(root);
+    await flushMicrotasks();
+
+    const [, init] = fetchSpy.mock.calls[0]!;
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body.company).toBe("bot-value");
   });
 });
 
