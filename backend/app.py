@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from .auth import require_admin, require_install
 from .config import BackendConfig, load_backend_config
+from .debug_artifacts import DebugArtifactPayload, build_debug_artifact_row
 from .proxy import ChatCompletionRequest, ProxyService
 from .store import InstallRecord, SupabaseStore
 from .telemetry import (
@@ -93,6 +94,18 @@ def create_app(
         if invocation_row is not None:
             await backend_store.upsert_invocation(invocation_row)
         return {"accepted": True, "event_id": row["event_id"]}
+
+    @app.post("/v1/debug-artifacts", status_code=status.HTTP_202_ACCEPTED)
+    async def ingest_debug_artifact(
+        payload: DebugArtifactPayload,
+        install: InstallRecord = Depends(require_install),
+    ) -> dict[str, object]:
+        row = build_debug_artifact_row(
+            install_id=install.install_id,
+            payload=payload.model_dump(mode="json"),
+        )
+        await backend_store.record_debug_artifact(row)
+        return {"accepted": True, "artifact_id": row["artifact_id"]}
 
     @app.post("/admin/install-keys")
     async def create_install_key(

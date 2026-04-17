@@ -123,6 +123,9 @@ class SupabaseStore:
     async def record_telemetry_event(self, row: dict[str, Any]) -> None:
         await self._insert_row("beta_telemetry_events", row, return_representation=False)
 
+    async def record_debug_artifact(self, row: dict[str, Any]) -> None:
+        await self._insert_row("beta_debug_artifacts", row, return_representation=False)
+
     async def upsert_invocation(self, row: dict[str, Any]) -> None:
         await self._upsert_row(
             "beta_invocations",
@@ -244,6 +247,7 @@ class InMemoryStore:
         self.proxy_requests: list[dict[str, Any]] = []
         self.proxy_attempts: list[dict[str, Any]] = []
         self.telemetry_events: list[dict[str, Any]] = []
+        self.debug_artifacts: list[dict[str, Any]] = []
         self.invocations: dict[str, dict[str, Any]] = {}
 
     async def close(self) -> None:
@@ -299,6 +303,9 @@ class InMemoryStore:
 
     async def record_telemetry_event(self, row: dict[str, Any]) -> None:
         self.telemetry_events.append(dict(row))
+
+    async def record_debug_artifact(self, row: dict[str, Any]) -> None:
+        self.debug_artifacts.append(dict(row))
 
     async def upsert_invocation(self, row: dict[str, Any]) -> None:
         invocation_id = str(row["invocation_id"])

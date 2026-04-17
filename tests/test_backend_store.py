@@ -98,3 +98,34 @@ class TestSupabaseStore:
 
         assert "Supabase response body:" in message
         assert "invocation_id" in message
+
+    def test_record_debug_artifact_writes_to_beta_debug_artifacts(self):
+        captured_rows: list[dict[str, object]] = []
+
+        def dispatch(request: httpx.Request) -> httpx.Response:
+            if request.method == "POST" and request.url.path.endswith("/beta_debug_artifacts"):
+                row = json.loads(request.content.decode("utf-8"))
+                captured_rows.append(row)
+                return httpx.Response(201, json=[row])
+            raise AssertionError(f"unexpected request: {request.method} {request.url}")
+
+        async def run_test() -> None:
+            client = httpx.AsyncClient(transport=httpx.MockTransport(dispatch))
+            store = SupabaseStore(make_config(), client=client)
+            try:
+                await store.record_debug_artifact(
+                    {
+                        "artifact_id": "artifact-1",
+                        "install_id": "install-1",
+                        "artifact_type": "focus_failure",
+                        "payload_json": {"meta": {"artifact_type": "focus_failure"}},
+                    }
+                )
+            finally:
+                await store.close()
+
+        asyncio.run(run_test())
+
+        assert len(captured_rows) == 1
+        assert captured_rows[0]["artifact_id"] == "artifact-1"
+        assert captured_rows[0]["artifact_type"] == "focus_failure"
