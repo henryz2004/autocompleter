@@ -31,7 +31,11 @@
         <!-- Input area -->
         <div class="input-pane">
           <div class="input-box">
-            <span class="input-placeholder">honestly i think the real problem is<span class="caret" aria-hidden="true"></span></span>
+            <span class="input-placeholder">
+              honestly i think the real problem is
+              <span data-draft-target>that I keep building what I think they need, not what they ask for</span>
+              <span class="caret" aria-hidden="true"></span>
+            </span>
           </div>
           <div class="input-toolbar" aria-hidden="true">
             <span>+</span>
@@ -45,15 +49,36 @@
       <!-- Autocompleter overlay — mirrors the real macOS HUD-style overlay -->
       <div class="overlay" role="presentation">
         <ol class="overlay-list">
-          <li class="overlay-item is-active">
+          <li
+            class="overlay-item is-active"
+            tabindex="0"
+            role="button"
+            aria-pressed="true"
+            data-suggestion-item
+            data-suggestion-text="that I keep building what I think they need, not what they ask for"
+          >
             <span class="rank">1</span>
             <span class="overlay-text">that I keep building what I think they need, not what they ask for</span>
           </li>
-          <li class="overlay-item">
+          <li
+            class="overlay-item"
+            tabindex="0"
+            role="button"
+            aria-pressed="false"
+            data-suggestion-item
+            data-suggestion-text="that I'm not sure I actually want to run a company"
+          >
             <span class="rank">2</span>
             <span class="overlay-text">that I'm not sure I actually want to run a company</span>
           </li>
-          <li class="overlay-item">
+          <li
+            class="overlay-item"
+            tabindex="0"
+            role="button"
+            aria-pressed="false"
+            data-suggestion-item
+            data-suggestion-text="that we haven't found one person who couldn't live without it"
+          >
             <span class="rank">3</span>
             <span class="overlay-text">that we haven't found one person who couldn't live without it</span>
           </li>
@@ -68,6 +93,8 @@
 </section>
 
 <script>
+  import { initProductVisual } from "../lib/productVisual";
+
   const scenes = document.querySelectorAll<HTMLElement>("[data-visual-scene]");
   if (typeof IntersectionObserver !== "undefined") {
     const observer = new IntersectionObserver(
@@ -86,6 +113,8 @@
     // Fallback: reveal immediately if IO is unavailable.
     scenes.forEach((scene) => scene.classList.add("is-visible"));
   }
+
+  scenes.forEach((scene) => initProductVisual({ root: scene }));
 </script>
 
 <style>
