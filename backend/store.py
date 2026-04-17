@@ -22,6 +22,10 @@ def hash_install_key(install_key: str) -> str:
     return hashlib.sha256(install_key.encode("utf-8")).hexdigest()
 
 
+class DuplicateApplicationError(RuntimeError):
+    """Raised when an application already exists for the normalized email."""
+
+
 @dataclass(frozen=True)
 class InstallRecord:
     install_id: str
@@ -46,6 +50,37 @@ class InstallRecord:
             created_at=row.get("created_at"),
             revoked_at=row.get("revoked_at"),
             notes=row.get("notes"),
+        )
+
+
+@dataclass(frozen=True)
+class WaitlistApplicationRecord:
+    application_id: str
+    email: str
+    email_normalized: str
+    name: str
+    role: str
+    primary_use_case: str
+    status: str
+    install_id: str | None
+    source: str | None
+    submitted_at: str | None
+    granted_at: str | None
+
+    @classmethod
+    def from_row(cls, row: dict[str, Any]) -> "WaitlistApplicationRecord":
+        return cls(
+            application_id=str(row.get("application_id", "")),
+            email=str(row.get("email", "")),
+            email_normalized=str(row.get("email_normalized", "")),
+            name=str(row.get("name", "")),
+            role=str(row.get("role", "")),
+            primary_use_case=str(row.get("primary_use_case", "")),
+            status=str(row.get("status", "")),
+            install_id=row.get("install_id"),
+            source=row.get("source"),
+            submitted_at=row.get("submitted_at"),
+            granted_at=row.get("granted_at"),
         )
 
 
@@ -113,6 +148,62 @@ class SupabaseStore:
             },
         )
         return bool(rows)
+
+    async def get_application_by_email(
+        self, email: str
+    ) -> WaitlistApplicationRecord | None:
+        normalized = email.strip().lower()
+        if not normalized:
+            return None
+        rows = await self._select_rows(
+            "beta_applications",
+            params={
+                "select": (
+                    "application_id,email,email_normalized,name,role,"
+                    "primary_use_case,status,install_id,source,"
+                    "submitted_at,granted_at"
+                ),
+                "email_normalized": f"eq.{normalized}",
+                "limit": "1",
+            },
+        )
+        if not rows:
+            return None
+        return WaitlistApplicationRecord.from_row(rows[0])
+
+    async def create_application(
+        self,
+        *,
+        email: str,
+        name: str,
+        role: str,
+        primary_use_case: str,
+        install_id: str,
+        source: str | None = None,
+    ) -> WaitlistApplicationRecord:
+        now = utcnow_iso()
+        row = {
+            "application_id": str(uuid.uuid4()),
+            "email": email.strip(),
+            "email_normalized": email.strip().lower(),
+            "name": name.strip(),
+            "role": role.strip(),
+            "primary_use_case": primary_use_case.strip(),
+            "status": "granted",
+            "install_id": install_id,
+            "source": source,
+            "submitted_at": now,
+            "granted_at": now,
+        }
+        try:
+            inserted = await self._insert_row("beta_applications", row)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 409:
+                raise DuplicateApplicationError(
+                    "application already exists for email"
+                ) from exc
+            raise
+        return WaitlistApplicationRecord.from_row(inserted)
 
     async def record_proxy_request(self, row: dict[str, Any]) -> None:
         await self._insert_row("beta_proxy_requests", row, return_representation=False)
@@ -249,6 +340,13 @@ class InMemoryStore:
         self.telemetry_events: list[dict[str, Any]] = []
         self.debug_artifacts: list[dict[str, Any]] = []
         self.invocations: dict[str, dict[str, Any]] = {}
+        self.applications: dict[str, WaitlistApplicationRecord] = {}
+        self.application_insert_should_fail: bool = False
+        # Test hook: when True, create_application inserts a competing
+        # application with the same email and THEN raises. This lets tests
+        # exercise the race-recovery path in the route handler (pre-check
+        # missed, duplicate discovered at insert time).
+        self.application_insert_simulates_race: bool = False
 
     async def close(self) -> None:
         return None
@@ -294,6 +392,66 @@ class InMemoryStore:
             notes=record.notes,
         )
         return True
+
+    async def get_application_by_email(
+        self, email: str
+    ) -> WaitlistApplicationRecord | None:
+        normalized = email.strip().lower()
+        if not normalized:
+            return None
+        for record in self.applications.values():
+            if record.email_normalized == normalized:
+                return record
+        return None
+
+    async def create_application(
+        self,
+        *,
+        email: str,
+        name: str,
+        role: str,
+        primary_use_case: str,
+        install_id: str,
+        source: str | None = None,
+    ) -> WaitlistApplicationRecord:
+        normalized = email.strip().lower()
+        if self.application_insert_simulates_race:
+            now = utcnow_iso()
+            racer = WaitlistApplicationRecord(
+                application_id=str(uuid.uuid4()),
+                email=email.strip(),
+                email_normalized=normalized,
+                name="racer",
+                role="racer",
+                primary_use_case="racer",
+                status="granted",
+                install_id="racer-install-id",
+                source=source,
+                submitted_at=now,
+                granted_at=now,
+            )
+            self.applications[racer.application_id] = racer
+            raise DuplicateApplicationError("simulated unique-violation race")
+        if self.application_insert_should_fail:
+            raise RuntimeError("simulated insert failure")
+        if await self.get_application_by_email(normalized):
+            raise DuplicateApplicationError("duplicate email")
+        now = utcnow_iso()
+        record = WaitlistApplicationRecord(
+            application_id=str(uuid.uuid4()),
+            email=email.strip(),
+            email_normalized=normalized,
+            name=name.strip(),
+            role=role.strip(),
+            primary_use_case=primary_use_case.strip(),
+            status="granted",
+            install_id=install_id,
+            source=source,
+            submitted_at=now,
+            granted_at=now,
+        )
+        self.applications[record.application_id] = record
+        return record
 
     async def record_proxy_request(self, row: dict[str, Any]) -> None:
         self.proxy_requests.append(dict(row))

@@ -1,0 +1,66 @@
+---
+// Short, honest beta-requirements strip. Sets expectations before the form.
+const items = [
+  { label: "macOS 13+ only" },
+  { label: "Requires Accessibility permission" },
+  { label: "Early beta, sharp edges, manual install" },
+  { label: "Open source", href: "https://github.com/henryz2004/autocompleter" },
+];
+---
+
+<section class="notice">
+  <div class="container">
+    <p class="eyebrow">Beta requirements</p>
+    <ul class="notice-list">
+      {items.map((item) => (
+        <li class="notice-item">
+          {item.href
+            ? <a href={item.href} target="_blank" rel="noreferrer noopener" class="notice-link">{item.label}</a>
+            : item.label}
+        </li>
+      ))}
+    </ul>
+  </div>
+</section>
+
+<style>
+  .notice {
+    padding: var(--space-8) 0;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .notice-list {
+    list-style: none;
+    padding: 0;
+    margin: var(--space-4) 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .notice-item {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    letter-spacing: 0.04em;
+    position: relative;
+    padding-left: 1.2rem;
+  }
+
+  .notice-item::before {
+    content: "→";
+    position: absolute;
+    left: 0;
+    color: var(--color-text-dim);
+  }
+
+  .notice-link {
+    color: inherit;
+    border-bottom-color: var(--color-text-dim);
+  }
+
+  .notice-link:hover {
+    color: var(--color-text);
+    border-bottom-color: var(--color-text);
+  }
+</style>

@@ -1,0 +1,435 @@
+---
+// Waitlist form + success card. Single-component so the success state shares
+// visual weight with the form and replaces it in place.
+const backendBaseUrl = import.meta.env.PUBLIC_BACKEND_BASE_URL ?? "";
+---
+
+<section id="waitlist" class="waitlist">
+  <div class="container">
+    <div class="waitlist-head">
+      <p class="eyebrow">Limited beta</p>
+      <h2 class="display display-l">Get your install key.</h2>
+      <p class="body-muted waitlist-lede">
+        Fill this out and you'll get credentials to run the autocompleter on
+        your machine. We want to know how you'll use it.
+      </p>
+    </div>
+
+    <div class="waitlist-shell" data-waitlist data-base-url={backendBaseUrl}>
+      <div data-form-container>
+        <form data-form novalidate>
+          <div
+            data-error-banner
+            class="error-banner"
+            role="alert"
+            aria-live="polite"
+            hidden
+          ></div>
+
+          <div class="field-grid">
+            <div class="field" data-field="name">
+              <label for="f-name">Name</label>
+              <input
+                id="f-name"
+                name="name"
+                type="text"
+                autocomplete="name"
+                required
+                maxlength="200"
+              />
+              <p class="field-error" data-field-error="name" hidden></p>
+            </div>
+
+            <div class="field" data-field="email">
+              <label for="f-email">Email</label>
+              <input
+                id="f-email"
+                name="email"
+                type="email"
+                autocomplete="email"
+                required
+                maxlength="320"
+              />
+              <p class="field-error" data-field-error="email" hidden></p>
+            </div>
+
+            <div class="field field-wide" data-field="role">
+              <label for="f-role">What do you do?</label>
+              <input
+                id="f-role"
+                name="role"
+                type="text"
+                autocomplete="organization-title"
+                required
+                maxlength="200"
+                placeholder="e.g. Staff engineer, solo founder, research scientist"
+              />
+              <p class="field-error" data-field-error="role" hidden></p>
+            </div>
+
+            <div class="field field-wide" data-field="primary_use_case">
+              <label for="f-use-case">How will you use it?</label>
+              <textarea
+                id="f-use-case"
+                name="primary_use_case"
+                rows="4"
+                required
+                maxlength="2000"
+                placeholder="Which app, what kind of writing? A sentence or two is plenty."
+              ></textarea>
+              <p class="field-error" data-field-error="primary_use_case" hidden></p>
+            </div>
+
+            <!-- Honeypot. Hidden from humans, attractive to bots. -->
+            <div class="hp" aria-hidden="true">
+              <label for="f-company">Company (leave blank)</label>
+              <input
+                id="f-company"
+                name="company"
+                type="text"
+                tabindex="-1"
+                autocomplete="off"
+              />
+            </div>
+          </div>
+
+          <button type="submit" class="submit" data-submit>
+            <span data-label>Apply for access</span>
+            <span data-spinner hidden class="spinner" aria-hidden="true"></span>
+          </button>
+        </form>
+      </div>
+
+      <div
+        data-success-container
+        class="success"
+        role="status"
+        aria-live="polite"
+        tabindex="-1"
+        hidden
+      >
+        <p class="eyebrow success-eyebrow">You're in.</p>
+        <h3 class="display display-l">
+          Paste this into <span class="mono">.env</span> and you're running.
+        </h3>
+
+        <div class="cred-grid">
+          <div class="cred">
+            <p class="cred-label">Install ID</p>
+            <div class="cred-row">
+              <code class="cred-value mono" data-install-id></code>
+              <button
+                type="button"
+                class="copy-btn"
+                data-copy-target="[data-install-id]"
+              >Copy</button>
+            </div>
+          </div>
+
+          <div class="cred">
+            <p class="cred-label">Install key <span class="cred-note">shown once</span></p>
+            <div class="cred-row">
+              <code class="cred-value mono" data-install-key></code>
+              <button
+                type="button"
+                class="copy-btn"
+                data-copy-target="[data-install-key]"
+              >Copy</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="env-block">
+          <div class="env-head">
+            <span class="env-eyebrow mono">.env</span>
+            <button
+              type="button"
+              class="copy-btn"
+              data-copy-target="[data-env-setup]"
+            >Copy</button>
+          </div>
+          <pre class="env-pre"><code class="mono" data-env-setup></code></pre>
+        </div>
+
+        <p class="body-muted success-next">
+          Next: follow the
+          <a href="#" data-docs-link target="_blank" rel="noreferrer">setup guide</a>
+          to install the app and paste these into <span class="mono">.env</span>.
+          We don't store this key. If you lose it, we'll mint a new one.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  import { initWaitlistForm } from "../lib/form";
+
+  document.querySelectorAll<HTMLElement>("[data-waitlist]").forEach((root) => {
+    const baseUrl = root.dataset.baseUrl ?? "";
+    initWaitlistForm({ root, baseUrl });
+  });
+</script>
+
+<style>
+  .waitlist {
+    padding: var(--space-10) 0 var(--space-16);
+    border-top: 1px solid var(--color-border);
+  }
+
+  .waitlist-head {
+    max-width: 640px;
+    margin-bottom: var(--space-8);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .waitlist-lede {
+    font-size: 1.0625rem;
+    max-width: 48ch;
+  }
+
+  .waitlist-shell {
+    max-width: 680px;
+  }
+
+  .field-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-5);
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .field-wide {
+    grid-column: 1 / -1;
+  }
+
+  label {
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
+    font-weight: 500;
+  }
+
+  input,
+  textarea {
+    background: #ffffff;
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+    padding: 0.75rem 0.9rem;
+    font-size: 1rem;
+    font-family: inherit;
+    border-radius: var(--radius-sm);
+    width: 100%;
+    transition: border-color 140ms ease, background 140ms ease;
+  }
+
+  textarea {
+    resize: none;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-text-dim);
+  }
+
+  input:focus,
+  textarea:focus {
+    border-color: var(--color-text);
+    outline: none;
+    background: #ffffff;
+  }
+
+  [data-field][data-invalid] input,
+  [data-field][data-invalid] textarea {
+    border-color: var(--color-danger);
+  }
+
+  .field-error {
+    font-size: 0.8125rem;
+    color: var(--color-danger);
+  }
+
+  .hp {
+    position: absolute;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+  }
+
+  .submit {
+    margin-top: var(--space-5);
+    background: var(--color-text);
+    color: var(--color-accent-contrast);
+    border: 0;
+    padding: 0.95rem 1.6rem;
+    font-size: 1rem;
+    font-weight: 500;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    transition: transform 120ms ease, opacity 120ms ease;
+  }
+
+  .submit:hover:not([disabled]) {
+    transform: translateY(-1px);
+  }
+
+  .submit[disabled] {
+    opacity: 0.6;
+    cursor: progress;
+  }
+
+  .spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(10, 10, 10, 0.3);
+    border-top-color: var(--color-accent-contrast);
+    border-radius: 50%;
+    animation: spin 700ms linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .error-banner {
+    background: rgba(255, 107, 107, 0.08);
+    border: 1px solid rgba(255, 107, 107, 0.3);
+    color: var(--color-danger);
+    padding: 0.7rem 0.9rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+    margin-bottom: var(--space-4);
+  }
+
+  /* Success state */
+  .success {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+  }
+
+  .success-eyebrow {
+    color: var(--color-success);
+  }
+
+  .cred-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-4);
+    margin-top: var(--space-3);
+  }
+
+  .cred {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  .cred-label {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .cred-note {
+    color: var(--color-text-dim);
+    text-transform: none;
+    letter-spacing: 0;
+    margin-left: 0.4rem;
+  }
+
+  .cred-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .cred-value {
+    flex: 1;
+    font-size: 0.875rem;
+    word-break: break-all;
+    color: var(--color-text);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.65rem;
+    min-width: 0;
+  }
+
+  .copy-btn {
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    cursor: pointer;
+    font-family: inherit;
+    transition: border-color 120ms ease;
+  }
+
+  .copy-btn:hover {
+    border-color: var(--color-text);
+  }
+
+  .env-block {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+
+  .env-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.55rem 0.9rem;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface-raised);
+  }
+
+  .env-eyebrow {
+    font-size: 0.7rem;
+  }
+
+  .env-pre {
+    margin: 0;
+    padding: var(--space-4);
+    background: transparent;
+    color: var(--color-text);
+    font-size: 0.8125rem;
+    line-height: 1.55;
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  .success-next {
+    font-size: 0.9rem;
+  }
+
+  @media (max-width: 620px) {
+    .field-grid,
+    .cred-grid {
+      grid-template-columns: 1fr;
+    }
+    .waitlist {
+      padding: var(--space-8) 0 var(--space-12);
+    }
+  }
+</style>

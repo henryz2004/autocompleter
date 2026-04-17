@@ -29,6 +29,26 @@ def _parse_allowed_models(raw: str) -> set[str]:
     return {item.strip() for item in raw.split(",") if item.strip()}
 
 
+def _parse_origins(raw: str) -> list[str]:
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _env_first_nonempty(*names: str, default: str = "") -> str:
+    for name in names:
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    return default
+
+
+def _default_public_cors_origins() -> list[str]:
+    return [
+        "http://127.0.0.1:4321",
+        "http://localhost:4321",
+        "https://autocompleter.dev",
+    ]
+
+
 @dataclass(frozen=True)
 class UpstreamConfig:
     name: str
@@ -65,6 +85,9 @@ class BackendConfig:
     allow_upstream_override_headers: bool
     primary_upstream: UpstreamConfig
     fallback_upstream: UpstreamConfig
+    public_cors_origins: list[str] = field(default_factory=_default_public_cors_origins)
+    public_cors_origin_regex: str = r"^https://[a-z0-9-]+\.autocompleter-259\.pages\.dev$"
+    public_install_docs_url: str = ""
 
     @property
     def supabase_rest_url(self) -> str:
@@ -136,4 +159,20 @@ def load_backend_config() -> BackendConfig:
         ),
         primary_upstream=primary,
         fallback_upstream=fallback,
+        public_cors_origins=_parse_origins(
+            _env_first_nonempty(
+                "AUTOCOMPLETER_PUBLIC_ALLOWED_ORIGINS",
+                "AUTOCOMPLETER_BACKEND_PUBLIC_CORS_ORIGINS",
+                default=",".join(_default_public_cors_origins()),
+            )
+        ),
+        public_cors_origin_regex=_env_first_nonempty(
+            "AUTOCOMPLETER_PUBLIC_ALLOWED_ORIGIN_REGEX",
+            default=r"^https://[a-z0-9-]+\.autocompleter-259\.pages\.dev$",
+        ),
+        public_install_docs_url=_env_first_nonempty(
+            "AUTOCOMPLETER_PUBLIC_INSTALL_DOCS_URL",
+            "AUTOCOMPLETER_LANDING_INSTALL_DOCS_URL",
+            default="https://github.com/henryz2004/autocompleter/blob/main/docs/friend-beta.md",
+        ),
     )

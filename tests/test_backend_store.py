@@ -8,7 +8,7 @@ import json
 import httpx
 
 from backend.config import BackendConfig, UpstreamConfig
-from backend.store import SupabaseStore
+from backend.store import DuplicateApplicationError, SupabaseStore
 
 
 def make_config() -> BackendConfig:
@@ -129,3 +129,73 @@ class TestSupabaseStore:
         assert len(captured_rows) == 1
         assert captured_rows[0]["artifact_id"] == "artifact-1"
         assert captured_rows[0]["artifact_type"] == "focus_failure"
+
+    def test_create_application_writes_expected_beta_application_row(self):
+        captured_rows: list[dict[str, object]] = []
+
+        def dispatch(request: httpx.Request) -> httpx.Response:
+            if request.method == "POST" and request.url.path.endswith("/beta_applications"):
+                row = json.loads(request.content.decode("utf-8"))
+                captured_rows.append(row)
+                return httpx.Response(201, json=[row])
+            raise AssertionError(f"unexpected request: {request.method} {request.url}")
+
+        async def run_test() -> None:
+            client = httpx.AsyncClient(transport=httpx.MockTransport(dispatch))
+            store = SupabaseStore(make_config(), client=client)
+            try:
+                await store.create_application(
+                    email="Ada@Example.com",
+                    name="Ada",
+                    role="Engineer",
+                    primary_use_case="Terminal commits",
+                    install_id="install-1",
+                    source="landing",
+                )
+            finally:
+                await store.close()
+
+        asyncio.run(run_test())
+
+        assert len(captured_rows) == 1
+        row = captured_rows[0]
+        assert row["email"] == "Ada@Example.com"
+        assert row["email_normalized"] == "ada@example.com"
+        assert row["install_id"] == "install-1"
+        assert row["status"] == "granted"
+        assert row["submitted_at"]
+        assert row["granted_at"]
+
+    def test_create_application_maps_unique_conflict_to_duplicate_error(self):
+        def dispatch(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                409,
+                json={
+                    "code": "23505",
+                    "details": "Key (email_normalized)=(ada@example.com) already exists.",
+                    "message": "duplicate key value violates unique constraint",
+                },
+                request=request,
+            )
+
+        async def run_test() -> str:
+            client = httpx.AsyncClient(transport=httpx.MockTransport(dispatch))
+            store = SupabaseStore(make_config(), client=client)
+            try:
+                try:
+                    await store.create_application(
+                        email="ada@example.com",
+                        name="Ada",
+                        role="Engineer",
+                        primary_use_case="Slack replies",
+                        install_id="install-1",
+                    )
+                except DuplicateApplicationError as exc:
+                    return str(exc)
+                raise AssertionError("expected DuplicateApplicationError")
+            finally:
+                await store.close()
+
+        message = asyncio.run(run_test())
+
+        assert "already exists" in message

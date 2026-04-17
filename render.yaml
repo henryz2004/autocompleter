@@ -31,3 +31,9 @@ services:
         value: "60"
       - key: AUTOCOMPLETER_BACKEND_ALLOW_UPSTREAM_OVERRIDE_HEADERS
         value: "0"
+      - key: AUTOCOMPLETER_PUBLIC_ALLOWED_ORIGINS
+        value: "https://autocompleter.dev"
+      - key: AUTOCOMPLETER_PUBLIC_ALLOWED_ORIGIN_REGEX
+        value: "^https://[a-z0-9-]+\\.autocompleter-259\\.pages\\.dev$"
+      - key: AUTOCOMPLETER_PUBLIC_INSTALL_DOCS_URL
+        value: "https://github.com/henryz2004/autocompleter/blob/main/docs/friend-beta.md"

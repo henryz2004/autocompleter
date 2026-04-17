@@ -1,0 +1,94 @@
+---
+const steps = [
+  { n: "01", label: "Press the hotkey", kbd: true, body: null },
+  { n: "02", label: "Autocompleter reads the window", body: "Your thread, your file, your cursor. Nothing more." },
+  { n: "03", label: "Pick a suggestion", body: "Enter to accept. Keep going." },
+];
+---
+
+<section id="how" class="how">
+  <div class="container">
+    <p class="eyebrow">How it works</p>
+    <ol class="steps">
+      {steps.map((step) => (
+        <li class="step">
+          <span class="step-n mono">{step.n}</span>
+          <div>
+            <p class="step-label">{step.label}</p>
+            {step.kbd ? (
+              <p class="step-body body-muted">
+                <kbd class="key">Ctrl</kbd> <kbd class="key">Space</kbd> wherever you're typing.
+              </p>
+            ) : (
+              <p class="step-body body-muted">{step.body}</p>
+            )}
+          </div>
+        </li>
+      ))}
+    </ol>
+  </div>
+</section>
+
+<style>
+  .how {
+    padding: var(--space-8) 0 var(--space-10);
+    border-top: 1px solid var(--color-border);
+  }
+
+  .steps {
+    list-style: none;
+    padding: 0;
+    margin: var(--space-6) 0 0;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-6);
+  }
+
+  .step {
+    display: flex;
+    gap: var(--space-3);
+    align-items: flex-start;
+  }
+
+  .step-n {
+    font-size: 0.75rem;
+    color: var(--color-text-dim);
+    letter-spacing: 0.1em;
+    padding-top: 0.15rem;
+  }
+
+  .step-label {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--color-text);
+  }
+
+  .step-body {
+    font-size: 0.9rem;
+    margin-top: 0.2rem;
+  }
+
+  /* macOS-style keyboard key */
+  .key {
+    display: inline-block;
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1;
+    padding: 0.2em 0.55em 0.3em;
+    background: #fff;
+    border: 1px solid #bbb;
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    color: var(--color-text);
+    box-shadow: 0 1px 0 #bbb, inset 0 1px 0 rgba(255,255,255,0.8);
+    vertical-align: middle;
+  }
+
+  @media (max-width: 820px) {
+    .steps {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
