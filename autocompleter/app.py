@@ -389,7 +389,7 @@ class Autocompleter:
         focus_debug_profile = self._resolve_debug_capture_profile(artifact_type)
         focus_debug = self._collect_focus_debug_info(profile=focus_debug_profile)
         if (
-            artifact_type == "focus_failure"
+            artifact_type in {"focus_failure", "focus_snapshot"}
             and focus_debug_profile == DEBUG_CAPTURE_PROFILE_AGGRESSIVE
         ):
             cdp_probe = self._collect_cdp_focus_probe(focus_debug)
@@ -446,7 +446,7 @@ class Autocompleter:
         config = getattr(self, "config", None)
         configured = getattr(config, "debug_capture_profile", "normal")
         if (
-            artifact_type == "focus_failure"
+            artifact_type in {"focus_failure", "focus_snapshot"}
             and configured == DEBUG_CAPTURE_PROFILE_AGGRESSIVE
         ):
             return DEBUG_CAPTURE_PROFILE_AGGRESSIVE
@@ -500,6 +500,45 @@ class Autocompleter:
                 "status": "connect_failed",
                 "reason": "probe_exception",
             }
+
+    def _capture_focus_success_snapshot(
+        self,
+        *,
+        trigger_type: str,
+        focused=None,
+        invocation_id: str | None = None,
+    ) -> None:
+        config = getattr(self, "config", None)
+        client = getattr(self, "debug_artifacts", None)
+        if client is None or not getattr(client, "enabled", False):
+            return
+        if not getattr(config, "debug_capture_success_enabled", False):
+            return
+        extra: dict[str, object] = {
+            "reason": "manual_success_snapshot",
+        }
+        if focused is not None:
+            extra.update(
+                {
+                    "focused_role": getattr(focused, "role", ""),
+                    "focused_app": getattr(focused, "app_name", ""),
+                    "focused_value_length": len(getattr(focused, "value", "") or ""),
+                    "placeholder_detected": bool(
+                        getattr(focused, "placeholder_detected", False)
+                    ),
+                }
+            )
+            insertion_point = getattr(focused, "insertion_point", None)
+            if isinstance(insertion_point, int):
+                extra["insertion_point"] = insertion_point
+        self._schedule_debug_capture(
+            "focus_snapshot",
+            trigger_type=trigger_type,
+            focused=focused,
+            invocation_id=invocation_id,
+            source_app=getattr(focused, "app_name", None) if focused is not None else None,
+            extra=extra,
+        )
 
     def _resolve_debug_invocation_id(self, invocation_id: str | None = None) -> str | None:
         if invocation_id:
@@ -1378,6 +1417,11 @@ class Autocompleter:
             mode=mode,
             trigger_type="manual",
             app_name=focused.app_name,
+        )
+        self._capture_focus_success_snapshot(
+            trigger_type="manual",
+            focused=focused,
+            invocation_id=invocation_id,
         )
 
         # Show loading indicator immediately

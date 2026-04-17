@@ -98,6 +98,7 @@ class Config:
     install_id: str = ""
     debug_capture_mode: str = DEBUG_CAPTURE_OFF
     debug_capture_profile: str = "normal"
+    debug_capture_success: bool = False
 
     # Sentinel to distinguish "not provided" from "explicitly set to empty"
     _UNSET: str = "__UNSET__"
@@ -262,6 +263,10 @@ class Config:
     def debug_capture_aggressive_enabled(self) -> bool:
         return self.debug_capture_active and self.debug_capture_profile == "aggressive"
 
+    @property
+    def debug_capture_success_enabled(self) -> bool:
+        return self.debug_capture_active and self.debug_capture_success
+
     def _resolve_install_id(self) -> str:
         install_id_path = self.data_dir / "install_id"
         try:
@@ -360,5 +365,6 @@ def load_config() -> Config:
             "AUTOCOMPLETER_DEBUG_CAPTURE_PROFILE",
             "normal",
         ),
+        debug_capture_success=_env_bool("AUTOCOMPLETER_DEBUG_CAPTURE_SUCCESS"),
     )
     return config

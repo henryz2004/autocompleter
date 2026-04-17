@@ -849,6 +849,78 @@ class TestTelemetryHooks:
         assert payload["focus_debug"]["window_inventory"][0]["title"] == "ChatGPT"
         assert payload["focus_debug"]["cdp_probe"]["status"] == "success"
 
+    def test_focus_success_snapshot_uploads_debug_artifact_when_enabled(self, monkeypatch):
+        app = Autocompleter.__new__(Autocompleter)
+        debug_artifacts = []
+        profiles = []
+        focused = FocusedElement(
+            app_name="Codex",
+            app_pid=321,
+            role="AXTextArea",
+            value="hello world",
+            selected_text="",
+            position=(10.0, 10.0),
+            size=(100.0, 20.0),
+            insertion_point=11,
+        )
+
+        class FakeThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None):
+                self._target = target
+
+            def start(self):
+                self._target()
+
+        monkeypatch.setattr(app_module.threading, "Thread", FakeThread)
+        monkeypatch.setattr(
+            app_module,
+            "probe_editable_dom_state",
+            lambda app_name, app_pid: {
+                "status": "success",
+                "app_name": app_name,
+                "app_pid": app_pid,
+                "active_element": {"tag": "textarea"},
+            },
+        )
+
+        app.observer = SimpleNamespace(
+            get_focus_debug_info=lambda profile="normal": profiles.append(profile) or {
+                "frontmost_app": {
+                    "name": "Codex",
+                    "pid": 321,
+                },
+                "window_inventory": [{"title": "Codex", "role": "AXWindow"}],
+            },
+        )
+        app.debug_artifacts = SimpleNamespace(
+            enabled=True,
+            emit_artifact=lambda *args, **kwargs: debug_artifacts.append((args, kwargs)),
+        )
+        app._log_buffer_handler = SimpleNamespace(snapshot=lambda limit=200: ["tail"])
+        app._active_invocation = None
+        app._last_trigger_args = None
+        app.config = SimpleNamespace(
+            install_id="install-123",
+            debug_capture_profile="aggressive",
+            debug_capture_success_enabled=True,
+        )
+
+        app._capture_focus_success_snapshot(
+            trigger_type="manual",
+            focused=focused,
+            invocation_id="inv-123",
+        )
+
+        assert len(debug_artifacts) == 1
+        assert debug_artifacts[0][0][0] == "focus_snapshot"
+        assert debug_artifacts[0][1]["trigger_type"] == "manual"
+        payload = debug_artifacts[0][0][1]
+        assert profiles == ["aggressive"]
+        assert payload["focus_debug"]["window_inventory"][0]["title"] == "Codex"
+        assert payload["focus_debug"]["cdp_probe"]["status"] == "success"
+        assert payload["extra"]["focused_role"] == "AXTextArea"
+        assert payload["extra"]["focused_value_length"] == 11
+
     def test_accept_injection_failure_uploads_debug_artifact(self, monkeypatch):
         app = Autocompleter.__new__(Autocompleter)
         debug_artifacts = []
