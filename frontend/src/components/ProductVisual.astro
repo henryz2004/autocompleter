@@ -33,7 +33,7 @@
           <div class="input-box">
             <span class="input-placeholder">
               honestly i think the real problem is
-              <span data-draft-target>that I keep building what I think they need, not what they ask for</span>
+              <span data-draft-target></span>
               <span class="caret" aria-hidden="true"></span>
             </span>
           </div>
@@ -50,10 +50,10 @@
       <div class="overlay" role="presentation">
         <ol class="overlay-list">
           <li
-            class="overlay-item is-active"
+            class="overlay-item"
             tabindex="0"
             role="button"
-            aria-pressed="true"
+            aria-pressed="false"
             data-suggestion-item
             data-suggestion-text="that I keep building what I think they need, not what they ask for"
           >
@@ -215,7 +215,8 @@
     font-size: 0.9rem;
     color: rgba(28, 30, 40, 0.75);
     padding-bottom: 0.8rem;
-    min-height: 2.4rem;
+    min-height: 3.8rem;
+    line-height: 1.5;
   }
 
   .caret {
@@ -394,10 +395,10 @@
     .scene.is-visible .human-bubble     { transition-delay: 180ms; }
     .scene.is-visible .assistant-msg    { transition-delay: 360ms; }
     .scene.is-visible .input-pane       { transition-delay: 540ms; }
-    .scene.is-visible .overlay          { transition-delay: 720ms; }
-    .scene.is-visible .overlay-item:nth-child(1) { transition-delay: 880ms; }
-    .scene.is-visible .overlay-item:nth-child(2) { transition-delay: 980ms; }
-    .scene.is-visible .overlay-item:nth-child(3) { transition-delay: 1080ms; }
+    .scene.is-visible .overlay          { transition-delay: 1280ms; }
+    .scene.is-visible .overlay-item:nth-child(1) { transition-delay: 1420ms; }
+    .scene.is-visible .overlay-item:nth-child(2) { transition-delay: 1520ms; }
+    .scene.is-visible .overlay-item:nth-child(3) { transition-delay: 1620ms; }
   }
 
   /* On mobile the overlay drops the horizontal offset, so the animated
