@@ -109,35 +109,11 @@ const backendBaseUrl = import.meta.env.PUBLIC_BACKEND_BASE_URL ?? "";
         tabindex="-1"
         hidden
       >
-        <p class="eyebrow success-eyebrow">You're in.</p>
-        <h3 class="display display-l">
-          Paste this into <span class="mono">.env</span> and you're running.
-        </h3>
-
-        <div class="cred-grid">
-          <div class="cred">
-            <p class="cred-label">Install ID</p>
-            <div class="cred-row">
-              <code class="cred-value mono" data-install-id></code>
-              <button
-                type="button"
-                class="copy-btn"
-                data-copy-target="[data-install-id]"
-              >Copy</button>
-            </div>
-          </div>
-
-          <div class="cred">
-            <p class="cred-label">Install key <span class="cred-note">shown once</span></p>
-            <div class="cred-row">
-              <code class="cred-value mono" data-install-key></code>
-              <button
-                type="button"
-                class="copy-btn"
-                data-copy-target="[data-install-key]"
-              >Copy</button>
-            </div>
-          </div>
+        <div class="success-head">
+          <p class="eyebrow success-eyebrow">You're in.</p>
+          <h3 class="display display-m success-title">
+            Copy this <span class="mono">.env</span>.
+          </h3>
         </div>
 
         <div class="env-block">
@@ -316,61 +292,23 @@ const backendBaseUrl = import.meta.env.PUBLIC_BACKEND_BASE_URL ?? "";
   .success {
     display: flex;
     flex-direction: column;
-    gap: var(--space-5);
+    gap: var(--space-4);
+  }
+
+  .success-head {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
   }
 
   .success-eyebrow {
     color: var(--color-success);
   }
 
-  .cred-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-4);
-    margin-top: var(--space-3);
-  }
-
-  .cred {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    padding: var(--space-4);
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    min-width: 0;
-  }
-
-  .cred-label {
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .cred-note {
-    color: var(--color-text-dim);
-    text-transform: none;
-    letter-spacing: 0;
-    margin-left: 0.4rem;
-  }
-
-  .cred-row {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-  }
-
-  .cred-value {
-    flex: 1;
-    font-size: 0.875rem;
-    word-break: break-all;
-    color: var(--color-text);
-    background: var(--color-bg);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    padding: 0.5rem 0.65rem;
-    min-width: 0;
+  .success-title {
+    font-size: clamp(1.45rem, 3.5vw, 2rem);
+    line-height: 1.05;
+    max-width: 16ch;
   }
 
   .copy-btn {
@@ -425,8 +363,7 @@ const backendBaseUrl = import.meta.env.PUBLIC_BACKEND_BASE_URL ?? "";
   }
 
   @media (max-width: 620px) {
-    .field-grid,
-    .cred-grid {
+    .field-grid {
       grid-template-columns: 1fr;
     }
     .waitlist {

@@ -138,13 +138,9 @@ export function renderSuccess(
   container: HTMLElement,
   data: BetaApplicationSuccess,
 ): void {
-  const installIdEl = container.querySelector<HTMLElement>("[data-install-id]");
-  const installKeyEl = container.querySelector<HTMLElement>("[data-install-key]");
   const envSetupEl = container.querySelector<HTMLElement>("[data-env-setup]");
   const docsLinkEl = container.querySelector<HTMLAnchorElement>("[data-docs-link]");
 
-  if (installIdEl) installIdEl.textContent = data.install_id;
-  if (installKeyEl) installKeyEl.textContent = data.install_key;
   if (envSetupEl) envSetupEl.textContent = data.env_setup;
   if (docsLinkEl && data.install_docs_url) {
     docsLinkEl.href = data.install_docs_url;
