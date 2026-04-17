@@ -30,8 +30,12 @@ def make_config() -> BackendConfig:
             api_key="fallback-key",
             default_model="beta-model",
         ),
-        public_cors_origins=["https://autocompleter.dev"],
-        public_cors_origin_regex=r"^https://[a-z0-9-]+\.autocompleter-259\.pages\.dev$",
+        public_cors_origins=[
+            "https://autocompleter.dev",
+            "https://autocompleter-259.pages.dev",
+            "https://landing-dev.autocompleter-259.pages.dev",
+        ],
+        public_cors_origin_regex="",
         public_install_docs_url="https://example.com/docs/friend-beta",
     )
 
@@ -119,20 +123,36 @@ class TestBetaApplicationsHappyPath:
         assert response.status_code == 200
         assert response.headers["access-control-allow-origin"] == "https://autocompleter.dev"
 
-    def test_cors_preflight_succeeds_for_preview_origin_regex(self):
+    def test_cors_preflight_succeeds_for_pages_host(self):
         app, _ = _make_app()
         with TestClient(app, base_url="https://proxy.example") as client:
             response = client.options(
                 "/v1/beta/applications",
                 headers={
-                    "Origin": "https://7afa4c9d.autocompleter-259.pages.dev",
+                    "Origin": "https://autocompleter-259.pages.dev",
                     "Access-Control-Request-Method": "POST",
                 },
             )
         assert response.status_code == 200
         assert (
             response.headers["access-control-allow-origin"]
-            == "https://7afa4c9d.autocompleter-259.pages.dev"
+            == "https://autocompleter-259.pages.dev"
+        )
+
+    def test_cors_preflight_succeeds_for_landing_dev_pages_host(self):
+        app, _ = _make_app()
+        with TestClient(app, base_url="https://proxy.example") as client:
+            response = client.options(
+                "/v1/beta/applications",
+                headers={
+                    "Origin": "https://landing-dev.autocompleter-259.pages.dev",
+                    "Access-Control-Request-Method": "POST",
+                },
+            )
+        assert response.status_code == 200
+        assert (
+            response.headers["access-control-allow-origin"]
+            == "https://landing-dev.autocompleter-259.pages.dev"
         )
 
 

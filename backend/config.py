@@ -46,6 +46,8 @@ def _default_public_cors_origins() -> list[str]:
         "http://127.0.0.1:4321",
         "http://localhost:4321",
         "https://autocompleter.dev",
+        "https://autocompleter-259.pages.dev",
+        "https://landing-dev.autocompleter-259.pages.dev",
     ]
 
 
@@ -86,7 +88,7 @@ class BackendConfig:
     primary_upstream: UpstreamConfig
     fallback_upstream: UpstreamConfig
     public_cors_origins: list[str] = field(default_factory=_default_public_cors_origins)
-    public_cors_origin_regex: str = r"^https://[a-z0-9-]+\.autocompleter-259\.pages\.dev$"
+    public_cors_origin_regex: str = ""
     public_install_docs_url: str = ""
 
     @property
@@ -168,7 +170,7 @@ def load_backend_config() -> BackendConfig:
         ),
         public_cors_origin_regex=_env_first_nonempty(
             "AUTOCOMPLETER_PUBLIC_ALLOWED_ORIGIN_REGEX",
-            default=r"^https://[a-z0-9-]+\.autocompleter-259\.pages\.dev$",
+            default="",
         ),
         public_install_docs_url=_env_first_nonempty(
             "AUTOCOMPLETER_PUBLIC_INSTALL_DOCS_URL",
