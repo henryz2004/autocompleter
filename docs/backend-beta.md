@@ -106,8 +106,7 @@ AUTOCOMPLETER_BACKEND_ALLOW_UPSTREAM_OVERRIDE_HEADERS=0
 Public landing-page configuration:
 
 ```bash
-AUTOCOMPLETER_PUBLIC_ALLOWED_ORIGINS=http://127.0.0.1:4321,http://localhost:4321,https://autocompleter.dev
-AUTOCOMPLETER_PUBLIC_ALLOWED_ORIGIN_REGEX=^https://[a-z0-9-]+\\.autocompleter-259\\.pages\\.dev$
+AUTOCOMPLETER_PUBLIC_ALLOWED_ORIGINS=http://127.0.0.1:4321,http://localhost:4321,https://autocompleter.dev,https://autocompleter-259.pages.dev,https://landing-dev.autocompleter-259.pages.dev
 AUTOCOMPLETER_PUBLIC_INSTALL_DOCS_URL=https://github.com/henryz2004/autocompleter/blob/main/docs/friend-beta.md
 ```
 
