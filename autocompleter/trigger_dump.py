@@ -142,51 +142,51 @@ class TriggerDumper:
         can be slow (~50-200ms) and should only run when dumping is enabled.
         """
         try:
-            import AppKit
-            from ApplicationServices import AXUIElementCreateApplication
-            from .ax_utils import ax_get_attribute, serialize_ax_tree
-
-            workspace = AppKit.NSWorkspace.sharedWorkspace()
-            front_app = workspace.frontmostApplication()
-            if not front_app:
-                return
-
-            pid = front_app.processIdentifier()
-            app_el = AXUIElementCreateApplication(pid)
-            window = ax_get_attribute(app_el, "AXFocusedWindow")
-            if window is None:
-                windows = ax_get_attribute(app_el, "AXWindows")
-                window = windows[0] if windows else None
-            if window is None:
-                return
-
-            focused_el = ax_get_attribute(app_el, "AXFocusedUIElement")
-            snapshot.ax_tree = serialize_ax_tree(
-                window,
-                max_depth=20,
-                focused_element=focused_el,
-            )
+            snapshot.ax_tree = self.capture_current_ax_tree(max_depth=20)
         except Exception:
             logger.debug("Failed to capture AX tree for dump", exc_info=True)
 
-    def save(self, snapshot: TriggerSnapshot) -> str | None:
-        """Write the snapshot to a JSON file.  Returns the file path."""
-        slug = _slugify(snapshot.app_name) if snapshot.app_name else "unknown"
-        ts = time.strftime("%Y%m%d-%H%M%S")
-        filename = f"{ts}-gen{snapshot.generation_id}-{slug}.json"
-        path = os.path.join(self.dump_dir, filename)
+    @staticmethod
+    def capture_current_ax_tree(
+        *,
+        max_depth: int = 20,
+    ) -> dict[str, Any] | None:
+        import AppKit
+        from ApplicationServices import AXUIElementCreateApplication
 
+        from .ax_utils import ax_get_attribute, serialize_ax_tree
+
+        workspace = AppKit.NSWorkspace.sharedWorkspace()
+        front_app = workspace.frontmostApplication()
+        if not front_app:
+            return None
+
+        pid = front_app.processIdentifier()
+        app_el = AXUIElementCreateApplication(pid)
+        window = ax_get_attribute(app_el, "AXFocusedWindow")
+        if window is None:
+            windows = ax_get_attribute(app_el, "AXWindows")
+            window = windows[0] if windows else None
+        if window is None:
+            return None
+
+        focused_el = ax_get_attribute(app_el, "AXFocusedUIElement")
+        return serialize_ax_tree(
+            window,
+            max_depth=max_depth,
+            focused_element=focused_el,
+        )
+
+    @staticmethod
+    def build_envelope(snapshot: TriggerSnapshot) -> dict[str, Any]:
         envelope: dict[str, Any] = {
             "artifactType": "manual_invocation_v1",
-            # Metadata (compatible with dump_ax_tree_json.py)
             "app": snapshot.app_name,
             "windowTitle": snapshot.window_title,
             "capturedAt": snapshot.timestamp,
             "macosVersion": platform.mac_ver()[0],
             "generationId": snapshot.generation_id,
             "triggerType": snapshot.trigger_type,
-
-            # Focused element state
             "focused": {
                 "role": snapshot.role,
                 "insertionPoint": snapshot.insertion_point,
@@ -201,8 +201,6 @@ class TriggerDumper:
                 "rawPlaceholderValue": snapshot.raw_placeholder_value,
                 "rawNumberOfCharacters": snapshot.raw_number_of_characters,
             },
-
-            # Detection results
             "detection": {
                 "mode": snapshot.mode,
                 "useShell": snapshot.use_shell,
@@ -212,22 +210,25 @@ class TriggerDumper:
                 "hasConversationTurns": snapshot.has_conversation_turns,
                 "conversationTurnCount": snapshot.conversation_turn_count,
             },
-
-            # Context sent to LLM
             "context": snapshot.context,
             "contextInputs": snapshot.context_inputs,
             "conversationTurns": snapshot.conversation_turns,
             "request": snapshot.request,
             "latency": snapshot.latency,
-
-            # LLM output
             "suggestions": snapshot.suggestions,
             "suggestionLatencyMs": snapshot.suggestion_latency_ms,
-
-            # AX tree (last — it's large)
             "tree": snapshot.ax_tree,
         }
-        envelope = _json_safe(envelope)
+        return _json_safe(envelope)
+
+    def save(self, snapshot: TriggerSnapshot) -> str | None:
+        """Write the snapshot to a JSON file.  Returns the file path."""
+        slug = _slugify(snapshot.app_name) if snapshot.app_name else "unknown"
+        ts = time.strftime("%Y%m%d-%H%M%S")
+        filename = f"{ts}-gen{snapshot.generation_id}-{slug}.json"
+        path = os.path.join(self.dump_dir, filename)
+
+        envelope = self.build_envelope(snapshot)
 
         try:
             with open(path, "w", encoding="utf-8") as f:

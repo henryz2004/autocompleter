@@ -89,7 +89,7 @@ Recommended order:
 2. Run `make supabase-db-push-dev`
 3. Run backend tests locally
 4. Run the backend against dev with `make backend-run-dev`
-5. Smoke test install-key minting, proxy requests, and telemetry ingest
+5. Smoke test install-key minting, proxy requests, telemetry ingest, and debug artifact ingest
 6. Run `make supabase-db-push-prod`
 
 ## First Dev Smoke Test
@@ -121,7 +121,11 @@ make backend-mint-install-dev INSTALL_LABEL=henry-local
 ```bash
 AUTOCOMPLETER_PROXY_BASE_URL=http://127.0.0.1:8000/v1
 AUTOCOMPLETER_TELEMETRY_URL=http://127.0.0.1:8000/v1/telemetry/events
+AUTOCOMPLETER_DEBUG_CAPTURE_MODE=both
 ```
+
+6. Launch the desktop app, press `ctrl+shift+b`, and confirm one new
+   `manual_report` row lands in `beta_debug_artifacts`.
 
 ## Current Schema Boundary
 

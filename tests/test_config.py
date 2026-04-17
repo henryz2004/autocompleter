@@ -115,3 +115,43 @@ class TestBetaProxyConfig:
         assert cfg1.install_id
         assert cfg1.install_id == cfg2.install_id
         assert install_id_path.read_text(encoding="utf-8").strip() == cfg1.install_id
+
+
+class TestDebugCaptureConfig:
+    def test_debug_capture_defaults_off(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("AUTOCOMPLETER_DEBUG_CAPTURE_MODE", "")
+
+        cfg = load_config()
+
+        assert cfg.debug_capture_mode == "off"
+        assert cfg.debug_capture_active is False
+
+    def test_debug_capture_mode_is_normalized_and_uses_proxy_url(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("AUTOCOMPLETER_BETA_MODE", "1")
+        monkeypatch.setenv("AUTOCOMPLETER_PROXY_ENABLED", "1")
+        monkeypatch.setenv("AUTOCOMPLETER_PROXY_BASE_URL", "https://proxy.example/v1/")
+        monkeypatch.setenv("AUTOCOMPLETER_PROXY_API_KEY", "proxy-key")
+        monkeypatch.setenv("AUTOCOMPLETER_DEBUG_CAPTURE_MODE", "BOTH")
+
+        cfg = load_config()
+
+        assert cfg.debug_capture_mode == "both"
+        assert cfg.debug_capture_active is True
+        assert cfg.debug_capture_url == "https://proxy.example/v1/debug-artifacts"
+        assert cfg.debug_capture_failures_enabled is True
+        assert cfg.debug_capture_manual_enabled is True
+
+    def test_invalid_debug_capture_mode_falls_back_to_off(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("AUTOCOMPLETER_BETA_MODE", "1")
+        monkeypatch.setenv("AUTOCOMPLETER_PROXY_ENABLED", "1")
+        monkeypatch.setenv("AUTOCOMPLETER_PROXY_BASE_URL", "https://proxy.example/v1")
+        monkeypatch.setenv("AUTOCOMPLETER_PROXY_API_KEY", "proxy-key")
+        monkeypatch.setenv("AUTOCOMPLETER_DEBUG_CAPTURE_MODE", "loud")
+
+        cfg = load_config()
+
+        assert cfg.debug_capture_mode == "off"
+        assert cfg.debug_capture_active is False

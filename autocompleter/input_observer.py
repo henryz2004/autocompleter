@@ -410,6 +410,89 @@ class InputObserver:
             logger.debug("Tree context bundle extraction failed", exc_info=True)
             return None
 
+    def get_focus_debug_info(
+        self,
+        *,
+        max_depth: int = 12,
+        candidate_limit: int = 8,
+    ) -> dict[str, object]:
+        """Collect rich focus diagnostics for remote debugging."""
+        if not HAS_ACCESSIBILITY:
+            return {"has_accessibility": False}
+
+        workspace = AppKit.NSWorkspace.sharedWorkspace()
+        front_app = workspace.frontmostApplication()
+        if front_app is None:
+            return {"has_accessibility": True, "frontmost_app": None}
+
+        app_name = front_app.localizedName() or "Unknown"
+        pid = front_app.processIdentifier()
+        app_element = AXUIElementCreateApplication(pid)
+
+        system_focused = (
+            ax_get_attribute(self._system_wide, "AXFocusedUIElement")
+            if self._system_wide is not None
+            else None
+        )
+        app_local_focused = ax_get_attribute(app_element, "AXFocusedUIElement")
+
+        window = ax_get_attribute(app_element, "AXFocusedWindow")
+        if window is None:
+            windows = ax_get_attribute(app_element, "AXWindows")
+            if windows and len(windows) > 0:
+                window = windows[0]
+
+        window_title = ax_get_attribute(window, "AXTitle") or "" if window is not None else ""
+        source_url = self._get_browser_url(app_element, app_name) if window is not None else ""
+
+        window_tree = None
+        app_local_tree = None
+        try:
+            from .ax_utils import serialize_ax_tree
+
+            if window is not None:
+                window_tree = serialize_ax_tree(
+                    window,
+                    max_depth=max_depth,
+                    max_children=20,
+                    focused_element=system_focused,
+                )
+                if app_local_focused is not None:
+                    app_local_tree = serialize_ax_tree(
+                        window,
+                        max_depth=max_depth,
+                        max_children=20,
+                        focused_element=app_local_focused,
+                    )
+        except Exception:
+            logger.debug("Failed to serialize window tree for focus diagnostics", exc_info=True)
+
+        return {
+            "has_accessibility": True,
+            "frontmost_app": {
+                "name": app_name,
+                "pid": pid,
+                "window_title": window_title,
+                "source_url": source_url,
+            },
+            "system_wide_focus_present": system_focused is not None,
+            "system_wide_focus_role": (
+                ax_get_attribute(system_focused, "AXRole") if system_focused is not None else None
+            ),
+            "app_local_focus_present": app_local_focused is not None,
+            "app_local_focus_role": (
+                ax_get_attribute(app_local_focused, "AXRole")
+                if app_local_focused is not None
+                else None
+            ),
+            "editable_candidates": self._summarize_editable_candidates(
+                window_tree or app_local_tree or {},
+                limit=candidate_limit,
+            ),
+            "window_tree": window_tree,
+            "app_local_tree": app_local_tree,
+        }
+
     _MAX_CHILDREN_PER_NODE = 50
     _MAX_FIND_VISITS = 500
 
@@ -485,6 +568,62 @@ class InputObserver:
                         return value
 
         return ""
+
+    @staticmethod
+    def _summarize_editable_candidates(
+        tree: dict,
+        *,
+        limit: int,
+    ) -> list[dict[str, object]]:
+        if not tree:
+            return []
+
+        results: list[dict[str, object]] = []
+
+        def _walk(node: dict, path: str, depth: int) -> None:
+            if len(results) >= limit:
+                return
+            role = str(node.get("role") or "")
+            role_desc = str(node.get("roleDescription") or "")
+            desc = str(node.get("description") or "")
+            title = str(node.get("title") or "")
+            placeholder = str(node.get("placeholderValue") or "")
+            value = str(node.get("value") or "")
+            text = " ".join(
+                piece for piece in (role_desc, desc, title, placeholder) if piece
+            ).lower()
+            editableish = (
+                role in {"AXTextArea", "AXTextField", "AXWebArea", "AXGroup"}
+                and (
+                    "text entry" in text
+                    or "search text field" in text
+                    or "search" in text
+                    or bool(placeholder)
+                    or bool(value.strip())
+                )
+            )
+            if editableish:
+                results.append(
+                    {
+                        "path": path,
+                        "depth": depth,
+                        "role": role,
+                        "role_description": role_desc,
+                        "description": desc,
+                        "title": title,
+                        "placeholder_value": placeholder,
+                        "value_preview": value[:120],
+                        "focused": bool(node.get("focused")),
+                    }
+                )
+
+            for index, child in enumerate(node.get("children") or []):
+                if not isinstance(child, dict):
+                    continue
+                _walk(child, f"{path}/{child.get('role', '?')}[{index}]", depth + 1)
+
+        _walk(tree, "root", 0)
+        return results
 
     def _find_element_by_role(
         self, element, role: str, max_depth: int, depth: int = 0,

@@ -7,6 +7,13 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .debug_capture import (
+    DEBUG_CAPTURE_OFF,
+    debug_capture_mode_allows_failures,
+    debug_capture_mode_allows_manual,
+    normalize_debug_capture_mode,
+)
+
 
 @dataclass
 class Config:
@@ -88,6 +95,7 @@ class Config:
     telemetry_url: str = ""
     telemetry_api_key: str = ""
     install_id: str = ""
+    debug_capture_mode: str = DEBUG_CAPTURE_OFF
 
     # Sentinel to distinguish "not provided" from "explicitly set to empty"
     _UNSET: str = "__UNSET__"
@@ -141,6 +149,9 @@ class Config:
                 self.fallback_api_key = os.environ.get("GROQ_API_KEY", "")
         if not self.install_id:
             self.install_id = self._resolve_install_id()
+        self.debug_capture_mode = normalize_debug_capture_mode(
+            self.debug_capture_mode
+        )
 
     @property
     def effective_llm_provider(self) -> str:
@@ -213,6 +224,34 @@ class Config:
         if self.proxy_api_key:
             return self.proxy_api_key
         return ""
+
+    @property
+    def debug_capture_active(self) -> bool:
+        return (
+            self.beta_mode
+            and self.proxy_enabled
+            and bool(self.proxy_base_url.strip())
+            and bool(self.proxy_api_key.strip())
+            and self.debug_capture_mode != DEBUG_CAPTURE_OFF
+        )
+
+    @property
+    def debug_capture_url(self) -> str:
+        if not self.proxy_base_url.strip():
+            return ""
+        return self.proxy_base_url.rstrip("/") + "/debug-artifacts"
+
+    @property
+    def debug_capture_failures_enabled(self) -> bool:
+        return self.debug_capture_active and debug_capture_mode_allows_failures(
+            self.debug_capture_mode
+        )
+
+    @property
+    def debug_capture_manual_enabled(self) -> bool:
+        return self.debug_capture_active and debug_capture_mode_allows_manual(
+            self.debug_capture_mode
+        )
 
     def _resolve_install_id(self) -> str:
         install_id_path = self.data_dir / "install_id"
@@ -304,5 +343,9 @@ def load_config() -> Config:
         telemetry_url=os.environ.get("AUTOCOMPLETER_TELEMETRY_URL", ""),
         telemetry_api_key=os.environ.get("AUTOCOMPLETER_TELEMETRY_API_KEY", ""),
         install_id=os.environ.get("AUTOCOMPLETER_INSTALL_ID", ""),
+        debug_capture_mode=os.environ.get(
+            "AUTOCOMPLETER_DEBUG_CAPTURE_MODE",
+            DEBUG_CAPTURE_OFF,
+        ),
     )
     return config

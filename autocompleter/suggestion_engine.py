@@ -1023,12 +1023,21 @@ class SuggestionEngine:
                 logger.warning(
                     "Streams produced no suggestions, falling back to non-streaming completion"
                 )
+                if event_callback is not None:
+                    event_callback(
+                        "fallback_started",
+                        {
+                            "reason": "no_suggestions",
+                            "model": self.config.effective_model_label,
+                        },
+                    )
                 cancel_primary.set()
                 cancel_fallback.set()
                 try:
                     results = self._call_llm(
                         system, user_msg,
                         temperature=temperature, max_tokens=max_tokens,
+                        request_headers=request_headers,
                     )
                     for suggestion in results:
                         yield suggestion
@@ -1047,10 +1056,19 @@ class SuggestionEngine:
                 "Streaming with escalation failed, falling back to blocking",
                 exc_info=True,
             )
+            if event_callback is not None:
+                event_callback(
+                    "fallback_started",
+                    {
+                        "reason": "streaming_failed",
+                        "model": self.config.effective_model_label,
+                    },
+                )
             try:
                 results = self._call_llm(
                     system, user_msg,
                     temperature=temperature, max_tokens=max_tokens,
+                    request_headers=request_headers,
                 )
                 for suggestion in results:
                     yield suggestion

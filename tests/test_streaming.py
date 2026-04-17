@@ -695,6 +695,28 @@ class TestGenerateSuggestionsStream:
         assert len(results) == 1
         assert "error" in results[0].text.lower() or "try again" in results[0].text.lower()
 
+    def test_no_stream_suggestions_propagates_headers_to_blocking_fallback(self, engine):
+        _mock_anthropic_stream(engine, ['{"suggestions": []}'])
+        engine._call_llm = MagicMock(return_value=[Suggestion(text="Fallback", index=0)])
+        events = []
+
+        results = list(engine.generate_suggestions_stream(
+            current_input="test input",
+            context="context",
+            request_headers={"x-invocation-id": "inv-123"},
+            event_callback=lambda name, payload=None: events.append((name, payload)),
+        ))
+
+        assert [result.text for result in results] == ["Fallback"]
+        engine._call_llm.assert_called_once()
+        assert engine._call_llm.call_args.kwargs["request_headers"] == {
+            "x-invocation-id": "inv-123",
+        }
+        assert (
+            "fallback_started",
+            {"reason": "no_suggestions", "model": engine.config.effective_model_label},
+        ) in events
+
 
 # ---------------------------------------------------------------------------
 # Tests — backward compatibility (non-streaming path)

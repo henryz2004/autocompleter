@@ -8,6 +8,7 @@ autocomplete tool.
 from __future__ import annotations
 
 import logging
+import platform
 import queue
 import signal
 import sys
@@ -32,7 +33,8 @@ from .config import Config, load_config
 from .context_store import ContextStore
 from .context_trail import ContextTrail
 from .conversation_extractors import get_extractor
-from .feedback import FeedbackContext, FeedbackReporter, extract_url_domain
+from .debug_capture import DebugArtifactClient, InMemoryLogBuffer
+from .feedback import FeedbackContext, FeedbackReporter, build_payload, extract_url_domain
 from .help_overlay import HelpOverlay
 from .hotkey import HotkeyListener
 from .input_observer import FocusedElement, InputObserver, VisibleContent
@@ -226,6 +228,19 @@ class Autocompleter:
             app_version=__version__,
             api_key=self.config.effective_telemetry_api_key,
         )
+        self.debug_artifacts = DebugArtifactClient(
+            enabled=self.config.debug_capture_active,
+            url=self.config.debug_capture_url,
+            api_key=self.config.proxy_api_key,
+            install_id=self.config.install_id,
+            app_version=__version__,
+            capture_mode=self.config.debug_capture_mode,
+        )
+        self._log_buffer_handler = InMemoryLogBuffer()
+        self._log_buffer_handler.setFormatter(
+            logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+        )
+        logging.getLogger().addHandler(self._log_buffer_handler)
 
         self._running = False
         self._observer_thread: threading.Thread | None = None
@@ -278,6 +293,355 @@ class Autocompleter:
             payload.setdefault("source_app", active.source_app)
             payload.setdefault("app_category", active.app_category)
         telemetry.emit(event, **payload)
+
+    def _schedule_debug_capture(
+        self,
+        artifact_type: str,
+        *,
+        invocation_id: str | None = None,
+        source_app: str | None = None,
+        trigger_type: str | None = None,
+        focused=None,
+        snapshot: TriggerSnapshot | None = None,
+        feedback_context: FeedbackContext | None = None,
+        feedback_payload: dict[str, object] | None = None,
+        extra: dict[str, object] | None = None,
+    ) -> None:
+        client = getattr(self, "debug_artifacts", None)
+        if client is None or not getattr(client, "enabled", False):
+            return
+        threading.Thread(
+            target=lambda: self._emit_debug_artifact(
+                artifact_type=artifact_type,
+                invocation_id=invocation_id,
+                source_app=source_app,
+                trigger_type=trigger_type,
+                focused=focused,
+                snapshot=snapshot,
+                feedback_context=feedback_context,
+                feedback_payload=feedback_payload,
+                extra=extra,
+            ),
+            daemon=True,
+        ).start()
+
+    def _emit_debug_artifact(
+        self,
+        *,
+        artifact_type: str,
+        invocation_id: str | None = None,
+        source_app: str | None = None,
+        trigger_type: str | None = None,
+        focused=None,
+        snapshot: TriggerSnapshot | None = None,
+        feedback_context: FeedbackContext | None = None,
+        feedback_payload: dict[str, object] | None = None,
+        extra: dict[str, object] | None = None,
+    ) -> None:
+        client = getattr(self, "debug_artifacts", None)
+        if client is None or not getattr(client, "enabled", False):
+            return
+        try:
+            payload = self._build_debug_artifact_payload(
+                artifact_type=artifact_type,
+                invocation_id=invocation_id,
+                source_app=source_app,
+                trigger_type=trigger_type,
+                focused=focused,
+                snapshot=snapshot,
+                feedback_context=feedback_context,
+                feedback_payload=feedback_payload,
+                extra=extra,
+            )
+            resolved_source_app = self._resolve_debug_source_app(
+                source_app=source_app,
+                focused=focused,
+                focus_debug=payload.get("focus_debug"),
+            )
+            client.emit_artifact(
+                artifact_type,
+                payload,
+                invocation_id=self._resolve_debug_invocation_id(invocation_id),
+                source_app=resolved_source_app or None,
+                trigger_type=self._resolve_debug_trigger_type(trigger_type),
+            )
+        except Exception:
+            logger.exception("Failed to capture remote debug artifact")
+
+    def _build_debug_artifact_payload(
+        self,
+        *,
+        artifact_type: str,
+        invocation_id: str | None = None,
+        source_app: str | None = None,
+        trigger_type: str | None = None,
+        focused=None,
+        snapshot: TriggerSnapshot | None = None,
+        feedback_context: FeedbackContext | None = None,
+        feedback_payload: dict[str, object] | None = None,
+        extra: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        focus_debug = self._collect_focus_debug_info()
+        resolved_source_app = self._resolve_debug_source_app(
+            source_app=source_app,
+            focused=focused,
+            focus_debug=focus_debug,
+        )
+        resolved_invocation_id = self._resolve_debug_invocation_id(invocation_id)
+        resolved_trigger_type = self._resolve_debug_trigger_type(trigger_type)
+        config = getattr(self, "config", None)
+
+        payload: dict[str, object] = {
+            "meta": {
+                "artifact_type": artifact_type,
+                "captured_at": self._telemetry_timestamp(),
+                "install_id": getattr(config, "install_id", ""),
+                "invocation_id": resolved_invocation_id,
+                "trigger_type": resolved_trigger_type,
+                "source_app": resolved_source_app,
+                "app_version": __version__,
+                "os_version": platform.mac_ver()[0] or platform.platform(),
+                "generation_id": getattr(self, "_generation_id", 0),
+            },
+            "focus_debug": focus_debug,
+            "log_tail": self._debug_log_tail(),
+        }
+
+        trigger_dump = self._build_debug_trigger_dump(snapshot=snapshot)
+        if trigger_dump is not None:
+            payload["trigger_dump"] = trigger_dump
+        if feedback_context is not None:
+            payload["feedback_report"] = build_payload(
+                feedback_context,
+                installation_id=getattr(config, "install_id", None),
+            )
+        if feedback_payload is not None:
+            payload["feedback_submission"] = feedback_payload
+        if extra:
+            payload["extra"] = extra
+        return payload
+
+    def _debug_log_tail(self, *, limit: int = 200) -> list[str]:
+        handler = getattr(self, "_log_buffer_handler", None)
+        if handler is None or not hasattr(handler, "snapshot"):
+            return []
+        return list(handler.snapshot(limit=limit))
+
+    def _collect_focus_debug_info(self) -> dict[str, object]:
+        observer = getattr(self, "observer", None)
+        if observer is None or not hasattr(observer, "get_focus_debug_info"):
+            return {}
+        try:
+            return dict(observer.get_focus_debug_info())
+        except Exception:
+            logger.debug("Failed to collect focus debug info", exc_info=True)
+            return {}
+
+    def _resolve_debug_invocation_id(self, invocation_id: str | None = None) -> str | None:
+        if invocation_id:
+            return invocation_id
+        active = getattr(self, "_active_invocation", None)
+        if active is not None:
+            return getattr(active, "invocation_id", None)
+        args = getattr(self, "_last_trigger_args", None) or {}
+        candidate = args.get("invocation_id")
+        return candidate if isinstance(candidate, str) and candidate.strip() else None
+
+    def _resolve_debug_trigger_type(self, trigger_type: str | None = None) -> str | None:
+        if trigger_type:
+            return trigger_type
+        args = getattr(self, "_last_trigger_args", None) or {}
+        candidate = args.get("trigger_type")
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate
+        active = getattr(self, "_active_invocation", None)
+        if active is not None:
+            return getattr(active, "trigger_type", None)
+        return None
+
+    def _resolve_debug_source_app(
+        self,
+        *,
+        source_app: str | None = None,
+        focused=None,
+        focus_debug: dict[str, object] | None = None,
+    ) -> str:
+        if isinstance(source_app, str) and source_app.strip():
+            return source_app
+        if focused is not None:
+            candidate = getattr(focused, "app_name", "")
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate
+        args = getattr(self, "_last_trigger_args", None) or {}
+        saved_focused = args.get("focused")
+        if saved_focused is not None:
+            candidate = getattr(saved_focused, "app_name", "")
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate
+        if isinstance(focus_debug, dict):
+            frontmost = focus_debug.get("frontmost_app")
+            if isinstance(frontmost, dict):
+                candidate = frontmost.get("name")
+                if isinstance(candidate, str) and candidate.strip():
+                    return candidate
+        return ""
+
+    def _build_debug_trigger_dump(
+        self,
+        *,
+        snapshot: TriggerSnapshot | None = None,
+    ) -> dict[str, object] | None:
+        dump_snapshot = snapshot or self._build_snapshot_from_last_trigger()
+        if dump_snapshot is None:
+            return None
+        if dump_snapshot.ax_tree is None:
+            try:
+                dump_snapshot.ax_tree = TriggerDumper.capture_current_ax_tree(max_depth=20)
+            except Exception:
+                logger.debug("Failed to capture current AX tree for remote debug", exc_info=True)
+        return TriggerDumper.build_envelope(dump_snapshot)
+
+    def _build_snapshot_from_last_trigger(self) -> TriggerSnapshot | None:
+        args = getattr(self, "_last_trigger_args", None)
+        if not args:
+            return None
+        focused = args.get("focused")
+        if focused is None:
+            return None
+
+        dumper = getattr(self, "_dumper", None)
+        if dumper is not None:
+            snapshot = dumper.new_snapshot(getattr(self, "_generation_id", 0))
+        else:
+            snapshot = TriggerSnapshot(
+                generation_id=getattr(self, "_generation_id", 0),
+                timestamp=self._telemetry_timestamp(),
+            )
+
+        snapshot.app_name = getattr(focused, "app_name", "")
+        snapshot.window_title = str(args.get("window_title") or "")
+        snapshot.source_url = str(args.get("source_url") or "")
+        snapshot.trigger_type = str(args.get("trigger_type") or "")
+        snapshot.role = getattr(focused, "role", "")
+        snapshot.before_cursor = getattr(focused, "before_cursor", "")
+        snapshot.after_cursor = getattr(focused, "after_cursor", "")
+        snapshot.insertion_point = getattr(focused, "insertion_point", None)
+        snapshot.selection_length = getattr(focused, "selection_length", 0) or 0
+        snapshot.value_length = len(getattr(focused, "value", "") or "")
+        snapshot.placeholder_detected = bool(
+            getattr(focused, "placeholder_detected", False)
+        )
+        snapshot.raw_value = getattr(focused, "raw_value", getattr(focused, "value", ""))
+        snapshot.raw_placeholder_value = getattr(
+            focused, "raw_placeholder_value", ""
+        )
+        snapshot.raw_number_of_characters = getattr(
+            focused, "raw_number_of_characters", None
+        )
+        mode = args.get("mode")
+        snapshot.mode = getattr(mode, "value", str(mode or ""))
+        snapshot.context_inputs = {
+            "focusedState": self._focused_state_payload(focused),
+            "topDownOverview": args.get("tree_overview_context") or "",
+            "bottomUpContext": args.get("subtree_context") or "",
+            "contextTree": args.get("context_tree") or {},
+        }
+        turns = args.get("conversation_turns") or []
+        if turns:
+            snapshot.conversation_turns = [
+                {
+                    "speaker": (
+                        turn.get("speaker", "")
+                        if isinstance(turn, dict)
+                        else getattr(turn, "speaker", "")
+                    ),
+                    "text": (
+                        turn.get("text", "")
+                        if isinstance(turn, dict)
+                        else getattr(turn, "text", "")
+                    ),
+                    "timestamp": (
+                        turn.get("timestamp", "")
+                        if isinstance(turn, dict)
+                        else getattr(turn, "timestamp", "")
+                    ),
+                }
+                for turn in turns
+            ]
+            snapshot.has_conversation_turns = True
+            snapshot.conversation_turn_count = len(turns)
+        snapshot.suggestions = [
+            suggestion.text
+            for suggestion in getattr(self, "_current_suggestions", [])
+            if getattr(suggestion, "text", "").strip()
+        ]
+        record = getattr(self, "_last_latency_record", None)
+        if record is not None:
+            snapshot.latency = {key: value for key, value in vars(record).items()}
+        return snapshot
+
+    def _capture_focus_failure(
+        self,
+        *,
+        trigger_type: str,
+    ) -> None:
+        client = getattr(self, "debug_artifacts", None)
+        if client is None or not getattr(client, "failure_capture_enabled", False):
+            return
+        self._schedule_debug_capture(
+            "focus_failure",
+            trigger_type=trigger_type,
+            extra={"reason": "no_focused_element"},
+        )
+
+    def _capture_generation_failure(
+        self,
+        *,
+        artifact_type: str,
+        trigger_type: str,
+        focused=None,
+        snapshot: TriggerSnapshot | None = None,
+        invocation_id: str | None = None,
+        error_type: str | None = None,
+    ) -> None:
+        client = getattr(self, "debug_artifacts", None)
+        if client is None or not getattr(client, "failure_capture_enabled", False):
+            return
+        extra: dict[str, object] = {}
+        if error_type:
+            extra["error_type"] = error_type
+        self._schedule_debug_capture(
+            artifact_type,
+            trigger_type=trigger_type,
+            focused=focused,
+            snapshot=snapshot,
+            invocation_id=invocation_id,
+            extra=extra or None,
+        )
+
+    def _capture_injection_failure(
+        self,
+        *,
+        accept_kind: str,
+        focused=None,
+        invocation_id: str | None = None,
+        suggestion_index: int | None = None,
+        accepted_length: int | None = None,
+    ) -> None:
+        client = getattr(self, "debug_artifacts", None)
+        if client is None or not getattr(client, "failure_capture_enabled", False):
+            return
+        extra: dict[str, object] = {"accept_kind": accept_kind}
+        if suggestion_index is not None:
+            extra["suggestion_index"] = suggestion_index
+        if accepted_length is not None:
+            extra["accepted_length"] = accepted_length
+        self._schedule_debug_capture(
+            "injection_failure",
+            focused=focused,
+            invocation_id=invocation_id,
+            extra=extra,
+        )
 
     @staticmethod
     def _telemetry_timestamp() -> str:
@@ -619,6 +983,12 @@ class Autocompleter:
         if help_overlay is not None:
             help_overlay.hide()
         self.context_store.close()
+        debug_client = getattr(self, "debug_artifacts", None)
+        if debug_client is not None:
+            debug_client.stop()
+        log_buffer_handler = getattr(self, "_log_buffer_handler", None)
+        if log_buffer_handler is not None:
+            logging.getLogger().removeHandler(log_buffer_handler)
         telemetry = getattr(self, "telemetry", None)
         if telemetry is not None:
             telemetry.stop()
@@ -877,6 +1247,7 @@ class Autocompleter:
         self._latency_tracker.mark("focused_ready")
         if focused is None:
             logger.info("No focused text element found")
+            self._capture_focus_failure(trigger_type="manual")
             return True
 
         # Skip non-editable elements. AXWebArea and AXGroup can be either
@@ -1256,11 +1627,20 @@ class Autocompleter:
             )
         except Exception:
             logger.error("Worker thread crashed", exc_info=True)
+            error = sys.exc_info()[1] or RuntimeError("unknown")
             self._emit_error_telemetry("streaming_worker", sys.exc_info()[1] or RuntimeError("unknown"))
+            self._capture_generation_failure(
+                artifact_type="generation_worker_crash",
+                trigger_type=trigger_type,
+                focused=focused,
+                snapshot=snapshot,
+                invocation_id=invocation_id,
+                error_type=type(error).__name__,
+            )
             self._emit_invocation_terminal_event(
                 invocation_id,
                 "invocation_errored",
-                error_type=type(sys.exc_info()[1] or RuntimeError("unknown")).__name__,
+                error_type=type(error).__name__,
             )
             self._run_on_main(self.overlay.hide)
 
@@ -1511,6 +1891,14 @@ class Autocompleter:
             logger.info(f"No suggestions from stream (took {elapsed:.2f}s)")
             self._run_on_main(self.overlay.hide)
             if generation_error_type:
+                self._capture_generation_failure(
+                    artifact_type="generation_error",
+                    trigger_type=trigger_type,
+                    focused=focused,
+                    snapshot=snapshot,
+                    invocation_id=invocation_id,
+                    error_type=generation_error_type,
+                )
                 self._emit_invocation_terminal_event(
                     invocation_id,
                     "invocation_errored",
@@ -1616,6 +2004,7 @@ class Autocompleter:
         self._latency_tracker.mark("focused_ready")
         if focused is None:
             logger.debug("Auto-trigger: no focused element")
+            self._capture_focus_failure(trigger_type="auto")
             return
 
         _AMBIGUOUS_ROLES = {"AXWebArea", "AXGroup"}
@@ -1714,6 +2103,7 @@ class Autocompleter:
             tree_overview_context=tree_overview_context,
             context_tree=context_tree,
             trigger_type="auto",
+            invocation_id=invocation_id,
         )
 
         self._generation_id += 1
@@ -1795,6 +2185,7 @@ class Autocompleter:
         self._latency_tracker.mark("focused_ready")
         if focused is None:
             logger.debug("Regenerate: no focused element, aborting")
+            self._capture_focus_failure(trigger_type="regenerate")
             return False
         saved_focused = self._last_trigger_args["focused"]
         if focused.app_pid != saved_focused.app_pid:
@@ -1851,6 +2242,7 @@ class Autocompleter:
             tree_overview_context=tree_overview_context,
             context_tree=context_tree,
             trigger_type="regenerate",
+            invocation_id=invocation_id,
         )
 
         # Bump generation to discard any in-flight stream
@@ -2198,6 +2590,7 @@ class Autocompleter:
             tree_overview_context=prev.get("tree_overview_context"),
             context_tree=prev.get("context_tree"),
             trigger_type="post_accept",
+            invocation_id=invocation_id,
         )
 
         self.overlay.show(
@@ -2260,6 +2653,13 @@ class Autocompleter:
         )
         if not success:
             logger.warning("Failed to inject suggestion")
+            self._capture_injection_failure(
+                accept_kind="full",
+                focused=focused,
+                invocation_id=invocation_id,
+                suggestion_index=suggestion.index,
+                accepted_length=len(text),
+            )
             return
 
         logger.info(f"Injected: {text[:60]}")
@@ -2309,6 +2709,17 @@ class Autocompleter:
                     )
                 else:
                     logger.warning("Failed to inject partial suggestion")
+                    self._capture_injection_failure(
+                        accept_kind="partial",
+                        focused=focused_before,
+                        invocation_id=(
+                            self._active_invocation.invocation_id
+                            if self._active_invocation
+                            else None
+                        ),
+                        suggestion_index=suggestion.index,
+                        accepted_length=len(partial_text),
+                    )
 
         self._run_on_main(_accept_partial)
         return True
@@ -2355,6 +2766,23 @@ class Autocompleter:
                 )
             except Exception:
                 logger.exception("Failed to emit feedback telemetry")
+
+            try:
+                debug_client = getattr(self, "debug_artifacts", None)
+                if debug_client is not None and getattr(
+                    debug_client,
+                    "manual_capture_enabled",
+                    False,
+                ):
+                    self._schedule_debug_capture(
+                        "manual_report",
+                        trigger_type="report_hotkey",
+                        feedback_context=ctx,
+                        feedback_payload=payload,
+                        extra={"local_report_fallback": payload is None},
+                    )
+            except Exception:
+                logger.exception("Failed to capture manual debug artifact")
 
             self._run_on_main(lambda: self._show_feedback_toast(ctx.app_name))
 

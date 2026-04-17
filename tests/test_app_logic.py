@@ -702,3 +702,174 @@ class TestTelemetryHooks:
                 },
             },
         )]
+
+    def test_report_feedback_uploads_debug_artifact_when_manual_capture_enabled(self, monkeypatch):
+        app = Autocompleter.__new__(Autocompleter)
+        events = []
+        debug_artifacts = []
+        focused = FocusedElement(
+            app_name="Slack",
+            app_pid=1,
+            role="AXTextArea",
+            value="hidden",
+            selected_text="",
+            position=(10.0, 10.0),
+            size=(100.0, 20.0),
+            insertion_point=0,
+        )
+
+        class FakeThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None):
+                self._target = target
+
+            def start(self):
+                self._target()
+
+        monkeypatch.setattr(app_module.threading, "Thread", FakeThread)
+        monkeypatch.setattr(app_module, "_get_caret_screen_position", lambda: (10.0, 10.0, 20.0))
+
+        app.config = SimpleNamespace(
+            install_id="install-123",
+            effective_llm_provider="openai",
+            effective_llm_model="beta-model",
+            effective_fallback_provider="openai",
+            effective_fallback_model="fallback-model",
+        )
+        app.feedback_reporter = SimpleNamespace(
+            submit=lambda ctx, installation_id=None: {
+                "report_id": "report-123",
+                "installation_id": installation_id,
+                "app": {"name": ctx.app_name},
+            }
+        )
+        app.debug_artifacts = SimpleNamespace(
+            enabled=True,
+            manual_capture_enabled=True,
+            emit_artifact=lambda *args, **kwargs: debug_artifacts.append((args, kwargs)),
+        )
+        app._log_buffer_handler = SimpleNamespace(snapshot=lambda limit=200: ["tail"])
+        app.overlay = SimpleNamespace(show=lambda suggestions, x, y, caret_height=20.0: None, hide=lambda: None)
+        app.observer = SimpleNamespace(
+            get_focused_element=lambda: focused,
+            get_focus_debug_info=lambda: {"frontmost_app": {"name": "Slack"}},
+        )
+        app._emit_telemetry = lambda event, **payload: events.append((event, payload))
+        app._run_on_main = lambda fn: fn()
+        app._generation_id = 0
+        app._last_latency_record = None
+        app._last_fallback_used = False
+        app._last_trigger_args = {
+            "focused": focused,
+            "mode": app_module.AutocompleteMode.REPLY,
+            "trigger_type": "manual",
+            "source_url": "https://slack.com/client/T123",
+            "conversation_turns": [],
+            "subtree_context": None,
+            "window_title": "Slack",
+            "invocation_id": "inv-123",
+        }
+
+        assert app._on_report_feedback() is True
+        assert events[0][0] == "feedback_reported"
+        assert len(debug_artifacts) == 1
+        assert debug_artifacts[0][0][0] == "manual_report"
+        assert debug_artifacts[0][1]["invocation_id"] == "inv-123"
+
+    def test_trigger_focus_failure_uploads_debug_artifact(self, monkeypatch):
+        app = Autocompleter.__new__(Autocompleter)
+        debug_artifacts = []
+
+        class FakeThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None):
+                self._target = target
+
+            def start(self):
+                self._target()
+
+        monkeypatch.setattr(app_module.threading, "Thread", FakeThread)
+
+        app._auto_trigger_debouncer = SimpleNamespace(cancel=lambda: None)
+        app.overlay = SimpleNamespace(is_visible=False)
+        app.observer = SimpleNamespace(
+            get_focused_element=lambda: None,
+            get_focus_debug_info=lambda: {"frontmost_app": {"name": "Google Chrome"}},
+        )
+        app.debug_artifacts = SimpleNamespace(
+            enabled=True,
+            failure_capture_enabled=True,
+            emit_artifact=lambda *args, **kwargs: debug_artifacts.append((args, kwargs)),
+        )
+        app._log_buffer_handler = SimpleNamespace(snapshot=lambda limit=200: ["tail"])
+        app._latency_tracker = SimpleNamespace(start=lambda *args, **kwargs: None, mark=lambda *args, **kwargs: None)
+        app._generation_id = 0
+        app._last_trigger_args = None
+        app._active_invocation = None
+        app.config = SimpleNamespace(install_id="install-123")
+
+        assert app._on_trigger() is True
+        assert len(debug_artifacts) == 1
+        assert debug_artifacts[0][0][0] == "focus_failure"
+        assert debug_artifacts[0][1]["trigger_type"] == "manual"
+
+    def test_accept_injection_failure_uploads_debug_artifact(self, monkeypatch):
+        app = Autocompleter.__new__(Autocompleter)
+        debug_artifacts = []
+        focused = FocusedElement(
+            app_name="Codex",
+            app_pid=1,
+            role="AXTextArea",
+            value="hello",
+            selected_text="",
+            position=(10.0, 10.0),
+            size=(100.0, 20.0),
+            insertion_point=5,
+        )
+
+        class FakeThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None):
+                self._target = target
+
+            def start(self):
+                self._target()
+
+        monkeypatch.setattr(app_module.threading, "Thread", FakeThread)
+
+        app.observer = SimpleNamespace(
+            get_focused_element=lambda: focused,
+            get_focus_debug_info=lambda: {"frontmost_app": {"name": "Codex"}},
+        )
+        app.overlay = SimpleNamespace(
+            _selected_index=0,
+            accept_selection=lambda: SimpleNamespace(text=" world", index=0),
+        )
+        app.injector = SimpleNamespace(inject=lambda text, app_name, app_pid: False)
+        app.debug_artifacts = SimpleNamespace(
+            enabled=True,
+            failure_capture_enabled=True,
+            emit_artifact=lambda *args, **kwargs: debug_artifacts.append((args, kwargs)),
+        )
+        app._log_buffer_handler = SimpleNamespace(snapshot=lambda limit=200: ["tail"])
+        app._active_invocation = SimpleNamespace(invocation_id="inv-123")
+        app._last_trigger_args = {
+            "focused": focused,
+            "trigger_type": "manual",
+            "window_title": "Codex",
+            "source_url": "",
+            "conversation_turns": [],
+            "subtree_context": None,
+            "tree_overview_context": None,
+            "context_tree": None,
+            "invocation_id": "inv-123",
+        }
+        app._trigger_before_cursor = "hello"
+        app._trigger_after_cursor = ""
+        app._current_suggestions = []
+        app._record_accepted_suggestion = lambda *args, **kwargs: None
+        app._start_post_accept_followup = lambda *args, **kwargs: None
+        app.config = SimpleNamespace(install_id="install-123")
+
+        app._accept_selected_suggestion()
+
+        assert len(debug_artifacts) == 1
+        assert debug_artifacts[0][0][0] == "injection_failure"
+        assert debug_artifacts[0][1]["invocation_id"] == "inv-123"

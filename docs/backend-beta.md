@@ -117,8 +117,9 @@ The backend expects these tables:
 - `beta_proxy_requests`
 - `beta_proxy_attempts`
 - `beta_telemetry_events`
+- `beta_debug_artifacts`
 
-The backend stores install/auth data, invocation-level product analytics, metadata-only proxy request rows, per-attempt upstream metadata, and raw telemetry events. It does not persist raw prompt or completion bodies by default.
+The backend stores install/auth data, invocation-level product analytics, metadata-only proxy request rows, per-attempt upstream metadata, raw telemetry events, and trusted-beta debug artifacts. It does not persist raw prompt or completion bodies by default, but debug artifacts may include redacted AX/context payloads when explicitly enabled by the client.
 
 Detailed beta profiling now rides alongside telemetry and proxy metadata in `profile_json` fields keyed by `invocation_id`. This captures stage timings and routing diagnostics without storing prompt or completion text.
 
