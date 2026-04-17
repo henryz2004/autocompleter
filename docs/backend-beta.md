@@ -4,6 +4,7 @@ This repo now includes a small FastAPI backend for the friend beta. It provides:
 
 - an OpenAI-compatible proxy at `/v1/chat/completions`
 - a telemetry ingest endpoint at `/v1/telemetry/events`
+- a public landing-page application endpoint at `/v1/beta/applications`
 - admin endpoints for minting and revoking per-install keys
 
 ## Install
@@ -102,6 +103,14 @@ AUTOCOMPLETER_BACKEND_STREAM_TIMEOUT_S=60
 AUTOCOMPLETER_BACKEND_ALLOW_UPSTREAM_OVERRIDE_HEADERS=0
 ```
 
+Public landing-page configuration:
+
+```bash
+AUTOCOMPLETER_PUBLIC_ALLOWED_ORIGINS=http://127.0.0.1:4321,http://localhost:4321,https://autocompleter.dev
+AUTOCOMPLETER_PUBLIC_ALLOWED_ORIGIN_REGEX=^https://[a-z0-9-]+\\.autocompleter-259\\.pages\\.dev$
+AUTOCOMPLETER_PUBLIC_INSTALL_DOCS_URL=https://github.com/henryz2004/autocompleter/blob/main/docs/friend-beta.md
+```
+
 ## Supabase Schema
 
 The schema now lives in versioned Supabase migrations instead of a one-off SQL snapshot.
@@ -113,6 +122,7 @@ Start with:
 The backend expects these tables:
 
 - `beta_installs`
+- `beta_applications`
 - `beta_invocations`
 - `beta_proxy_requests`
 - `beta_proxy_attempts`
@@ -135,6 +145,34 @@ Important current implementation note:
 - the backend store currently talks to Supabase via the REST API
 - because of that, these beta tables currently live in `public`
 - if you later want them in a truly backend-only `private` schema, switch the backend store to a direct Postgres connection first
+
+The landing-page application table lives in `public` because the backend still
+uses Supabase REST for persistence. Since `public` is an exposed schema,
+Supabase recommends enabling RLS on these tables even if only the backend's
+secret key is meant to access them. See [Securing your API](https://supabase.com/docs/guides/api/securing-your-api)
+and [Hardening the Data API](https://supabase.com/docs/guides/database/hardening-data-api).
+
+## Public Beta Applications
+
+The landing page submits directly to the backend:
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/beta/applications \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name":"Ada Lovelace",
+    "email":"ada@example.com",
+    "role":"Founding engineer",
+    "primary_use_case":"Reply drafting in Slack and terminal commands.",
+    "company":"",
+    "source":"landing"
+  }'
+```
+
+On success the response includes a one-time plaintext `install_key`, the
+corresponding `install_id`, and an `env_setup` block ready to paste into `.env`.
+Duplicate normalized emails return `409`. Filled honeypot submissions return
+`422` and do not mint keys.
 
 ## Mint Install Keys
 
@@ -183,6 +221,9 @@ For Render, replace `http://127.0.0.1:8000` with your public Render domain:
 AUTOCOMPLETER_PROXY_BASE_URL=https://<your-service>.onrender.com/v1
 AUTOCOMPLETER_TELEMETRY_URL=https://<your-service>.onrender.com/v1/telemetry/events
 ```
+
+The landing page should point `PUBLIC_BACKEND_BASE_URL` at the same public
+backend origin, but without `/v1`.
 
 You can mint `install_id` and `install_key` locally with:
 

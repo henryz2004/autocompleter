@@ -13,6 +13,11 @@ npm install
 npm run dev
 ```
 
+For local backend work, set `PUBLIC_BACKEND_BASE_URL=http://127.0.0.1:8000`.
+For deployed Pages builds, set `PUBLIC_BACKEND_BASE_URL` in Cloudflare Pages to
+the public backend origin without `/v1`, for example
+`https://autocompleter-beta-backend.onrender.com`.
+
 The form posts to `${PUBLIC_BACKEND_BASE_URL}/v1/beta/applications`. Run the
 backend locally from the repo root with:
 
@@ -43,3 +48,4 @@ npm run test
 - `src/lib/api.ts` — `submitBetaApplication` fetch wrapper
 - `src/lib/form.ts` — DOM wiring invoked from `WaitlistForm.astro`
 - `tests/` — Vitest suites for validation, api, and the form flow
+- The backend must allow CORS from `autocompleter.dev`, local Astro dev, and Pages previews for browser submissions to succeed
