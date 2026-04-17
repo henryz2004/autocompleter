@@ -10,8 +10,11 @@ from autocompleter.debug_capture import (
     DEBUG_CAPTURE_BOTH,
     DEBUG_CAPTURE_FAILURES,
     DEBUG_CAPTURE_MANUAL,
+    DEBUG_CAPTURE_PROFILE_AGGRESSIVE,
+    DEBUG_CAPTURE_PROFILE_NORMAL,
     DebugArtifactClient,
     InMemoryLogBuffer,
+    normalize_debug_capture_profile,
     normalize_debug_capture_mode,
     redact_debug_payload,
     trim_debug_artifact,
@@ -24,6 +27,12 @@ def test_normalize_debug_capture_mode():
     assert normalize_debug_capture_mode("failures") == DEBUG_CAPTURE_FAILURES
     assert normalize_debug_capture_mode("manual") == DEBUG_CAPTURE_MANUAL
     assert normalize_debug_capture_mode("nope") == "off"
+
+
+def test_normalize_debug_capture_profile():
+    assert normalize_debug_capture_profile(None) == DEBUG_CAPTURE_PROFILE_NORMAL
+    assert normalize_debug_capture_profile("AGGRESSIVE") == DEBUG_CAPTURE_PROFILE_AGGRESSIVE
+    assert normalize_debug_capture_profile("loud") == DEBUG_CAPTURE_PROFILE_NORMAL
 
 
 def test_in_memory_log_buffer_keeps_recent_lines():
@@ -78,6 +87,46 @@ def test_trim_debug_artifact_prunes_large_payload_deterministically():
     assert trimmed["meta"]["trimmed"] is True
     assert len(trimmed["log_tail"]) <= 100
     assert len(json.dumps(trimmed, sort_keys=True, ensure_ascii=False)) <= 25_000
+
+
+def test_trim_debug_artifact_preserves_focus_summaries_before_dropping_full_trees():
+    artifact = {
+        "meta": {"artifact_type": "focus_failure"},
+        "focus_debug": {
+            "window_inventory": [{"title": "ChatGPT", "role": "AXWindow"} for _ in range(5)],
+            "window_trees": [
+                {
+                    "index": index,
+                    "role_counts": {"AXGroup": 40, "AXWebArea": 1},
+                    "editable_candidates": [{"role": "AXTextArea", "value_preview": "x" * 100}],
+                    "tree": {
+                        "role": "AXWindow",
+                        "children": [
+                            {"role": "AXGroup", "children": [{"role": "AXTextArea", "value": "x" * 10_000}]}
+                            for _ in range(30)
+                        ],
+                    },
+                }
+                for index in range(3)
+            ],
+            "cdp_probe": {
+                "status": "success",
+                "target_title": "ChatGPT",
+                "editable_candidates": [{"tag": "textarea", "value_preview": "y" * 200}],
+            },
+        },
+        "log_tail": [f"log-{index}" for index in range(300)],
+        "trigger_dump": {"context": "z" * 80_000},
+    }
+
+    trimmed = trim_debug_artifact(artifact, max_chars=12_000)
+
+    assert trimmed["meta"]["trimmed"] is True
+    assert trimmed["focus_debug"]["window_inventory"]
+    assert trimmed["focus_debug"]["cdp_probe"]["status"] == "success"
+    assert "window_trees" in trimmed["focus_debug"]
+    assert all("role_counts" in item for item in trimmed["focus_debug"]["window_trees"])
+    assert all("tree" not in item for item in trimmed["focus_debug"]["window_trees"])
 
 
 def test_debug_artifact_client_posts_with_install_auth(monkeypatch):

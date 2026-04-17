@@ -7,6 +7,7 @@ in the active window, and monitors for typing pauses or hotkey triggers.
 from __future__ import annotations
 
 import logging
+import platform
 import time
 from dataclasses import dataclass
 
@@ -415,6 +416,9 @@ class InputObserver:
         *,
         max_depth: int = 12,
         candidate_limit: int = 8,
+        profile: str = "normal",
+        serialized_window_limit: int = 3,
+        serialized_window_children: int = 50,
     ) -> dict[str, object]:
         """Collect rich focus diagnostics for remote debugging."""
         if not HAS_ACCESSIBILITY:
@@ -426,6 +430,7 @@ class InputObserver:
             return {"has_accessibility": True, "frontmost_app": None}
 
         app_name = front_app.localizedName() or "Unknown"
+        bundle_id = front_app.bundleIdentifier() or ""
         pid = front_app.processIdentifier()
         app_element = AXUIElementCreateApplication(pid)
 
@@ -436,11 +441,15 @@ class InputObserver:
         )
         app_local_focused = ax_get_attribute(app_element, "AXFocusedUIElement")
 
-        window = ax_get_attribute(app_element, "AXFocusedWindow")
+        focused_window = ax_get_attribute(app_element, "AXFocusedWindow")
+        main_window = ax_get_attribute(app_element, "AXMainWindow")
+        windows = self._coerce_ax_sequence(ax_get_attribute(app_element, "AXWindows"))
+
+        window = focused_window
         if window is None:
-            windows = ax_get_attribute(app_element, "AXWindows")
-            if windows and len(windows) > 0:
-                window = windows[0]
+            window = main_window
+        if window is None and windows:
+            window = windows[0]
 
         window_title = ax_get_attribute(window, "AXTitle") or "" if window is not None else ""
         source_url = self._get_browser_url(app_element, app_name) if window is not None else ""
@@ -463,17 +472,21 @@ class InputObserver:
                         max_depth=max_depth,
                         max_children=20,
                         focused_element=app_local_focused,
-                    )
+                )
         except Exception:
             logger.debug("Failed to serialize window tree for focus diagnostics", exc_info=True)
 
-        return {
+        result: dict[str, object] = {
             "has_accessibility": True,
             "frontmost_app": {
                 "name": app_name,
+                "localized_name": app_name,
+                "bundle_id": bundle_id,
                 "pid": pid,
                 "window_title": window_title,
                 "source_url": source_url,
+                "os_version": platform.mac_ver()[0] or platform.platform(),
+                "ax_trusted": bool(AXIsProcessTrusted()),
             },
             "system_wide_focus_present": system_focused is not None,
             "system_wide_focus_role": (
@@ -489,9 +502,180 @@ class InputObserver:
                 window_tree or app_local_tree or {},
                 limit=candidate_limit,
             ),
+            "focused_window_present": focused_window is not None,
+            "main_window_present": main_window is not None,
             "window_tree": window_tree,
             "app_local_tree": app_local_tree,
         }
+
+        if profile != "aggressive":
+            return result
+
+        result["focused_window"] = self._summarize_window(
+            focused_window,
+            index=None,
+            is_focused_window=True,
+            is_main_window=self._same_ax_element(focused_window, main_window),
+        )
+        result["main_window"] = self._summarize_window(
+            main_window,
+            index=None,
+            is_focused_window=self._same_ax_element(main_window, focused_window),
+            is_main_window=True,
+        )
+
+        ordered_windows = self._ordered_unique_windows(
+            focused_window,
+            main_window,
+            windows,
+        )
+        result["window_count"] = len(ordered_windows)
+        result["window_inventory"] = [
+            self._summarize_window(
+                item["window"],
+                index=item["index"],
+                is_focused_window=item["is_focused_window"],
+                is_main_window=item["is_main_window"],
+            )
+            for item in ordered_windows
+        ]
+
+        try:
+            from .ax_utils import serialize_ax_tree
+
+            window_trees: list[dict[str, object]] = []
+            for item in ordered_windows[:serialized_window_limit]:
+                tree = serialize_ax_tree(
+                    item["window"],
+                    max_depth=20,
+                    max_children=serialized_window_children,
+                    focused_element=system_focused or app_local_focused,
+                )
+                window_trees.append(
+                    {
+                        "index": item["index"],
+                        "title": item["summary"].get("title", ""),
+                        "role": item["summary"].get("role", ""),
+                        "is_focused_window": item["is_focused_window"],
+                        "is_main_window": item["is_main_window"],
+                        "role_counts": self._count_roles_in_tree(tree),
+                        "editable_candidates": self._summarize_editable_candidates(
+                            tree or {},
+                            limit=candidate_limit,
+                        ),
+                        "tree": tree,
+                    }
+                )
+            result["window_trees"] = window_trees
+        except Exception:
+            logger.debug(
+                "Failed to serialize aggressive window trees for focus diagnostics",
+                exc_info=True,
+            )
+
+        return result
+
+    @staticmethod
+    def _coerce_ax_sequence(value) -> list:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        if isinstance(value, tuple):
+            return list(value)
+        try:
+            return list(value)
+        except Exception:
+            return []
+
+    @staticmethod
+    def _same_ax_element(left, right) -> bool:
+        if left is None or right is None:
+            return False
+        try:
+            return bool(left == right)
+        except Exception:
+            return id(left) == id(right)
+
+    def _ordered_unique_windows(self, focused_window, main_window, windows) -> list[dict[str, object]]:
+        ordered: list[dict[str, object]] = []
+
+        def _append(window) -> None:
+            if window is None:
+                return
+            for existing in ordered:
+                if self._same_ax_element(existing["window"], window):
+                    return
+            summary = self._summarize_window(
+                window,
+                index=len(ordered),
+                is_focused_window=self._same_ax_element(window, focused_window),
+                is_main_window=self._same_ax_element(window, main_window),
+            )
+            ordered.append(
+                {
+                    "index": len(ordered),
+                    "window": window,
+                    "summary": summary,
+                    "is_focused_window": bool(summary.get("is_focused_window")),
+                    "is_main_window": bool(summary.get("is_main_window")),
+                }
+            )
+
+        _append(focused_window)
+        _append(main_window)
+        for window in windows:
+            _append(window)
+        return ordered
+
+    def _summarize_window(
+        self,
+        window,
+        *,
+        index: int | None,
+        is_focused_window: bool,
+        is_main_window: bool,
+    ) -> dict[str, object] | None:
+        if window is None:
+            return None
+        title = ax_get_attribute(window, "AXTitle") or ""
+        role = ax_get_attribute(window, "AXRole") or ""
+        subrole = ax_get_attribute(window, "AXSubrole") or ""
+        desc = ax_get_attribute(window, "AXDescription") or ""
+        position = ax_get_position(window)
+        size = ax_get_size(window)
+        child_count = len(ax_get_children(window))
+        summary: dict[str, object] = {
+            "index": index,
+            "title": title,
+            "role": role,
+            "subrole": subrole,
+            "description": desc,
+            "is_focused_window": is_focused_window,
+            "is_main_window": is_main_window,
+            "visible_child_count": child_count,
+        }
+        if position is not None:
+            summary["position"] = {"x": position[0], "y": position[1]}
+        if size is not None:
+            summary["size"] = {"width": size[0], "height": size[1]}
+        return summary
+
+    @staticmethod
+    def _count_roles_in_tree(tree: dict | None) -> dict[str, int]:
+        counts: dict[str, int] = {}
+
+        def _walk(node: dict | None) -> None:
+            if not isinstance(node, dict):
+                return
+            role = str(node.get("role") or "")
+            if role:
+                counts[role] = counts.get(role, 0) + 1
+            for child in node.get("children") or []:
+                _walk(child if isinstance(child, dict) else None)
+
+        _walk(tree)
+        return counts
 
     _MAX_CHILDREN_PER_NODE = 50
     _MAX_FIND_VISITS = 500

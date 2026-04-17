@@ -11,6 +11,7 @@ from .debug_capture import (
     DEBUG_CAPTURE_OFF,
     debug_capture_mode_allows_failures,
     debug_capture_mode_allows_manual,
+    normalize_debug_capture_profile,
     normalize_debug_capture_mode,
 )
 
@@ -96,6 +97,7 @@ class Config:
     telemetry_api_key: str = ""
     install_id: str = ""
     debug_capture_mode: str = DEBUG_CAPTURE_OFF
+    debug_capture_profile: str = "normal"
 
     # Sentinel to distinguish "not provided" from "explicitly set to empty"
     _UNSET: str = "__UNSET__"
@@ -151,6 +153,9 @@ class Config:
             self.install_id = self._resolve_install_id()
         self.debug_capture_mode = normalize_debug_capture_mode(
             self.debug_capture_mode
+        )
+        self.debug_capture_profile = normalize_debug_capture_profile(
+            self.debug_capture_profile
         )
 
     @property
@@ -253,6 +258,10 @@ class Config:
             self.debug_capture_mode
         )
 
+    @property
+    def debug_capture_aggressive_enabled(self) -> bool:
+        return self.debug_capture_active and self.debug_capture_profile == "aggressive"
+
     def _resolve_install_id(self) -> str:
         install_id_path = self.data_dir / "install_id"
         try:
@@ -346,6 +355,10 @@ def load_config() -> Config:
         debug_capture_mode=os.environ.get(
             "AUTOCOMPLETER_DEBUG_CAPTURE_MODE",
             DEBUG_CAPTURE_OFF,
+        ),
+        debug_capture_profile=os.environ.get(
+            "AUTOCOMPLETER_DEBUG_CAPTURE_PROFILE",
+            "normal",
         ),
     )
     return config

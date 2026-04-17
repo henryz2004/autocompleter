@@ -77,6 +77,51 @@ class TestBackendDebugArtifacts:
         assert row["payload_json"]["install_id"] == record.install_id
         assert row["payload_json"]["payload"]["headers"]["Authorization"] == "[redacted]"
 
+    def test_debug_artifact_accepts_richer_focus_failure_payload(self):
+        store = InMemoryStore()
+        config = make_config()
+        app = create_app(
+            config=config,
+            store=store,
+            proxy_service=ProxyService(config, store),
+        )
+        record, install_key = asyncio.run(store.create_install(label="friend"))
+
+        with TestClient(app) as client:
+            response = client.post(
+                "/v1/debug-artifacts",
+                headers={"Authorization": f"Bearer {install_key}"},
+                json={
+                    "artifact_type": "focus_failure",
+                    "invocation_id": "inv-456",
+                    "source_app": "Codex",
+                    "trigger_type": "manual",
+                    "payload": {
+                        "meta": {"artifact_type": "focus_failure"},
+                        "focus_debug": {
+                            "window_inventory": [{"title": "Codex", "role": "AXWindow"}],
+                            "window_trees": [
+                                {
+                                    "index": 0,
+                                    "role_counts": {"AXWindow": 1, "AXGroup": 3},
+                                    "tree": {"role": "AXWindow", "children": []},
+                                }
+                            ],
+                            "cdp_probe": {
+                                "status": "success",
+                                "active_element": {"tag": "textarea", "value_length": 11},
+                                "editable_candidates": [{"tag": "textarea", "value_length": 11}],
+                            },
+                        },
+                    },
+                },
+            )
+
+        assert response.status_code == 202
+        row = store.debug_artifacts[0]
+        assert row["payload_json"]["payload"]["focus_debug"]["window_inventory"][0]["title"] == "Codex"
+        assert row["payload_json"]["payload"]["focus_debug"]["cdp_probe"]["status"] == "success"
+
     def test_debug_artifact_requires_valid_install_key(self):
         store = InMemoryStore()
         config = make_config()

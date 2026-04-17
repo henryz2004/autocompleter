@@ -9,6 +9,7 @@ from autocompleter.cdp_injector import (
     CDPConnection,
     find_debug_port,
     is_chromium_app,
+    probe_editable_dom_state,
     _port_from_process_args,
     _probe_debug_port,
 )
@@ -267,6 +268,103 @@ class TestFindActiveTarget:
         cdp = CDPConnection(port=9222)
         with patch.object(cdp, "discover_targets", return_value=[]):
             assert cdp.find_active_target() is None
+
+
+class TestProbeEditableDomState:
+    @patch("autocompleter.cdp_injector.find_debug_port", return_value=None)
+    def test_returns_no_debug_port_when_port_missing(self, mock_find_port):
+        result = probe_editable_dom_state("Google Chrome", 1234)
+        assert result["status"] == "no_debug_port"
+        mock_find_port.assert_called_once_with(1234)
+
+    @patch("autocompleter.cdp_injector.find_debug_port", return_value=9222)
+    @patch("autocompleter.cdp_injector.CDPConnection")
+    def test_returns_no_target_when_no_active_target(self, mock_cdp_cls, mock_find_port):
+        mock_cdp = MagicMock()
+        mock_cdp.discover_targets.return_value = []
+        mock_cdp.find_active_target.return_value = None
+        mock_cdp_cls.return_value = mock_cdp
+
+        result = probe_editable_dom_state("Google Chrome", 1234)
+
+        assert result["status"] == "no_target"
+        mock_cdp.close.assert_called_once()
+
+    @patch("autocompleter.cdp_injector.find_debug_port", return_value=9222)
+    @patch("autocompleter.cdp_injector.CDPConnection")
+    def test_returns_connect_failed_when_target_connection_fails(self, mock_cdp_cls, mock_find_port):
+        target = {
+            "id": "page-1",
+            "title": "ChatGPT",
+            "url": "https://chatgpt.com",
+            "webSocketDebuggerUrl": "ws://localhost:9222/devtools/page/page-1",
+        }
+        mock_cdp = MagicMock()
+        mock_cdp.discover_targets.return_value = [target]
+        mock_cdp.find_active_target.return_value = target
+        mock_cdp.connect_to_target.return_value = False
+        mock_cdp_cls.return_value = mock_cdp
+
+        result = probe_editable_dom_state("Google Chrome", 1234)
+
+        assert result["status"] == "connect_failed"
+        assert result["target_title"] == "ChatGPT"
+        mock_cdp.close.assert_called_once()
+
+    @patch("autocompleter.cdp_injector.find_debug_port", return_value=9222)
+    @patch("autocompleter.cdp_injector.CDPConnection")
+    def test_returns_js_failed_when_runtime_evaluate_errors(self, mock_cdp_cls, mock_find_port):
+        target = {
+            "id": "page-1",
+            "title": "ChatGPT",
+            "url": "https://chatgpt.com",
+            "webSocketDebuggerUrl": "ws://localhost:9222/devtools/page/page-1",
+        }
+        mock_cdp = MagicMock()
+        mock_cdp.discover_targets.return_value = [target]
+        mock_cdp.find_active_target.return_value = target
+        mock_cdp.connect_to_target.return_value = True
+        mock_cdp.send_command.return_value = {"error": {"message": "boom"}}
+        mock_cdp_cls.return_value = mock_cdp
+
+        result = probe_editable_dom_state("Google Chrome", 1234)
+
+        assert result["status"] == "js_failed"
+        assert result["error"] == "boom"
+        mock_cdp.close.assert_called_once()
+
+    @patch("autocompleter.cdp_injector.find_debug_port", return_value=9222)
+    @patch("autocompleter.cdp_injector.CDPConnection")
+    def test_returns_success_with_active_element_and_candidates(self, mock_cdp_cls, mock_find_port):
+        target = {
+            "id": "page-1",
+            "title": "ChatGPT",
+            "url": "https://chatgpt.com",
+            "webSocketDebuggerUrl": "ws://localhost:9222/devtools/page/page-1",
+        }
+        mock_cdp = MagicMock()
+        mock_cdp.discover_targets.return_value = [target]
+        mock_cdp.find_active_target.return_value = target
+        mock_cdp.connect_to_target.return_value = True
+        mock_cdp.send_command.return_value = {
+            "result": {
+                "result": {
+                    "value": {
+                        "active_element": {"tag": "textarea", "value_length": 12},
+                        "editable_candidates": [{"tag": "textarea", "value_length": 12}],
+                    }
+                }
+            }
+        }
+        mock_cdp_cls.return_value = mock_cdp
+
+        result = probe_editable_dom_state("Google Chrome", 1234)
+
+        assert result["status"] == "success"
+        assert result["target_url"] == "https://chatgpt.com"
+        assert result["active_element"]["tag"] == "textarea"
+        assert result["editable_candidates"][0]["tag"] == "textarea"
+        mock_cdp.close.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

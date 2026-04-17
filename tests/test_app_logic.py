@@ -707,6 +707,7 @@ class TestTelemetryHooks:
         app = Autocompleter.__new__(Autocompleter)
         events = []
         debug_artifacts = []
+        cdp_probes = []
         focused = FocusedElement(
             app_name="Slack",
             app_pid=1,
@@ -727,6 +728,11 @@ class TestTelemetryHooks:
 
         monkeypatch.setattr(app_module.threading, "Thread", FakeThread)
         monkeypatch.setattr(app_module, "_get_caret_screen_position", lambda: (10.0, 10.0, 20.0))
+        monkeypatch.setattr(
+            app_module,
+            "probe_editable_dom_state",
+            lambda app_name, app_pid: cdp_probes.append((app_name, app_pid)) or {"status": "success"},
+        )
 
         app.config = SimpleNamespace(
             install_id="install-123",
@@ -734,6 +740,7 @@ class TestTelemetryHooks:
             effective_llm_model="beta-model",
             effective_fallback_provider="openai",
             effective_fallback_model="fallback-model",
+            debug_capture_profile="aggressive",
         )
         app.feedback_reporter = SimpleNamespace(
             submit=lambda ctx, installation_id=None: {
@@ -751,7 +758,10 @@ class TestTelemetryHooks:
         app.overlay = SimpleNamespace(show=lambda suggestions, x, y, caret_height=20.0: None, hide=lambda: None)
         app.observer = SimpleNamespace(
             get_focused_element=lambda: focused,
-            get_focus_debug_info=lambda: {"frontmost_app": {"name": "Slack"}},
+            get_focus_debug_info=lambda profile="normal": {
+                "frontmost_app": {"name": "Slack", "pid": 1},
+                "profile_used": profile,
+            },
         )
         app._emit_telemetry = lambda event, **payload: events.append((event, payload))
         app._run_on_main = lambda fn: fn()
@@ -774,10 +784,15 @@ class TestTelemetryHooks:
         assert len(debug_artifacts) == 1
         assert debug_artifacts[0][0][0] == "manual_report"
         assert debug_artifacts[0][1]["invocation_id"] == "inv-123"
+        payload = debug_artifacts[0][0][1]
+        assert payload["focus_debug"]["profile_used"] == "normal"
+        assert "cdp_probe" not in payload["focus_debug"]
+        assert cdp_probes == []
 
     def test_trigger_focus_failure_uploads_debug_artifact(self, monkeypatch):
         app = Autocompleter.__new__(Autocompleter)
         debug_artifacts = []
+        profiles = []
 
         class FakeThread:
             def __init__(self, target=None, args=(), kwargs=None, daemon=None):
@@ -787,12 +802,28 @@ class TestTelemetryHooks:
                 self._target()
 
         monkeypatch.setattr(app_module.threading, "Thread", FakeThread)
+        monkeypatch.setattr(
+            app_module,
+            "probe_editable_dom_state",
+            lambda app_name, app_pid: {
+                "status": "success",
+                "app_name": app_name,
+                "app_pid": app_pid,
+                "editable_candidates": [{"tag": "textarea"}],
+            },
+        )
 
         app._auto_trigger_debouncer = SimpleNamespace(cancel=lambda: None)
         app.overlay = SimpleNamespace(is_visible=False)
         app.observer = SimpleNamespace(
             get_focused_element=lambda: None,
-            get_focus_debug_info=lambda: {"frontmost_app": {"name": "Google Chrome"}},
+            get_focus_debug_info=lambda profile="normal": profiles.append(profile) or {
+                "frontmost_app": {
+                    "name": "Google Chrome",
+                    "pid": 321,
+                },
+                "window_inventory": [{"title": "ChatGPT", "role": "AXWindow"}],
+            },
         )
         app.debug_artifacts = SimpleNamespace(
             enabled=True,
@@ -804,12 +835,19 @@ class TestTelemetryHooks:
         app._generation_id = 0
         app._last_trigger_args = None
         app._active_invocation = None
-        app.config = SimpleNamespace(install_id="install-123")
+        app.config = SimpleNamespace(
+            install_id="install-123",
+            debug_capture_profile="aggressive",
+        )
 
         assert app._on_trigger() is True
         assert len(debug_artifacts) == 1
         assert debug_artifacts[0][0][0] == "focus_failure"
         assert debug_artifacts[0][1]["trigger_type"] == "manual"
+        payload = debug_artifacts[0][0][1]
+        assert profiles == ["aggressive"]
+        assert payload["focus_debug"]["window_inventory"][0]["title"] == "ChatGPT"
+        assert payload["focus_debug"]["cdp_probe"]["status"] == "success"
 
     def test_accept_injection_failure_uploads_debug_artifact(self, monkeypatch):
         app = Autocompleter.__new__(Autocompleter)

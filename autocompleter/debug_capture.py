@@ -18,11 +18,17 @@ DEBUG_CAPTURE_OFF = "off"
 DEBUG_CAPTURE_FAILURES = "failures"
 DEBUG_CAPTURE_MANUAL = "manual"
 DEBUG_CAPTURE_BOTH = "both"
+DEBUG_CAPTURE_PROFILE_NORMAL = "normal"
+DEBUG_CAPTURE_PROFILE_AGGRESSIVE = "aggressive"
 VALID_DEBUG_CAPTURE_MODES = {
     DEBUG_CAPTURE_OFF,
     DEBUG_CAPTURE_FAILURES,
     DEBUG_CAPTURE_MANUAL,
     DEBUG_CAPTURE_BOTH,
+}
+VALID_DEBUG_CAPTURE_PROFILES = {
+    DEBUG_CAPTURE_PROFILE_NORMAL,
+    DEBUG_CAPTURE_PROFILE_AGGRESSIVE,
 }
 
 _DEFAULT_MAX_LOG_RECORDS = 400
@@ -71,6 +77,13 @@ def debug_capture_mode_allows_manual(mode: str) -> bool:
         DEBUG_CAPTURE_MANUAL,
         DEBUG_CAPTURE_BOTH,
     }
+
+
+def normalize_debug_capture_profile(raw: str | None) -> str:
+    value = (raw or DEBUG_CAPTURE_PROFILE_NORMAL).strip().lower()
+    if value in VALID_DEBUG_CAPTURE_PROFILES:
+        return value
+    return DEBUG_CAPTURE_PROFILE_NORMAL
 
 
 def _json_safe(value: Any) -> Any:
@@ -159,6 +172,21 @@ def _prune_tree(tree: Any, *, max_depth: int) -> Any:
     return _walk(tree, 0)
 
 
+def _prune_window_trees(window_trees: Any, *, max_depth: int) -> Any:
+    if not isinstance(window_trees, list):
+        return window_trees
+    pruned: list[Any] = []
+    for item in window_trees:
+        if not isinstance(item, dict):
+            pruned.append(item)
+            continue
+        next_item = dict(item)
+        if "tree" in next_item:
+            next_item["tree"] = _prune_tree(next_item["tree"], max_depth=max_depth)
+        pruned.append(next_item)
+    return pruned
+
+
 def trim_debug_artifact(
     artifact: dict[str, Any],
     *,
@@ -184,6 +212,11 @@ def trim_debug_artifact(
         for key in ("window_tree", "app_local_tree"):
             if key in focus_debug:
                 focus_debug[key] = _prune_tree(focus_debug[key], max_depth=8)
+        if "window_trees" in focus_debug:
+            focus_debug["window_trees"] = _prune_window_trees(
+                focus_debug["window_trees"],
+                max_depth=8,
+            )
     if _json_chars(payload) <= max_chars:
         return payload
 
@@ -216,6 +249,17 @@ def trim_debug_artifact(
     if isinstance(focus_debug, dict):
         focus_debug.pop("window_tree", None)
         focus_debug.pop("app_local_tree", None)
+        window_trees = focus_debug.get("window_trees")
+        if isinstance(window_trees, list):
+            focus_debug["window_trees"] = [
+                {
+                    key: value
+                    for key, value in tree_entry.items()
+                    if key != "tree"
+                }
+                for tree_entry in window_trees
+                if isinstance(tree_entry, dict)
+            ]
     return payload
 
 

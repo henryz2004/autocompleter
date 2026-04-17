@@ -121,10 +121,12 @@ class TestDebugCaptureConfig:
     def test_debug_capture_defaults_off(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.setenv("AUTOCOMPLETER_DEBUG_CAPTURE_MODE", "")
+        monkeypatch.setenv("AUTOCOMPLETER_DEBUG_CAPTURE_PROFILE", "")
 
         cfg = load_config()
 
         assert cfg.debug_capture_mode == "off"
+        assert cfg.debug_capture_profile == "normal"
         assert cfg.debug_capture_active is False
 
     def test_debug_capture_mode_is_normalized_and_uses_proxy_url(self, monkeypatch, tmp_path):
@@ -134,14 +136,17 @@ class TestDebugCaptureConfig:
         monkeypatch.setenv("AUTOCOMPLETER_PROXY_BASE_URL", "https://proxy.example/v1/")
         monkeypatch.setenv("AUTOCOMPLETER_PROXY_API_KEY", "proxy-key")
         monkeypatch.setenv("AUTOCOMPLETER_DEBUG_CAPTURE_MODE", "BOTH")
+        monkeypatch.setenv("AUTOCOMPLETER_DEBUG_CAPTURE_PROFILE", "AGGRESSIVE")
 
         cfg = load_config()
 
         assert cfg.debug_capture_mode == "both"
+        assert cfg.debug_capture_profile == "aggressive"
         assert cfg.debug_capture_active is True
         assert cfg.debug_capture_url == "https://proxy.example/v1/debug-artifacts"
         assert cfg.debug_capture_failures_enabled is True
         assert cfg.debug_capture_manual_enabled is True
+        assert cfg.debug_capture_aggressive_enabled is True
 
     def test_invalid_debug_capture_mode_falls_back_to_off(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HOME", str(tmp_path))
@@ -155,3 +160,17 @@ class TestDebugCaptureConfig:
 
         assert cfg.debug_capture_mode == "off"
         assert cfg.debug_capture_active is False
+
+    def test_invalid_debug_capture_profile_falls_back_to_normal(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("AUTOCOMPLETER_BETA_MODE", "1")
+        monkeypatch.setenv("AUTOCOMPLETER_PROXY_ENABLED", "1")
+        monkeypatch.setenv("AUTOCOMPLETER_PROXY_BASE_URL", "https://proxy.example/v1")
+        monkeypatch.setenv("AUTOCOMPLETER_PROXY_API_KEY", "proxy-key")
+        monkeypatch.setenv("AUTOCOMPLETER_DEBUG_CAPTURE_MODE", "both")
+        monkeypatch.setenv("AUTOCOMPLETER_DEBUG_CAPTURE_PROFILE", "loud")
+
+        cfg = load_config()
+
+        assert cfg.debug_capture_profile == "normal"
+        assert cfg.debug_capture_aggressive_enabled is False

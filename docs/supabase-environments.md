@@ -122,10 +122,15 @@ make backend-mint-install-dev INSTALL_LABEL=henry-local
 AUTOCOMPLETER_PROXY_BASE_URL=http://127.0.0.1:8000/v1
 AUTOCOMPLETER_TELEMETRY_URL=http://127.0.0.1:8000/v1/telemetry/events
 AUTOCOMPLETER_DEBUG_CAPTURE_MODE=both
+AUTOCOMPLETER_DEBUG_CAPTURE_PROFILE=aggressive
 ```
 
-6. Launch the desktop app, press `ctrl+shift+b`, and confirm one new
-   `manual_report` row lands in `beta_debug_artifacts`.
+6. Launch the desktop app, put the caret in a Chromium/Electron editor,
+   press `ctrl+space`, and confirm one new `focus_failure` row lands in
+   `beta_debug_artifacts` with `window_inventory` and `cdp_probe`.
+
+7. If you need a lighter manual snapshot too, press `ctrl+shift+b` and
+   confirm one new `manual_report` row lands in `beta_debug_artifacts`.
 
 ## Current Schema Boundary
 

@@ -33,7 +33,12 @@ from .config import Config, load_config
 from .context_store import ContextStore
 from .context_trail import ContextTrail
 from .conversation_extractors import get_extractor
-from .debug_capture import DebugArtifactClient, InMemoryLogBuffer
+from .cdp_injector import probe_editable_dom_state
+from .debug_capture import (
+    DEBUG_CAPTURE_PROFILE_AGGRESSIVE,
+    DebugArtifactClient,
+    InMemoryLogBuffer,
+)
 from .feedback import FeedbackContext, FeedbackReporter, build_payload, extract_url_domain
 from .help_overlay import HelpOverlay
 from .hotkey import HotkeyListener
@@ -381,7 +386,17 @@ class Autocompleter:
         feedback_payload: dict[str, object] | None = None,
         extra: dict[str, object] | None = None,
     ) -> dict[str, object]:
-        focus_debug = self._collect_focus_debug_info()
+        focus_debug_profile = self._resolve_debug_capture_profile(artifact_type)
+        focus_debug = self._collect_focus_debug_info(profile=focus_debug_profile)
+        if (
+            artifact_type == "focus_failure"
+            and focus_debug_profile == DEBUG_CAPTURE_PROFILE_AGGRESSIVE
+        ):
+            cdp_probe = self._collect_cdp_focus_probe(focus_debug)
+            if cdp_probe:
+                if not isinstance(focus_debug, dict):
+                    focus_debug = {}
+                focus_debug["cdp_probe"] = cdp_probe
         resolved_source_app = self._resolve_debug_source_app(
             source_app=source_app,
             focused=focused,
@@ -427,15 +442,64 @@ class Autocompleter:
             return []
         return list(handler.snapshot(limit=limit))
 
-    def _collect_focus_debug_info(self) -> dict[str, object]:
+    def _resolve_debug_capture_profile(self, artifact_type: str) -> str:
+        config = getattr(self, "config", None)
+        configured = getattr(config, "debug_capture_profile", "normal")
+        if (
+            artifact_type == "focus_failure"
+            and configured == DEBUG_CAPTURE_PROFILE_AGGRESSIVE
+        ):
+            return DEBUG_CAPTURE_PROFILE_AGGRESSIVE
+        return "normal"
+
+    def _collect_focus_debug_info(
+        self,
+        *,
+        profile: str = "normal",
+    ) -> dict[str, object]:
         observer = getattr(self, "observer", None)
         if observer is None or not hasattr(observer, "get_focus_debug_info"):
             return {}
         try:
-            return dict(observer.get_focus_debug_info())
+            return dict(observer.get_focus_debug_info(profile=profile))
+        except TypeError:
+            try:
+                return dict(observer.get_focus_debug_info())
+            except Exception:
+                logger.debug("Failed to collect focus debug info", exc_info=True)
+                return {}
         except Exception:
             logger.debug("Failed to collect focus debug info", exc_info=True)
             return {}
+
+    def _collect_cdp_focus_probe(
+        self,
+        focus_debug: dict[str, object] | None,
+    ) -> dict[str, object] | None:
+        if not isinstance(focus_debug, dict):
+            return None
+        frontmost = focus_debug.get("frontmost_app")
+        if not isinstance(frontmost, dict):
+            return None
+        app_name = frontmost.get("name")
+        app_pid = frontmost.get("pid")
+        if not isinstance(app_name, str) or not app_name.strip():
+            return None
+        if not isinstance(app_pid, int):
+            try:
+                app_pid = int(app_pid)
+            except (TypeError, ValueError):
+                app_pid = 0
+        try:
+            return probe_editable_dom_state(app_name, app_pid)
+        except Exception:
+            logger.debug("Failed to collect CDP focus probe", exc_info=True)
+            return {
+                "app_name": app_name,
+                "app_pid": app_pid,
+                "status": "connect_failed",
+                "reason": "probe_exception",
+            }
 
     def _resolve_debug_invocation_id(self, invocation_id: str | None = None) -> str | None:
         if invocation_id:

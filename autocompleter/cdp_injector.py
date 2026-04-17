@@ -79,6 +79,79 @@ _CHROMIUM_PATTERNS: list[re.Pattern[str]] = [
 _COMMON_DEBUG_PORTS: list[int] = [9222, 9229, 9223, 9224]
 
 
+def _build_dom_probe_expression(
+    *,
+    candidate_limit: int = 8,
+    preview_chars: int = 240,
+) -> str:
+    return f"""
+(() => {{
+  const CANDIDATE_LIMIT = {candidate_limit};
+  const PREVIEW_CHARS = {preview_chars};
+
+  function textValue(el) {{
+    if (!el) return "";
+    if (typeof el.value === "string") return el.value;
+    if (el.isContentEditable) {{
+      if (typeof el.innerText === "string" && el.innerText) return el.innerText;
+      if (typeof el.textContent === "string") return el.textContent;
+    }}
+    return "";
+  }}
+
+  function summarize(el) {{
+    if (!el) return null;
+    const getAttr = el.getAttribute ? (name => el.getAttribute(name) || "") : (() => "");
+    const value = textValue(el);
+    return {{
+      tag: (el.tagName || "").toLowerCase(),
+      role: getAttr("role"),
+      type: getAttr("type"),
+      contenteditable: !!el.isContentEditable,
+      contenteditable_attr: getAttr("contenteditable"),
+      placeholder: getAttr("placeholder"),
+      aria_label: getAttr("aria-label"),
+      id: typeof el.id === "string" ? el.id : "",
+      class_name: typeof el.className === "string" ? el.className.slice(0, 200) : "",
+      value_length: value.length,
+      value_preview: value.slice(0, PREVIEW_CHARS),
+    }};
+  }}
+
+  const selectors = [
+    "textarea",
+    "input:not([type])",
+    'input[type="text"]',
+    'input[type="search"]',
+    'input[type="email"]',
+    'input[type="url"]',
+    'input[type="tel"]',
+    'input[type="number"]',
+    "[contenteditable]",
+    'div[role="textbox"]'
+  ];
+
+  const seen = new Set();
+  const editableCandidates = [];
+  for (const selector of selectors) {{
+    for (const el of document.querySelectorAll(selector)) {{
+      if (!el || seen.has(el)) continue;
+      seen.add(el);
+      const summary = summarize(el);
+      if (summary) editableCandidates.push(summary);
+      if (editableCandidates.length >= CANDIDATE_LIMIT) break;
+    }}
+    if (editableCandidates.length >= CANDIDATE_LIMIT) break;
+  }}
+
+  return {{
+    active_element: summarize(document.activeElement),
+    editable_candidates: editableCandidates,
+  }};
+}})()
+""".strip()
+
+
 def is_chromium_app(app_name: str) -> bool:
     """Check if the given application name belongs to a Chromium-based app.
 
@@ -158,6 +231,81 @@ def _probe_debug_port(port: int) -> bool:
             return "Browser" in data or "webSocketDebuggerUrl" in data
     except Exception:
         return False
+
+
+def probe_editable_dom_state(
+    app_name: str,
+    app_pid: int,
+    *,
+    candidate_limit: int = 8,
+    preview_chars: int = 240,
+) -> Dict[str, Any]:
+    """Probe the active Chromium/Electron DOM for editable state."""
+    result: Dict[str, Any] = {
+        "app_name": app_name,
+        "app_pid": app_pid,
+    }
+    if not app_name or not is_chromium_app(app_name):
+        result["status"] = "no_debug_port"
+        result["reason"] = "non_chromium_app"
+        return result
+
+    port = find_debug_port(app_pid)
+    if port is None:
+        result["status"] = "no_debug_port"
+        return result
+
+    result["port"] = port
+    cdp = CDPConnection(port=port)
+    try:
+        targets = cdp.discover_targets()
+        result["discovered_target_count"] = len(targets)
+        target = cdp.find_active_target(targets)
+        if target is None:
+            result["status"] = "no_target"
+            return result
+
+        result["target_title"] = target.get("title", "")
+        result["target_url"] = target.get("url", "")
+        result["target_id"] = target.get("id", "")
+
+        if not cdp.connect_to_target(target):
+            result["status"] = "connect_failed"
+            return result
+
+        response = cdp.send_command(
+            "Runtime.evaluate",
+            {
+                "expression": _build_dom_probe_expression(
+                    candidate_limit=candidate_limit,
+                    preview_chars=preview_chars,
+                ),
+                "returnByValue": True,
+            },
+        )
+        if "error" in response:
+            result["status"] = "js_failed"
+            result["error"] = response["error"].get("message", "unknown")
+            return result
+
+        runtime_result = response.get("result", {})
+        if runtime_result.get("exceptionDetails"):
+            result["status"] = "js_failed"
+            result["error"] = runtime_result["exceptionDetails"].get("text", "exception")
+            return result
+
+        value = runtime_result.get("result", {}).get("value")
+        if not isinstance(value, dict):
+            result["status"] = "js_failed"
+            result["error"] = "missing_value"
+            return result
+
+        result["status"] = "success"
+        result["active_element"] = value.get("active_element")
+        result["editable_candidates"] = value.get("editable_candidates") or []
+        return result
+    finally:
+        cdp.close()
 
 
 class CDPConnection:
