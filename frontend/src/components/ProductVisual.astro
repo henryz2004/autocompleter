@@ -4,7 +4,7 @@
 
 <section class="visual">
   <div class="container">
-    <div class="scene">
+    <div class="scene" data-visual-scene>
       <div class="popup">
 
         <!-- Top toolbar -->
@@ -66,6 +66,27 @@
     </div>
   </div>
 </section>
+
+<script>
+  const scenes = document.querySelectorAll<HTMLElement>("[data-visual-scene]");
+  if (typeof IntersectionObserver !== "undefined") {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            observer.unobserve(entry.target);
+          }
+        }
+      },
+      { threshold: 0.2, rootMargin: "0px 0px -8% 0px" },
+    );
+    scenes.forEach((scene) => observer.observe(scene));
+  } else {
+    // Fallback: reveal immediately if IO is unavailable.
+    scenes.forEach((scene) => scene.classList.add("is-visible"));
+  }
+</script>
 
 <style>
   .visual {
@@ -239,11 +260,21 @@
     color: rgb(235, 235, 240);
     line-height: 1.35;
     align-items: flex-start;
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease;
   }
 
-  .overlay-item.is-active {
+  .overlay-item.is-active,
+  .overlay-item:hover {
     background: rgb(64, 115, 191);
     color: rgb(250, 250, 252);
+  }
+
+  /* When another item is hovered, the default-active row reverts to its
+     resting style so the highlight only appears under the cursor. */
+  .overlay-list:has(.overlay-item:hover) .overlay-item.is-active:not(:hover) {
+    background: transparent;
+    color: rgb(235, 235, 240);
   }
 
   .overlay-text {
@@ -260,8 +291,13 @@
     padding-top: 0.05rem;
   }
 
-  .overlay-item.is-active .rank {
+  .overlay-item.is-active .rank,
+  .overlay-item:hover .rank {
     color: rgba(255, 255, 255, 0.85);
+  }
+
+  .overlay-list:has(.overlay-item:hover) .overlay-item.is-active:not(:hover) .rank {
+    color: rgba(235, 235, 240, 0.55);
   }
 
   .overlay-hint {
@@ -287,6 +323,62 @@
       width: 100%;
       align-self: stretch;
       transform: none;
+    }
+  }
+
+  /* Scroll-triggered reveal. IntersectionObserver adds .is-visible to
+     .scene when it enters the viewport. Each element animates from
+     slightly-below + transparent to its final position, staggered. */
+  @media (prefers-reduced-motion: no-preference) {
+    .scene .popup,
+    .scene .human-bubble,
+    .scene .assistant-msg,
+    .scene .input-pane,
+    .scene .overlay,
+    .scene .overlay-item {
+      opacity: 0;
+      transform: translateY(14px);
+      transition:
+        opacity 520ms cubic-bezier(0.22, 1, 0.36, 1),
+        transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    /* Overlay keeps its horizontal offset while animating vertically. */
+    .scene .overlay {
+      transform: translateX(6%) translateY(14px);
+    }
+
+    .scene.is-visible .popup,
+    .scene.is-visible .human-bubble,
+    .scene.is-visible .assistant-msg,
+    .scene.is-visible .input-pane,
+    .scene.is-visible .overlay-item {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .scene.is-visible .overlay {
+      opacity: 1;
+      transform: translateX(6%) translateY(0);
+    }
+
+    .scene.is-visible .human-bubble     { transition-delay: 180ms; }
+    .scene.is-visible .assistant-msg    { transition-delay: 360ms; }
+    .scene.is-visible .input-pane       { transition-delay: 540ms; }
+    .scene.is-visible .overlay          { transition-delay: 720ms; }
+    .scene.is-visible .overlay-item:nth-child(1) { transition-delay: 880ms; }
+    .scene.is-visible .overlay-item:nth-child(2) { transition-delay: 980ms; }
+    .scene.is-visible .overlay-item:nth-child(3) { transition-delay: 1080ms; }
+  }
+
+  /* On mobile the overlay drops the horizontal offset, so the animated
+     transform needs to match. */
+  @media (prefers-reduced-motion: no-preference) and (max-width: 600px) {
+    .scene .overlay {
+      transform: translateY(14px);
+    }
+    .scene.is-visible .overlay {
+      transform: translateY(0);
     }
   }
 </style>
