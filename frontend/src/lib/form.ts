@@ -156,10 +156,12 @@ export function renderSuccess(
         if (!target || !target.textContent) return;
         try {
           await navigator.clipboard?.writeText(target.textContent);
-          const originalLabel = button.textContent ?? "Copy";
-          button.textContent = "Copied";
+          const originalAriaLabel = button.getAttribute("aria-label") ?? "Copy";
+          button.setAttribute("aria-label", "Copied");
+          button.dataset.copied = "true";
           setTimeout(() => {
-            button.textContent = originalLabel;
+            button.setAttribute("aria-label", originalAriaLabel);
+            delete button.dataset.copied;
           }, 1200);
         } catch {
           // Clipboard unavailable; no-op. The user can still select the text.
