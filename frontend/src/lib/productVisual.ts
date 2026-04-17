@@ -2,6 +2,8 @@ export interface InitProductVisualOptions {
   root: HTMLElement;
 }
 
+const TYPING_DELAY_MS = 16;
+
 export function initProductVisual({ root }: InitProductVisualOptions): void {
   const draftTarget = root.querySelector<HTMLElement>("[data-draft-target]");
   const overlayItems = Array.from(
@@ -12,6 +14,24 @@ export function initProductVisual({ root }: InitProductVisualOptions): void {
     return;
   }
 
+  let typingRun = 0;
+
+  const animateDraft = (suggestion: string) => {
+    typingRun += 1;
+    const currentRun = typingRun;
+    draftTarget.textContent = "";
+
+    for (let index = 0; index < suggestion.length; index += 1) {
+      window.setTimeout(() => {
+        if (typingRun !== currentRun) {
+          return;
+        }
+
+        draftTarget.textContent = suggestion.slice(0, index + 1);
+      }, TYPING_DELAY_MS * (index + 1));
+    }
+  };
+
   const setActiveSuggestion = (item: HTMLElement) => {
     const suggestion = item.dataset.suggestionText ?? item.textContent ?? "";
     overlayItems.forEach((candidate) => {
@@ -21,7 +41,7 @@ export function initProductVisual({ root }: InitProductVisualOptions): void {
         candidate === item ? "true" : "false",
       );
     });
-    draftTarget.textContent = suggestion;
+    animateDraft(suggestion);
   };
 
   overlayItems.forEach((item) => {
