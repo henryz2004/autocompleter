@@ -22,15 +22,16 @@ final class DiagnosticsModel: ObservableObject {
         .init(id: "tcc", title: "Accessibility permission granted", status: .pending, detail: ""),
         .init(id: "focus", title: "AXFocusedUIElement returns a non-nil element", status: .pending, detail: ""),
         .init(id: "tap", title: "CGEventTapCreate succeeds", status: .pending, detail: ""),
-        .init(id: "e2e", title: "Hotkey fires → captures focused element value", status: .pending, detail: "Waiting for you to press the hotkey in a text field..."),
+        // The end-to-end hotkey test is superseded by the Worker (Phase A)
+        // pane, which already observes the worker's real hotkey tap. Installing
+        // a *second* tap here would head-insert ahead of the worker's tap and
+        // consume ctrl+space before the worker saw it — so that check is gone.
     ]
 
     @Published var hotkeyString: String = "ctrl+space"
     /// Redacted JSON of the last hotkey-fired snapshot. Safe to show in the
     /// UI and to copy to the pasteboard — the raw AXValue is NOT included.
     @Published var lastCaptureRedactedJSON: String = ""
-
-    private var hotkeyTap: HotkeyTap?
 
     // MARK: - Check #1: accessibility permission
 
@@ -70,72 +71,23 @@ final class DiagnosticsModel: ObservableObject {
             : "CGEvent.tapCreate returned nil. Usually indicates missing accessibility permission.")
     }
 
-    // MARK: - Check #4: end-to-end hotkey capture
-
-    func armHotkeyCapture() {
-        // Tear down any previous tap first.
-        hotkeyTap?.stop()
-        hotkeyTap = nil
-
-        let hk: HotkeyTap.Hotkey
-        do {
-            hk = try HotkeyTap.Hotkey.parse(hotkeyString)
-        } catch {
-            update("e2e", .fail, "Could not parse hotkey '\(hotkeyString)': \(error)")
-            return
-        }
-
-        let tap = HotkeyTap(hotkey: hk)
-        tap.onFire = { [weak self] in
-            self?.handleHotkeyFire()
-        }
-        tap.onTapCreateFailed = { [weak self] in
-            self?.update("e2e", .fail, "CGEvent.tapCreate failed inside the background thread. Usually means accessibility permission is missing or was just revoked — re-run the permission check.")
-        }
-        tap.start()
-        hotkeyTap = tap
-
-        update("e2e", .pending, "Armed. Focus a text field in any app and press \(hotkeyString).")
-    }
-
-    private func handleHotkeyFire() {
-        do {
-            let snap = try AXProbe.snapshotFocusedElement()
-            let redacted = RedactedFocusedElementSnapshot(from: snap)
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            if let data = try? encoder.encode(redacted),
-               let s = String(data: data, encoding: .utf8) {
-                lastCaptureRedactedJSON = s
-            }
-
-            // v0.1 success criterion: we actually got something back. A
-            // non-nil insertion_point OR non-empty value (including via
-            // child-text fallback) is enough to prove AX is working.
-            let gotSomething = snap.insertionPoint != nil || snap.valueLength > 0
-            if !gotSomething {
-                update("e2e", .fail, "Hotkey fired, but AXValue was empty and no insertion point could be read. This is the macOS 15 failure we're trying to reproduce.")
-            } else {
-                var detail = "Captured \(snap.valueLength) chars from \(snap.appName) (\(snap.role))."
-                if snap.valueFromChildText {
-                    detail += " Recovered via child-text fallback (Electron/Chromium)."
-                }
-                detail += " See 'Last capture' for the redacted JSON."
-                update("e2e", .pass, detail)
-            }
-        } catch {
-            update("e2e", .fail, "Hotkey fired but capture failed: \(error)")
-        }
-    }
-
     // MARK: - Report
 
-    func diagnosticReportJSON() -> String {
+    struct WorkerReport: Codable {
+        var alive: Bool
+        var exitedAbnormally: Bool
+        var lastTriggerSeq: Int
+        var lastInjectSeq: Int
+        var logTail: [String]
+    }
+
+    func diagnosticReportJSON(worker: WorkerReport? = nil) -> String {
         struct Report: Codable {
             var checks: [CheckResult]
             var osVersion: String
             var hotkey: String
             var lastCaptureRedacted: String
+            var worker: WorkerReport?
             var note: String
         }
         let report = Report(
@@ -143,6 +95,7 @@ final class DiagnosticsModel: ObservableObject {
             osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
             hotkey: hotkeyString,
             lastCaptureRedacted: lastCaptureRedactedJSON,
+            worker: worker,
             note: "Raw AXValue is redacted. Only length + first-character preview is included."
         )
         let encoder = JSONEncoder()
@@ -151,10 +104,10 @@ final class DiagnosticsModel: ObservableObject {
         return String(data: data, encoding: .utf8) ?? "{}"
     }
 
-    func copyReportToPasteboard() {
+    func copyReportToPasteboard(worker: WorkerReport? = nil) {
         let pb = NSPasteboard.general
         pb.clearContents()
-        pb.setString(diagnosticReportJSON(), forType: .string)
+        pb.setString(diagnosticReportJSON(worker: worker), forType: .string)
     }
 
     // MARK: - helpers
@@ -170,6 +123,11 @@ final class DiagnosticsModel: ObservableObject {
 
 struct DiagnosticsView: View {
     @StateObject var model = DiagnosticsModel()
+    /// Shared worker-status model owned by `AppDelegate`. Must be injected at
+    /// the call site — a default value closure here caused SwiftUI to silently
+    /// bind to a detached fresh model on re-init, leaving the pane stuck on
+    /// "stopped" even though the worker was alive.
+    @ObservedObject var workerStatus: WorkerStatusModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -208,9 +166,6 @@ struct DiagnosticsView: View {
                 Button("Run tap-creation check") {
                     model.runTapCreationCheck()
                 }
-                Button("Arm hotkey capture") {
-                    model.armHotkeyCapture()
-                }
             }
 
             HStack {
@@ -218,14 +173,20 @@ struct DiagnosticsView: View {
                     model.runTCCCheck(prompt: true)
                     model.runFocusCheck()
                     model.runTapCreationCheck()
-                    model.armHotkeyCapture()
                 }
                 .keyboardShortcut(.defaultAction)
 
                 Spacer()
 
                 Button("Copy diagnostic report") {
-                    model.copyReportToPasteboard()
+                    let report = DiagnosticsModel.WorkerReport(
+                        alive: workerStatus.workerAlive,
+                        exitedAbnormally: workerStatus.workerExitedAbnormally,
+                        lastTriggerSeq: workerStatus.lastTriggerSeq,
+                        lastInjectSeq: workerStatus.lastInjectSeq,
+                        logTail: workerStatus.lines
+                    )
+                    model.copyReportToPasteboard(worker: report)
                 }
             }
 
@@ -240,9 +201,48 @@ struct DiagnosticsView: View {
                     .frame(maxHeight: 180)
                 }
             }
+
+            WorkerPane(status: workerStatus)
         }
         .padding(20)
         .frame(width: 620)
+    }
+}
+
+/// Phase A worker status pane. Tails every IPC event so dogfood debugging
+/// doesn't require opening a log file.
+private struct WorkerPane: View {
+    @ObservedObject var status: WorkerStatusModel
+
+    var body: some View {
+        GroupBox(label: Text("Worker (Phase A)")) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 12) {
+                    Label(
+                        status.workerAlive ? "running" : "stopped",
+                        systemImage: status.workerAlive ? "circle.fill" : "circle"
+                    )
+                    .foregroundStyle(status.workerAlive ? .green : .secondary)
+                    Text("triggers: \(status.lastTriggerSeq)")
+                    Text("injects: \(status.lastInjectSeq)")
+                    if status.workerExitedAbnormally {
+                        Text("(last exit was abnormal)")
+                            .foregroundStyle(.red)
+                    }
+                    Spacer()
+                }
+                .font(.caption)
+
+                ScrollView {
+                    Text(status.lines.joined(separator: "\n"))
+                        .font(.system(.caption2, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 180)
+            }
+            .padding(6)
+        }
     }
 }
 

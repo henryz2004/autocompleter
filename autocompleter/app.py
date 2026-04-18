@@ -3114,6 +3114,15 @@ def main():
         action="store_true",
         help="Run memory consolidation (FAISS → memory.md) and exit.",
     )
+    parser.add_argument(
+        "--worker-mode",
+        action="store_true",
+        help=(
+            "Run as a stdin/stdout JSON-lines worker for the Swift bootstrap "
+            "app. No hotkey, no observer loop, no LLM in Phase A. See "
+            "autocompleter/worker.py for the protocol."
+        ),
+    )
     args = parser.parse_args()
 
     log_fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -3141,6 +3150,13 @@ def main():
 
     if args.log_file and not args.quiet:
         print(f"Logging to {args.log_file} (file=DEBUG, console={args.log_level})")
+
+    # --worker-mode: short-circuit before touching config, AX, or Autocompleter.
+    # The Phase A worker is self-contained (stdin → reverse-echo → stdout) and
+    # must not depend on macOS AX APIs or the full app lifecycle.
+    if args.worker_mode:
+        from .worker import run_worker_loop
+        sys.exit(run_worker_loop())
 
     config = load_config()
 
