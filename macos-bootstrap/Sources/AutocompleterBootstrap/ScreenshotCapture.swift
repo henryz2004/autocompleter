@@ -85,14 +85,46 @@ final class ScreenshotCapture {
         )
     }
 
-    /// Explicit capture triggered by hotkey (ctrl+shift+c). Captures the
-    /// current frontmost window immediately — no debounce, no dedup.
+    /// Explicit capture triggered by hotkey (ctrl+shift+c). If the user
+    /// has text selected, captures the selection directly (perfect fidelity,
+    /// no OCR needed). Otherwise falls back to screenshot + OCR.
     func captureNow() {
         guard let app = NSWorkspace.shared.frontmostApplication else { return }
         let pid = app.processIdentifier
         let appName = app.localizedName ?? "Unknown"
         let bundleID = app.bundleIdentifier
-        onLog?("capture: manual → \(appName)")
+
+        // Check for selected text first.
+        if let selectedText = Self.readSelectedText(pid: pid), !selectedText.isEmpty {
+            onLog?("capture: manual (selection) → \(appName) — \(selectedText.count) chars")
+            let title = Self.readWindowTitle(pid: pid)
+            let url = Self.readURL(pid: pid)
+
+            let screenshotDir = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(".autocompleter/screenshots")
+            try? FileManager.default.createDirectory(at: screenshotDir, withIntermediateDirectories: true)
+            // No screenshot file for selection captures — use a placeholder path.
+            let placeholder = screenshotDir.appendingPathComponent("selection-\(Int(Date().timeIntervalSince1970 * 1000)).txt")
+            try? selectedText.write(to: placeholder, atomically: true, encoding: .utf8)
+
+            let entry = CaptureEntry(
+                id: UUID(),
+                timestamp: Date(),
+                trigger: "manual",
+                appName: appName,
+                bundleID: bundleID,
+                windowTitle: title,
+                url: url,
+                screenshotPath: placeholder,
+                ocrText: selectedText,
+                ocrLatencyMs: 0
+            )
+            store.append(entry)
+            return
+        }
+
+        // No selection — fall back to screenshot + OCR.
+        onLog?("capture: manual (screenshot) → \(appName)")
         performCapture(
             trigger: "manual",
             pid: pid,
@@ -100,6 +132,22 @@ final class ScreenshotCapture {
             bundleID: bundleID,
             skipDedup: true
         )
+    }
+
+    /// Read AXSelectedText from the focused element.
+    private static func readSelectedText(pid: pid_t) -> String? {
+        let app = AXUIElementCreateApplication(pid)
+        var focRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            app, kAXFocusedUIElementAttribute as CFString, &focRef
+        ) == .success, let focRef,
+              CFGetTypeID(focRef) == AXUIElementGetTypeID() else { return nil }
+        let el = focRef as! AXUIElement
+        var selRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            el, kAXSelectedTextAttribute as CFString, &selRef
+        ) == .success else { return nil }
+        return selRef as? String
     }
 
     // MARK: - Debounce + dedup

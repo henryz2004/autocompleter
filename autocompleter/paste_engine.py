@@ -109,8 +109,8 @@ def _build_user_message(
         parts.append(f"---\n{header}\n{ocr[:3000]}\n---")
 
     parts.append(
-        '\nProduce 3 suggestions for what to paste in this field, ranked by '
-        'relevance. Return as JSON: [{"text": "...", "rank": 1}, ...]'
+        '\nProduce the single best text to paste in this field. '
+        'Return as JSON: [{"text": "...", "rank": 1}]'
     )
     return "\n".join(parts)
 
