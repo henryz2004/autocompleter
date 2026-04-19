@@ -24,6 +24,10 @@ final class WorkerCoordinator {
     /// Optional consumer for status + log events, used by the diagnostics UI.
     var onStatus: ((Status) -> Void)?
 
+    /// Experimental: delivered when Python replies to a `trajectory_query`.
+    /// Lives on the `trajectory-intent-probe` branch.
+    var onTrajectoryGuess: ((IPCMessage.TrajectoryGuess) -> Void)?
+
     enum Status {
         case workerLaunched(pid: Int32)
         case workerExited(status: Int32, intentional: Bool)
@@ -83,6 +87,17 @@ final class WorkerCoordinator {
 
     // MARK: - Hotkey → Trigger
 
+    // MARK: - Trajectory intent probe
+
+    /// Ship the current trajectory ring buffer to Python. Returns the seq
+    /// we used so the caller can correlate replies.
+    func sendTrajectoryQuery(snapshots: [IPCMessage.TrajectorySnapshotPayload]) -> Int {
+        let seq = worker.nextSeq()
+        let query = IPCMessage.TrajectoryQuery(seq: seq, snapshots: snapshots)
+        worker.send(query)
+        return seq
+    }
+
     private func handleHotkeyFire() {
         let seq = worker.nextSeq()
         guard let trigger = TriggerBuilder.build(seq: seq) else {
@@ -104,6 +119,8 @@ final class WorkerCoordinator {
             onStatus?(.workerLog(level: log.level, message: log.message))
         case let err as IPCMessage.ErrorMessage:
             onStatus?(.workerError(message: err.message))
+        case let guess as IPCMessage.TrajectoryGuess:
+            onTrajectoryGuess?(guess)
         case _ as IPCMessage.Pong:
             // No-op: pong is a liveness signal. If we start sending pings we
             // can measure round-trip here.

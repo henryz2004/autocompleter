@@ -131,6 +131,47 @@ enum IPCMessage {
         var type: String = "ping"
     }
 
+    /// Experimental: ship a ring-buffer trajectory to Python and ask the
+    /// fast LLM what the user is doing. Python replies with a
+    /// `TrajectoryGuess`. Fire-and-forget if the worker is busy.
+    struct TrajectoryQuery: Codable {
+        let seq: Int
+        var type: String = "trajectory_query"
+        /// Chronological list of recent (app, window, focus) snapshots. Shape
+        /// matches `TrajectoryStack.Snapshot`.
+        let snapshots: [TrajectorySnapshotPayload]
+    }
+
+    struct TrajectorySnapshotPayload: Codable {
+        let timestamp: Double
+        let lastSeen: Double
+        let trigger: String
+        let appName: String
+        let appPID: Int32
+        let bundleID: String?
+        let windowTitle: String?
+        let url: String?
+        let focusedRole: String?
+        let focusedValuePreview: String?
+        let focusedValueLength: Int?
+        let contentSimilarity: Double?
+
+        enum CodingKeys: String, CodingKey {
+            case timestamp
+            case lastSeen = "last_seen"
+            case trigger
+            case appName = "app_name"
+            case appPID = "app_pid"
+            case bundleID = "bundle_id"
+            case windowTitle = "window_title"
+            case url
+            case focusedRole = "focused_role"
+            case focusedValuePreview = "focused_value_preview"
+            case focusedValueLength = "focused_value_length"
+            case contentSimilarity = "content_similarity"
+        }
+    }
+
     // MARK: - Python → Swift
 
     /// Discriminator-first lightweight envelope used for initial decoding.
@@ -188,6 +229,37 @@ enum IPCMessage {
             case type
             case message
             case inReplyTo = "in_reply_to"
+        }
+    }
+
+    /// Python's answer to a `TrajectoryQuery`. The experiment cares about
+    /// both the sentence and the latency, so model/latency live in-message
+    /// rather than in a side-channel log.
+    struct TrajectoryGuess: Codable {
+        let seq: Int
+        let type: String           // "trajectory_guess"
+        let inReplyTo: Int?
+        /// Free-form English sentence: "You're drafting a Marketplace listing
+        /// for a pair of Sony headphones."
+        let intentSentence: String
+        /// Self-reported 0..1 confidence. The model isn't calibrated; treat
+        /// this as a rough tie-break signal rather than ground truth.
+        let confidence: Double?
+        /// Which model produced the guess — useful for offline eval when we
+        /// swap providers.
+        let modelUsed: String?
+        /// Wall-clock time from query receipt to response emission on the
+        /// Python side, milliseconds.
+        let latencyMs: Double?
+
+        enum CodingKeys: String, CodingKey {
+            case seq
+            case type
+            case inReplyTo = "in_reply_to"
+            case intentSentence = "intent_sentence"
+            case confidence
+            case modelUsed = "model_used"
+            case latencyMs = "latency_ms"
         }
     }
 }
@@ -257,6 +329,8 @@ enum IPCCodec {
             return try decoder.decode(IPCMessage.Pong.self, from: line)
         case "error":
             return try decoder.decode(IPCMessage.ErrorMessage.self, from: line)
+        case "trajectory_guess":
+            return try decoder.decode(IPCMessage.TrajectoryGuess.self, from: line)
         default:
             throw IPCDecodeError.unexpectedType(envelope.type)
         }

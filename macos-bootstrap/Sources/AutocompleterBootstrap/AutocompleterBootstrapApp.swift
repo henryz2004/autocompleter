@@ -20,12 +20,22 @@ struct AutocompleterBootstrapApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var diagnosticsWindow: NSWindow?
+    private var trajectoryInspectorWindow: NSWindow?
+    private var trajectoryInspectorModel: TrajectoryInspectorModel?
     /// Phase A substrate: subprocess worker + hotkey → inject round-trip.
     /// Lives alongside the diagnostic panel — diagnostics still work.
     private(set) var workerCoordinator: WorkerCoordinator?
     /// Keeps Chromium-family apps' AX engines awake on macOS 15. See
     /// ChromiumWaker.swift for the why.
     private var chromiumWaker: ChromiumWaker?
+    /// Experimental trajectory capture — ring buffer of window / focus
+    /// events feeding the intent-probe spike. Lives on the
+    /// `trajectory-intent-probe` branch; not part of the core Phase A path.
+    private(set) var trajectoryStack: TrajectoryStack?
+    /// Experimental floating panel that shows the most recent intent guess.
+    private var intentOverlay: IntentOverlay?
+    /// Glue between stack → worker query → overlay.
+    private var intentController: TrajectoryIntentController?
     /// Published state for the diagnostics UI to observe.
     let workerStatusModel = WorkerStatusModel()
 
@@ -37,6 +47,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installStatusItem()
         startWorkerIfConfigured()
         startChromiumWaker()
+        startTrajectoryStack()
+        startTrajectoryIntent()
         // Show diagnostics immediately on first launch so the user knows
         // where to go.
         showDiagnostics()
@@ -45,6 +57,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         workerCoordinator?.stop()
         chromiumWaker?.stop()
+        trajectoryStack?.stop()
+        intentController?.stop()
+    }
+
+    private func startTrajectoryIntent() {
+        guard let coord = workerCoordinator, let stack = trajectoryStack else {
+            return
+        }
+        let overlay = IntentOverlay()
+        let controller = TrajectoryIntentController(
+            coordinator: coord,
+            stack: stack,
+            overlay: overlay
+        )
+        controller.onLog = { [weak self] line in
+            self?.workerStatusModel.append(line)
+        }
+        intentOverlay = overlay
+        intentController = controller
+        controller.start()
+    }
+
+    private func startTrajectoryStack() {
+        let stack = TrajectoryStack()
+        stack.addObserver { [weak self] change in
+            switch change {
+            case .appended(let snap):
+                let title = snap.windowTitle ?? "(no title)"
+                let role = snap.focusedRole ?? "-"
+                self?.workerStatusModel.append(
+                    "traj[\(snap.trigger)] \(snap.appName) — \(title) role=\(role)"
+                )
+            case .updated(let snap):
+                let dwell = Int(snap.lastSeen - snap.timestamp)
+                self?.workerStatusModel.append(
+                    "traj[dwell] \(snap.appName) — \(dwell)s"
+                )
+            }
+        }
+        stack.start()
+        trajectoryStack = stack
     }
 
     private func startChromiumWaker() {
@@ -90,17 +143,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(showDiagnostics),
             keyEquivalent: ""
         ))
+        menu.addItem(NSMenuItem(
+            title: "Open Trajectory Inspector…",
+            action: #selector(showTrajectoryInspector),
+            keyEquivalent: ""
+        ))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(
             title: "Quit",
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         ))
-        for mi in menu.items where mi.action == #selector(showDiagnostics) {
+        for mi in menu.items where mi.action == #selector(showDiagnostics)
+            || mi.action == #selector(showTrajectoryInspector) {
             mi.target = self
         }
         item.menu = menu
         statusItem = item
+    }
+
+    @objc func showTrajectoryInspector() {
+        if let window = trajectoryInspectorWindow {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        if trajectoryInspectorModel == nil, let stack = trajectoryStack {
+            trajectoryInspectorModel = TrajectoryInspectorModel(
+                stack: stack,
+                intentController: intentController
+            )
+        }
+        guard let model = trajectoryInspectorModel else { return }
+
+        let hosting = NSHostingController(
+            rootView: TrajectoryInspectorView(model: model)
+        )
+        let window = NSWindow(contentViewController: hosting)
+        window.title = "Trajectory Inspector"
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.isReleasedWhenClosed = false
+        window.setContentSize(NSSize(width: 780, height: 600))
+        window.minSize = NSSize(width: 600, height: 400)
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        trajectoryInspectorWindow = window
     }
 
     @objc func showDiagnostics() {
