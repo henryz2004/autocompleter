@@ -148,9 +148,9 @@ final class WorkerCoordinator {
             onStatus?(.triggerFailed(reason: "No capture store available"))
             return
         }
-        let entries = store.entries
-        guard !entries.isEmpty else {
-            onStatus?(.triggerFailed(reason: "No captures available for paste"))
+        let manualEntries = store.manualEntriesForPaste
+        guard !manualEntries.isEmpty else {
+            onStatus?(.triggerFailed(reason: "No manual captures — press ctrl+shift+c first"))
             return
         }
 
@@ -199,14 +199,16 @@ final class WorkerCoordinator {
             }
         }
 
-        // Build capture payloads — last 10 entries, most recent first.
-        let captures = entries.suffix(10).reversed().map { entry in
+        // Build capture payloads from manual captures, sorted by
+        // least-used first (soft-consume), max 10.
+        let captures = manualEntries.prefix(10).map { entry in
             IPCMessage.CapturePayload(
                 timestamp: entry.timestamp.timeIntervalSince1970,
                 appName: entry.appName,
                 windowTitle: entry.windowTitle,
                 url: entry.url,
-                ocrText: entry.ocrText
+                ocrText: entry.ocrText,
+                timesUsed: entry.timesUsed
             )
         }
 

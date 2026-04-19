@@ -195,11 +195,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     strategy: .clipboard,
                     requireMatchingPID: coord.lastTriggerPID
                 )
-                self.workerStatusModel.append(
-                    outcome.ok
-                        ? "paste: injected '\(top.text.prefix(60))'"
-                        : "paste: inject failed — \(outcome.reason ?? "unknown")"
-                )
+                if outcome.ok {
+                    self.workerStatusModel.append(
+                        "paste: injected '\(top.text.prefix(60))'"
+                    )
+                    // Soft-consume: mark the source capture as used.
+                    self.captureStore.markUsed(pastedText: top.text)
+                } else {
+                    self.workerStatusModel.append(
+                        "paste: inject failed — \(outcome.reason ?? "unknown")"
+                    )
+                }
             }
         }
         workerCoordinator = coord

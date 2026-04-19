@@ -88,18 +88,24 @@ def _build_user_message(
         )
         parts.append(f"```\n{caret_context_ocr[:2000]}\n```")
 
-    parts.append("\nContent they recently viewed:")
+    parts.append(
+        "\nManually captured content (ordered by relevance — prefer "
+        "earlier entries. Entries marked [USED Nx] have already been "
+        "pasted and should be deprioritized):"
+    )
     for cap in captures:
         cap_app = cap.get("app_name", "?")
         cap_title = cap.get("window_title", "")
         cap_url = cap.get("url", "")
         ocr = cap.get("ocr_text", "")
+        times_used = cap.get("times_used", 0)
+        used_tag = f" [USED {times_used}x]" if times_used > 0 else ""
         header = f"[{cap_app}"
         if cap_title:
             header += f' - "{cap_title}"'
         if cap_url:
             header += f" | {cap_url}"
-        header += "]"
+        header += f"]{used_tag}"
         parts.append(f"---\n{header}\n{ocr[:3000]}\n---")
 
     parts.append(

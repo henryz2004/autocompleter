@@ -272,6 +272,7 @@ enum IPCMessage {
         let windowTitle: String?
         let url: String?
         let ocrText: String
+        let timesUsed: Int
 
         enum CodingKeys: String, CodingKey {
             case timestamp
@@ -279,6 +280,7 @@ enum IPCMessage {
             case windowTitle = "window_title"
             case url
             case ocrText = "ocr_text"
+            case timesUsed = "times_used"
         }
     }
 
