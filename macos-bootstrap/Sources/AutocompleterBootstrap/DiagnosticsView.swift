@@ -190,6 +190,17 @@ struct DiagnosticsView: View {
                 }
             }
 
+            Divider()
+
+            HStack(spacing: 8) {
+                Button("Trajectory Inspector…") {
+                    NSApp.sendAction(#selector(AppDelegate.showTrajectoryInspector), to: nil, from: nil)
+                }
+                Button("Capture Inspector…") {
+                    NSApp.sendAction(#selector(AppDelegate.showCaptureInspector), to: nil, from: nil)
+                }
+            }
+
             if !model.lastCaptureRedactedJSON.isEmpty {
                 GroupBox(label: Text("Last capture (redacted)")) {
                     ScrollView {

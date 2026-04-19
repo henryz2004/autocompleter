@@ -24,14 +24,14 @@ final class IntentOverlay {
     // Panel sizing constants. The panel pins to the top-right of the
     // visibleFrame and grows downward as the sentence gets longer, capped at
     // maxBodyHeight so a verbose model doesn't eat the screen.
-    private let panelWidth: CGFloat = 320
+    private let panelWidth: CGFloat = 420
     private let horizPad: CGFloat = 12
     private let titleAreaHeight: CGFloat = 18  // top "intent" header + gap
     private let metaAreaHeight: CGFloat = 18   // bottom meta row + gap
     private let bodyTopPadding: CGFloat = 4
     private let bodyBottomPadding: CGFloat = 4
     private let minBodyHeight: CGFloat = 32
-    private let maxBodyHeight: CGFloat = 240
+    private let maxBodyHeight: CGFloat = 500
 
     func show() {
         if panel == nil {

@@ -36,6 +36,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var intentOverlay: IntentOverlay?
     /// Glue between stack → worker query → overlay.
     private var intentController: TrajectoryIntentController?
+    /// Screenshot + OCR capture pipeline.
+    private var screenshotCapture: ScreenshotCapture?
+    /// Paste hotkey (ctrl+shift+v) — separate from autocomplete hotkey.
+    private var pasteHotkey: HotkeyTap?
+    /// Explicit capture hotkey (ctrl+shift+c) — "remember what I'm looking at."
+    private var captureHotkey: HotkeyTap?
+    private let captureStore = CaptureStore()
+    private var captureInspectorWindow: NSWindow?
     /// Published state for the diagnostics UI to observe.
     let workerStatusModel = WorkerStatusModel()
 
@@ -49,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startChromiumWaker()
         startTrajectoryStack()
         startTrajectoryIntent()
+        startScreenshotCapture()
         // Show diagnostics immediately on first launch so the user knows
         // where to go.
         showDiagnostics()
@@ -59,6 +68,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         chromiumWaker?.stop()
         trajectoryStack?.stop()
         intentController?.stop()
+        screenshotCapture?.stop()
+        pasteHotkey?.stop()
+        captureHotkey?.stop()
     }
 
     private func startTrajectoryIntent() {
@@ -79,8 +91,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.start()
     }
 
+    private func startScreenshotCapture() {
+        let capture = ScreenshotCapture(store: captureStore)
+        capture.onLog = { [weak self] line in
+            self?.workerStatusModel.append(line)
+        }
+        capture.start()
+        screenshotCapture = capture
+
+        // Piggyback on TrajectoryStack's AXObserver for title/window changes.
+        trajectoryStack?.addObserver { [weak capture] change in
+            switch change {
+            case .appended(let snap):
+                if snap.trigger == "title_change" || snap.trigger == "focus_change" {
+                    capture?.onAXEvent(trigger: snap.trigger)
+                }
+            case .updated:
+                break
+            }
+        }
+    }
+
     private func startTrajectoryStack() {
         let stack = TrajectoryStack()
+        stack.onProfile = { [weak self] line in
+            self?.workerStatusModel.append(line)
+        }
         stack.addObserver { [weak self] change in
             switch change {
             case .appended(let snap):
@@ -127,8 +163,73 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         coord.onStatus = { [weak self] status in
             self?.workerStatusModel.apply(status)
         }
+        coord.captureStore = captureStore
+        coord.onPasteSuggestions = { [weak self] paste in
+            guard let self else { return }
+            if paste.suggestions.isEmpty {
+                self.workerStatusModel.append("paste: no suggestions returned")
+                self.intentOverlay?.updateStatus("(no paste suggestions)")
+                return
+            }
+            // Show all suggestions in the overlay as a numbered list.
+            let display = paste.suggestions
+                .sorted { $0.rank < $1.rank }
+                .enumerated()
+                .map { "\($0.offset + 1). \($0.element.text)" }
+                .joined(separator: "\n")
+            self.intentOverlay?.update(
+                sentence: display,
+                latencyMs: nil,
+                model: "paste"
+            )
+            // Log each suggestion.
+            for s in paste.suggestions {
+                self.workerStatusModel.append(
+                    "paste[\(s.rank)]: \(s.text)"
+                )
+            }
+            // Auto-inject the top-ranked suggestion for POC.
+            if let top = paste.suggestions.sorted(by: { $0.rank < $1.rank }).first {
+                let outcome = Injector.inject(
+                    text: top.text,
+                    strategy: .clipboard,
+                    requireMatchingPID: coord.lastTriggerPID
+                )
+                self.workerStatusModel.append(
+                    outcome.ok
+                        ? "paste: injected '\(top.text.prefix(60))'"
+                        : "paste: inject failed — \(outcome.reason ?? "unknown")"
+                )
+            }
+        }
         workerCoordinator = coord
         coord.start()
+
+        // Paste hotkey — separate CGEvent tap.
+        do {
+            let pasteKey = try HotkeyTap.Hotkey.parse("ctrl+shift+v")
+            let tap = HotkeyTap(hotkey: pasteKey)
+            tap.onFire = { [weak coord] in
+                coord?.handlePasteHotkey()
+            }
+            tap.start()
+            pasteHotkey = tap
+        } catch {
+            workerStatusModel.append("Paste hotkey parse failed: \(error)")
+        }
+
+        // Capture hotkey — "remember what I'm looking at."
+        do {
+            let capKey = try HotkeyTap.Hotkey.parse("ctrl+shift+c")
+            let tap = HotkeyTap(hotkey: capKey)
+            tap.onFire = { [weak self] in
+                self?.screenshotCapture?.captureNow()
+            }
+            tap.start()
+            captureHotkey = tap
+        } catch {
+            workerStatusModel.append("Capture hotkey parse failed: \(error)")
+        }
     }
 
     private func installStatusItem() {
@@ -148,6 +249,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(showTrajectoryInspector),
             keyEquivalent: ""
         ))
+        menu.addItem(NSMenuItem(
+            title: "Open Capture Inspector…",
+            action: #selector(showCaptureInspector),
+            keyEquivalent: ""
+        ))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(
             title: "Quit",
@@ -155,7 +261,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: "q"
         ))
         for mi in menu.items where mi.action == #selector(showDiagnostics)
-            || mi.action == #selector(showTrajectoryInspector) {
+            || mi.action == #selector(showTrajectoryInspector)
+            || mi.action == #selector(showCaptureInspector) {
             mi.target = self
         }
         item.menu = menu
@@ -190,6 +297,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         trajectoryInspectorWindow = window
+    }
+
+    @objc func showCaptureInspector() {
+        if let window = captureInspectorWindow {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let hosting = NSHostingController(
+            rootView: CaptureInspectorView(store: captureStore)
+        )
+        let window = NSWindow(contentViewController: hosting)
+        window.title = "Capture Inspector"
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.isReleasedWhenClosed = false
+        window.setContentSize(NSSize(width: 900, height: 650))
+        window.minSize = NSSize(width: 700, height: 450)
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        captureInspectorWindow = window
     }
 
     @objc func showDiagnostics() {

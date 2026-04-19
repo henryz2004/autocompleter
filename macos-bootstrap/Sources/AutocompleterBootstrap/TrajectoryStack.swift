@@ -297,8 +297,12 @@ final class TrajectoryStack {
         return (jaccard, delta)
     }
 
+    /// Diagnostic log hook for AX profiling. Wired by AppDelegate.
+    var onProfile: ((String) -> Void)?
+
     private func buildSnapshot(trigger: String) -> Snapshot {
         let now = Date().timeIntervalSince1970
+        let t0 = CFAbsoluteTimeGetCurrent()
 
         let frontmost = NSWorkspace.shared.frontmostApplication
         let pid = frontmost?.processIdentifier ?? 0
@@ -311,26 +315,50 @@ final class TrajectoryStack {
         var focusedValuePreview: String? = nil
         var focusedValueLength: Int? = nil
 
+        var profileParts: [String] = []
+
         if pid > 0 {
             let appElement = AXUIElementCreateApplication(pid)
-            windowTitle = Self.readFocusedWindowTitle(appElement)
 
+            var t = CFAbsoluteTimeGetCurrent()
+            windowTitle = Self.readFocusedWindowTitle(appElement)
+            profileParts.append(String(format: "title=%.1fms", (CFAbsoluteTimeGetCurrent() - t) * 1000))
+
+            t = CFAbsoluteTimeGetCurrent()
             if let focused = Self.readFocusedElement(appElement) {
+                profileParts.append(String(format: "focus=%.1fms", (CFAbsoluteTimeGetCurrent() - t) * 1000))
+
                 focusedRole = Self.readStringAttribute(focused, kAXRoleAttribute as CFString)
+
+                t = CFAbsoluteTimeGetCurrent()
                 let value = Self.readStringAttribute(focused, kAXValueAttribute as CFString) ?? ""
-                // Prefer the visible portion of the text (what's on screen)
-                // over the full scrollback. Falls back to full value if the
-                // element doesn't support AXVisibleCharacterRange.
+                profileParts.append(String(format: "value=%.1fms(%d)", (CFAbsoluteTimeGetCurrent() - t) * 1000, value.count))
+
+                t = CFAbsoluteTimeGetCurrent()
                 let visibleText = Self.readVisibleText(focused, fullValue: value) ?? value
+                profileParts.append(String(format: "visible=%.1fms", (CFAbsoluteTimeGetCurrent() - t) * 1000))
+
                 focusedValueLength = visibleText.count
                 focusedValuePreview = Self.preview(of: visibleText, limit: previewCharLimit)
-                // Some apps expose a URL via the focused element (browsers often
-                // do via AXURL on the web-area element).
+
+                t = CFAbsoluteTimeGetCurrent()
                 url = Self.readURLAttribute(focused)
+                profileParts.append(String(format: "url=%.1fms", (CFAbsoluteTimeGetCurrent() - t) * 1000))
+            } else {
+                profileParts.append(String(format: "focus=%.1fms(nil)", (CFAbsoluteTimeGetCurrent() - t) * 1000))
             }
+
             if url == nil {
+                t = CFAbsoluteTimeGetCurrent()
                 url = Self.readURLFromFocusedWindow(appElement)
+                profileParts.append(String(format: "urlBFS=%.1fms", (CFAbsoluteTimeGetCurrent() - t) * 1000))
             }
+        }
+
+        let totalMs = (CFAbsoluteTimeGetCurrent() - t0) * 1000
+        if !profileParts.isEmpty {
+            onProfile?(String(format: "ax[%@] %@ total=%.1fms | %@",
+                              trigger, appName, totalMs, profileParts.joined(separator: " ")))
         }
 
         return Snapshot(

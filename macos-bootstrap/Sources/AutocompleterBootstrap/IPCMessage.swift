@@ -232,6 +232,76 @@ enum IPCMessage {
         }
     }
 
+    // MARK: - Intelligent paste
+
+    /// Swift → Python: user pressed paste hotkey. Carries the current
+    /// field context + recent OCR captures so Python can ask the LLM
+    /// for paste suggestions.
+    struct PasteTrigger: Codable {
+        let seq: Int
+        var type: String = "paste_trigger"
+        let timestamp: Double
+        let appName: String
+        let appPID: Int32
+        let windowTitle: String?
+        let focusedRole: String?
+        let focusedValue: String?
+        let focusedLabel: String?    // AXTitle / AXDescription / AXPlaceholderValue
+        /// OCR text from a small screenshot around the caret/focused element.
+        /// Includes bounding boxes. Helps the LLM identify which field the
+        /// user is in when AX labels are missing (common in web forms).
+        let caretContextOCR: String?
+        let recentCaptures: [CapturePayload]
+
+        enum CodingKeys: String, CodingKey {
+            case seq, type, timestamp
+            case appName = "app_name"
+            case appPID = "app_pid"
+            case windowTitle = "window_title"
+            case focusedRole = "focused_role"
+            case focusedValue = "focused_value"
+            case focusedLabel = "focused_label"
+            case caretContextOCR = "caret_context_ocr"
+            case recentCaptures = "recent_captures"
+        }
+    }
+
+    struct CapturePayload: Codable {
+        let timestamp: Double
+        let appName: String
+        let windowTitle: String?
+        let url: String?
+        let ocrText: String
+
+        enum CodingKeys: String, CodingKey {
+            case timestamp
+            case appName = "app_name"
+            case windowTitle = "window_title"
+            case url
+            case ocrText = "ocr_text"
+        }
+    }
+
+    /// Python → Swift: ranked paste suggestions from the LLM.
+    struct PasteSuggestions: Codable {
+        let seq: Int
+        let type: String  // "paste_suggestions"
+        let inReplyTo: Int
+        let suggestions: [PasteSuggestion]
+
+        enum CodingKeys: String, CodingKey {
+            case seq, type
+            case inReplyTo = "in_reply_to"
+            case suggestions
+        }
+    }
+
+    struct PasteSuggestion: Codable {
+        let text: String
+        let rank: Int
+        let source: String?
+    }
+
     /// Python's answer to a `TrajectoryQuery`. The experiment cares about
     /// both the sentence and the latency, so model/latency live in-message
     /// rather than in a side-channel log.
@@ -331,6 +401,8 @@ enum IPCCodec {
             return try decoder.decode(IPCMessage.ErrorMessage.self, from: line)
         case "trajectory_guess":
             return try decoder.decode(IPCMessage.TrajectoryGuess.self, from: line)
+        case "paste_suggestions":
+            return try decoder.decode(IPCMessage.PasteSuggestions.self, from: line)
         default:
             throw IPCDecodeError.unexpectedType(envelope.type)
         }

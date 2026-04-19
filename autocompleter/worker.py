@@ -160,6 +160,15 @@ def _log(state: WorkerState, level: str, message: str) -> None:
         "level": level,
         "message": message,
     })
+    # Also write to stderr so Swift tees it into the diagnostics log,
+    # and to a file so Claude can read it directly.
+    print(f"[{level}] {message}", file=sys.stderr, flush=True)
+    try:
+        log_path = Path.home() / ".autocompleter" / "worker.log"
+        with open(log_path, "a") as f:
+            f.write(f"[{level}] {message}\n")
+    except Exception:
+        pass
 
 
 def _error(state: WorkerState, message: str, in_reply_to: int | None) -> None:
@@ -268,6 +277,63 @@ def _handle_trajectory_query(state: WorkerState, msg: dict[str, Any]) -> None:
     t.start()
 
 
+def _handle_paste_trigger(state: WorkerState, msg: dict[str, Any]) -> None:
+    """Handle paste_trigger: call LLM with captures + field context, return suggestions."""
+    in_reply_to = int(msg.get("seq") or 0)
+    captures = msg.get("recent_captures") or []
+    if not captures:
+        _log(state, "warning", "paste_trigger: no captures provided")
+        return
+    caret_ocr = msg.get("caret_context_ocr")
+    _log(state, "info",
+         f"paste_trigger received seq={in_reply_to} captures={len(captures)} "
+         f"role={msg.get('focused_role')} label={msg.get('focused_label')} "
+         f"caretOCR={len(caret_ocr) if caret_ocr else 0}chars")
+
+    def run() -> None:
+        try:
+            from .paste_engine import generate_paste_suggestions
+
+            client, model, _ = state.get_intent_llm()
+            if client is None or model is None:
+                _log(state, "warning", "paste: LLM not configured (set GROQ_API_KEY)")
+                return
+            paste_start = time.perf_counter()
+            suggestions = generate_paste_suggestions(
+                app_name=msg.get("app_name", "Unknown"),
+                window_title=msg.get("window_title"),
+                focused_role=msg.get("focused_role"),
+                focused_value=msg.get("focused_value"),
+                focused_label=msg.get("focused_label"),
+                caret_context_ocr=msg.get("caret_context_ocr"),
+                captures=captures,
+                client=client,
+                model=model,
+            )
+            paste_ms = (time.perf_counter() - paste_start) * 1000.0
+            for s in suggestions:
+                _log(state, "info",
+                     f"paste suggestion[{s.rank}]: '{s.text[:100]}'")
+            _log(state, "info",
+                 f"paste: {len(suggestions)} suggestions in {paste_ms:.0f}ms (model={model})")
+            _emit({
+                "seq": state.next_seq(),
+                "type": "paste_suggestions",
+                "in_reply_to": in_reply_to,
+                "suggestions": [
+                    {"text": s.text, "rank": s.rank, "source": s.source}
+                    for s in suggestions
+                ],
+            })
+        except Exception as exc:  # noqa: BLE001
+            _error(state, f"paste handler crashed: {exc}", in_reply_to)
+            print(f"[worker] paste handler exception: {exc!r}",
+                  file=sys.stderr, flush=True)
+
+    t = threading.Thread(target=run, name="paste-engine", daemon=True)
+    t.start()
+
+
 def _dispatch(state: WorkerState, msg: dict[str, Any]) -> None:
     kind = msg.get("type")
     if kind == "trigger":
@@ -276,6 +342,8 @@ def _dispatch(state: WorkerState, msg: dict[str, Any]) -> None:
         _handle_ping(state, msg)
     elif kind == "trajectory_query":
         _handle_trajectory_query(state, msg)
+    elif kind == "paste_trigger":
+        _handle_paste_trigger(state, msg)
     elif kind == "inject_result":
         # Swift reporting whether the last inject succeeded. Phase A just logs.
         ok = msg.get("ok")

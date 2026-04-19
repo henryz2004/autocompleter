@@ -28,6 +28,12 @@ final class WorkerCoordinator {
     /// Lives on the `trajectory-intent-probe` branch.
     var onTrajectoryGuess: ((IPCMessage.TrajectoryGuess) -> Void)?
 
+    /// Delivered when Python replies to a `paste_trigger` with suggestions.
+    var onPasteSuggestions: ((IPCMessage.PasteSuggestions) -> Void)?
+
+    /// Reference to capture store for building paste triggers.
+    weak var captureStore: CaptureStore?
+
     enum Status {
         case workerLaunched(pid: Int32)
         case workerExited(status: Int32, intentional: Bool)
@@ -121,12 +127,118 @@ final class WorkerCoordinator {
             onStatus?(.workerError(message: err.message))
         case let guess as IPCMessage.TrajectoryGuess:
             onTrajectoryGuess?(guess)
+        case let paste as IPCMessage.PasteSuggestions:
+            onPasteSuggestions?(paste)
         case _ as IPCMessage.Pong:
             // No-op: pong is a liveness signal. If we start sending pings we
             // can measure round-trip here.
             break
         default:
             onStatus?(.workerError(message: "unhandled inbound: \(type(of: message))"))
+        }
+    }
+
+    // MARK: - Paste hotkey
+
+    /// Called by the paste HotkeyTap. Builds a paste_trigger from the
+    /// current focused element + recent capture store entries and sends
+    /// to Python.
+    func handlePasteHotkey() {
+        guard let store = captureStore else {
+            onStatus?(.triggerFailed(reason: "No capture store available"))
+            return
+        }
+        let entries = store.entries
+        guard !entries.isEmpty else {
+            onStatus?(.triggerFailed(reason: "No captures available for paste"))
+            return
+        }
+
+        // Capture current focused element metadata.
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        let appName = frontmost?.localizedName ?? "Unknown"
+        let appPID = frontmost?.processIdentifier ?? 0
+
+        var windowTitle: String? = nil
+        var focusedRole: String? = nil
+        var focusedValue: String? = nil
+        var focusedLabel: String? = nil
+        if appPID > 0 {
+            let app = AXUIElementCreateApplication(appPID)
+            // Window title
+            var winRef: CFTypeRef?
+            if AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &winRef) == .success,
+               let winRef, CFGetTypeID(winRef) == AXUIElementGetTypeID() {
+                var titleRef: CFTypeRef?
+                if AXUIElementCopyAttributeValue(winRef as! AXUIElement, kAXTitleAttribute as CFString, &titleRef) == .success {
+                    windowTitle = titleRef as? String
+                }
+            }
+            // Focused element
+            var focRef: CFTypeRef?
+            if AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &focRef) == .success,
+               let focRef, CFGetTypeID(focRef) == AXUIElementGetTypeID() {
+                let el = focRef as! AXUIElement
+                var roleRef: CFTypeRef?
+                if AXUIElementCopyAttributeValue(el, kAXRoleAttribute as CFString, &roleRef) == .success {
+                    focusedRole = roleRef as? String
+                }
+                var valRef: CFTypeRef?
+                if AXUIElementCopyAttributeValue(el, kAXValueAttribute as CFString, &valRef) == .success {
+                    focusedValue = valRef as? String
+                }
+                // Try to get field label — AXTitle, AXDescription, or AXPlaceholderValue.
+                for attr in [kAXTitleAttribute, kAXDescriptionAttribute, kAXPlaceholderValueAttribute] as [CFString] {
+                    var labelRef: CFTypeRef?
+                    if AXUIElementCopyAttributeValue(el, attr, &labelRef) == .success,
+                       let str = labelRef as? String, !str.isEmpty {
+                        focusedLabel = str
+                        break
+                    }
+                }
+            }
+        }
+
+        // Build capture payloads — last 10 entries, most recent first.
+        let captures = entries.suffix(10).reversed().map { entry in
+            IPCMessage.CapturePayload(
+                timestamp: entry.timestamp.timeIntervalSince1970,
+                appName: entry.appName,
+                windowTitle: entry.windowTitle,
+                url: entry.url,
+                ocrText: entry.ocrText
+            )
+        }
+
+        // Capture caret-localized screenshot in the background, then send.
+        let capturedPID = appPID
+        let capturedAppName = appName
+        let capturedWindowTitle = windowTitle
+        let capturedRole = focusedRole
+        let capturedValue = focusedValue
+        let capturedLabel = focusedLabel
+
+        Task {
+            let caretOCR = await ScreenshotCapture.captureAroundFocusedElement(
+                pid: capturedPID
+            )
+
+            let seq = self.worker.nextSeq()
+            let trigger = IPCMessage.PasteTrigger(
+                seq: seq,
+                timestamp: Date().timeIntervalSince1970,
+                appName: capturedAppName,
+                appPID: capturedPID,
+                windowTitle: capturedWindowTitle,
+                focusedRole: capturedRole,
+                focusedValue: capturedValue,
+                focusedLabel: capturedLabel,
+                caretContextOCR: caretOCR,
+                recentCaptures: captures
+            )
+            self.lastTriggerPID = capturedPID
+            self.worker.send(trigger)
+            self.onStatus?(.triggerSent(seq: seq, appName: "paste:\(capturedAppName) role=\(capturedRole ?? "nil") label=\(capturedLabel ?? "nil") caretOCR=\(caretOCR?.prefix(80) ?? "nil")"))
         }
     }
 
