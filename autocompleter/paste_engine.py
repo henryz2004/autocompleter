@@ -33,6 +33,11 @@ SYSTEM_PROMPT = (
     "title, a 'Price' field needs a price, a 'Description' field needs "
     "the full description with formatting preserved.\n"
     "- Use the field label/placeholder to determine what content belongs.\n"
+    "- IMPORTANT: If the current form already has content filled in (visible "
+    "in the caret OCR or the field value), identify which capture that content "
+    "came from and use THE SAME capture for the current field — even if it's "
+    "marked [USED]. The [USED] tag only matters when the form is completely "
+    "empty and you're choosing which listing to start with.\n"
     "- If nothing relevant was captured, return an empty suggestions array.\n"
     "- Return valid JSON only. Use \\n for newlines inside JSON strings."
 )
@@ -115,6 +120,31 @@ def _build_user_message(
     return "\n".join(parts)
 
 
+def _log_paste_debug(
+    system: str | None,
+    user: str | None,
+    raw_response: str | None,
+    stripped_response: str | None,
+) -> None:
+    """Append prompt/response to ~/.autocompleter/paste_debug.log."""
+    try:
+        from pathlib import Path
+        log_path = Path.home() / ".autocompleter" / "paste_debug.log"
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(f"\n{'='*80}\n")
+            f.write(f"[{time.strftime('%H:%M:%S')}]\n")
+            if system is not None:
+                f.write(f"--- SYSTEM ---\n{system}\n")
+            if user is not None:
+                f.write(f"--- USER ({len(user)} chars) ---\n{user}\n")
+            if raw_response is not None:
+                f.write(f"--- RAW RESPONSE ---\n{raw_response}\n")
+            if stripped_response is not None:
+                f.write(f"--- STRIPPED ---\n{stripped_response}\n")
+    except Exception:
+        pass
+
+
 def generate_paste_suggestions(
     *,
     app_name: str,
@@ -139,6 +169,9 @@ def generate_paste_suggestions(
         captures=captures,
     )
 
+    # Log the full prompt for debugging.
+    _log_paste_debug(SYSTEM_PROMPT, user_msg, None, None)
+
     start = time.perf_counter()
     try:
         resp = client.chat.completions.create(
@@ -159,6 +192,9 @@ def generate_paste_suggestions(
     latency_ms = (time.perf_counter() - start) * 1000.0
     raw = resp.choices[0].message.content or ""
     stripped = _strip_reasoning(raw)
+
+    # Log the full response for debugging.
+    _log_paste_debug(None, None, raw, stripped)
 
     # Parse JSON array from the response.
     try:
